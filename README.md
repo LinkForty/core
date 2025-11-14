@@ -361,7 +361,7 @@ await fastify.listen({ port: 3000 });
 
 LinkForty can be deployed in multiple ways depending on your needs:
 
-### Production Deployment (Recommended)
+### 🚀 Production Deployment (Recommended)
 
 Deploy to managed platforms with minimal DevOps overhead:
 
