@@ -2,7 +2,7 @@
 
 **Open-source deeplink management engine with device detection and analytics**
 
-Link Forty Core is a powerful, self-hosted deeplink management system that enables you to create, manage, and track smart links with device-specific routing, analytics, and UTM parameter support. It's the open-source foundation of the Link Forty platform.
+LinkForty Core is a powerful, self-hosted deeplink management system that enables you to create, manage, and track smart links with device-specific routing, analytics, and UTM parameter support. It's the open-source foundation of the LinkForty platform.
 
 [![npm version](https://img.shields.io/npm/v/@linkforty/core.svg)](https://www.npmjs.com/package/@linkforty/core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -359,9 +359,9 @@ await fastify.listen({ port: 3000 });
 
 ## Deployment
 
-Link Forty can be deployed in multiple ways depending on your needs:
+LinkForty can be deployed in multiple ways depending on your needs:
 
-### 🚀 Production Deployment (Recommended)
+### Production Deployment (Recommended)
 
 Deploy to managed platforms with minimal DevOps overhead:
 
