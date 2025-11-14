@@ -375,7 +375,7 @@ Deploy to managed platforms with minimal DevOps overhead:
 
 See [`infra/`](infra/) directory for all deployment options and platform-specific guides.
 
-### 🐳 Docker Deployment (Self-Hosted)
+### Docker Deployment (Self-Hosted)
 
 For local development or self-managed infrastructure:
 
@@ -387,7 +387,7 @@ docker-compose up -d
 
 See [`examples/docker-compose.yml`](examples/docker-compose.yml) for complete Docker setup.
 
-### 📦 Manual Deployment
+### Manual Deployment
 
 For custom infrastructure needs:
 
@@ -397,7 +397,7 @@ For custom infrastructure needs:
 4. Run migrations: `npm run migrate`
 5. Start server: `node server.js`
 
-### 🌐 Other Platforms
+### Other Platforms
 
 Community-maintained templates available for:
 - AWS (ECS/Fargate)
