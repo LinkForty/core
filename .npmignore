@@ -1,0 +1,56 @@
+# Source files (only include dist/)
+src/
+*.ts
+!*.d.ts
+tsconfig.json
+
+# Tests
+**/*.test.ts
+**/*.spec.ts
+coverage/
+.nyc_output/
+
+# Development files
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Documentation (keep README and LICENSE)
+docs/
+*.md
+!README.md
+!LICENSE
+!CHANGELOG.md
+
+# Build artifacts
+*.tsbuildinfo
+node_modules/
+npm-debug.log*
+
+# Examples and development helpers
+examples/
+scripts/
+
+# MacOS
+.DS_Store
+
+# Temporary files
+tmp/
+temp/

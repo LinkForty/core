@@ -1,0 +1,60 @@
+{
+  "name": "@linkforty/core",
+  "version": "1.0.0",
+  "description": "Open-source deeplink management engine with device detection and analytics",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/linkforty/core"
+  },
+  "keywords": [
+    "deeplink",
+    "onelink",
+    "mobile-links",
+    "device-detection",
+    "url-shortener",
+    "analytics"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "migrate": "tsx src/scripts/migrate.ts",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "fastify": "^4.24.0",
+    "@fastify/cors": "^8.4.0",
+    "@fastify/redis": "^6.1.0",
+    "pg": "^8.11.0",
+    "nanoid": "^5.0.0",
+    "geoip-lite": "^1.4.7",
+    "ua-parser-js": "^1.0.37",
+    "zod": "^3.22.0",
+    "dotenv": "^16.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.8.0",
+    "@types/pg": "^8.10.0",
+    "@types/geoip-lite": "^1.4.4",
+    "@types/ua-parser-js": "^0.7.39",
+    "tsx": "^4.0.0",
+    "typescript": "^5.2.0",
+    "vitest": "^1.0.0"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./utils": "./dist/lib/utils.js",
+    "./database": "./dist/lib/database.js",
+    "./routes": "./dist/routes/index.js",
+    "./types": "./dist/types/index.js"
+  },
+  "files": [
+    "dist",
+    "migrations",
+    "examples",
+    "README.md",
+    "LICENSE"
+  ]
+}

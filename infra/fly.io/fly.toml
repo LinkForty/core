@@ -1,0 +1,71 @@
+# Fly.io configuration for Link Forty
+# See https://fly.io/docs/reference/configuration/ for full documentation
+
+app = "linkforty-core" # Change this to your unique app name
+primary_region = "iad" # Change to your preferred region (iad = Washington DC)
+
+# Build configuration
+[build]
+  # Use the Dockerfile from the examples directory
+  dockerfile = "../../examples/Dockerfile"
+
+# Environment variables (non-sensitive)
+[env]
+  NODE_ENV = "production"
+  PORT = "8080"
+  # DATABASE_URL and REDIS_URL should be set as secrets (see DEPLOYMENT.md)
+
+# HTTP service configuration
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false  # Keep at least one machine always running
+  auto_start_machines = true
+  min_machines_running = 1    # Always keep at least one instance running
+
+  # HTTP service concurrency
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250          # Maximum concurrent requests per machine
+    soft_limit = 200          # Target concurrent requests before scaling
+
+# Health checks
+[[http_service.checks]]
+  grace_period = "10s"        # Wait before starting health checks
+  interval = "30s"            # Check every 30 seconds
+  method = "GET"
+  timeout = "5s"
+  path = "/health"            # Ensure your app has a /health endpoint
+
+# VM resources
+# Start with shared-cpu-1x (256MB RAM) - scale up as needed
+[vm]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 256
+
+# Metrics (optional but recommended)
+[[metrics]]
+  port = 9091                 # If you add Prometheus metrics
+  path = "/metrics"
+
+# Deploy configuration
+[deploy]
+  release_command = "npm run migrate" # Run migrations before deploying
+  strategy = "rolling"               # Rolling deployment strategy
+
+# Scaling configuration
+# Uncomment and adjust for auto-scaling based on traffic
+# [[services.autoscaling]]
+#   enabled = true
+#   min_count = 1              # Minimum number of machines
+#   max_count = 10             # Maximum number of machines
+
+# Multi-region deployment (optional)
+# Uncomment to deploy to multiple regions for lower latency
+# [[regions]]
+# name = "iad"  # Primary region (US East)
+# [[regions]]
+# name = "lhr"  # Europe (London)
+# [[regions]]
+# name = "syd"  # Asia-Pacific (Sydney)
