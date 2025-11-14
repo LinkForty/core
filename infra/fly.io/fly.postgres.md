@@ -1,10 +1,10 @@
 # PostgreSQL Setup on Fly.io
 
-This guide covers setting up and managing PostgreSQL for Link Forty on Fly.io.
+This guide covers setting up and managing PostgreSQL for LinkForty on Fly.io.
 
 ## Overview
 
-Link Forty requires PostgreSQL 13 or higher. Fly.io offers managed PostgreSQL clusters with:
+LinkForty requires PostgreSQL 13 or higher. Fly.io offers managed PostgreSQL clusters with:
 - Automated backups
 - Point-in-time recovery
 - High availability options
@@ -151,7 +151,7 @@ fly postgres connect -a linkforty-db
 # Run SQL manually
 \i /path/to/migration.sql
 
-# Or use Link Forty's migration tool
+# Or use LinkForty's migration tool
 \q
 ```
 
@@ -291,7 +291,7 @@ fly postgres update linkforty-db --add-replica
 fly postgres update linkforty-db --add-replica --region lhr
 ```
 
-**Note:** Link Forty's connection pool handles read/write routing automatically.
+**Note:** LinkForty's connection pool handles read/write routing automatically.
 
 ### High Availability
 
@@ -310,7 +310,7 @@ Benefits:
 
 ### Connection Pooling
 
-Link Forty includes connection pooling (configured in `src/database/pool.ts`):
+LinkForty includes connection pooling (configured in `src/database/pool.ts`):
 
 ```typescript
 // Default configuration
@@ -325,7 +325,7 @@ Adjust based on your VM size:
 
 ### Indexes
 
-Link Forty creates these indexes automatically (via migrations):
+LinkForty creates these indexes automatically (via migrations):
 
 ```sql
 -- Fast lookups by code

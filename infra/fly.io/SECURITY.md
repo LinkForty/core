@@ -1,6 +1,6 @@
 # Security Checklist for Production Deployment
 
-This checklist helps ensure your Link Forty deployment on Fly.io follows security best practices.
+This checklist helps ensure your LinkForty deployment on Fly.io follows security best practices.
 
 ## ✅ Pre-Deployment Security Checklist
 
@@ -108,7 +108,7 @@ Never use `*` in production - this allows any website to make requests to your A
 
 ### 4. Rate Limiting
 
-Link Forty includes built-in rate limiting. Verify it's enabled in your deployment:
+LinkForty includes built-in rate limiting. Verify it's enabled in your deployment:
 
 - Link creation: Limited by IP address
 - Analytics queries: Limited by userId
@@ -121,7 +121,7 @@ fly logs | grep "rate limit"
 
 ### 5. Input Validation
 
-Link Forty uses Zod for input validation. Ensure validation errors are logged:
+LinkForty uses Zod for input validation. Ensure validation errors are logged:
 
 ```bash
 fly logs | grep "validation"
@@ -280,7 +280,7 @@ Fly.io integrates with:
 
 ### Personal Identifiable Information (PII)
 
-Link Forty collects:
+LinkForty collects:
 - IP addresses (for geolocation)
 - User agent strings (for device detection)
 - Referrer URLs (for analytics)

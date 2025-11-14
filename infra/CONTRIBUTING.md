@@ -1,10 +1,10 @@
 # Contributing Infrastructure Templates
 
-Thank you for your interest in contributing infrastructure templates to Link Forty! This guide will help you add support for new cloud platforms and deployment methods.
+Thank you for your interest in contributing infrastructure templates to LinkForty! This guide will help you add support for new cloud platforms and deployment methods.
 
 ## Overview
 
-We welcome community contributions for additional infrastructure providers. This allows Link Forty users to deploy on their preferred platforms with minimal setup.
+We welcome community contributions for additional infrastructure providers. This allows LinkForty users to deploy on their preferred platforms with minimal setup.
 
 ## Official vs Community Support
 
@@ -102,7 +102,7 @@ infra/
 Your `DEPLOYMENT.md` should include:
 
 ```markdown
-# Deploying Link Forty to [Provider Name]
+# Deploying LinkForty to [Provider Name]
 
 ## Prerequisites
 - Account setup
@@ -153,16 +153,16 @@ Your `DEPLOYMENT.md` should include:
 ### README.md Template
 
 ```markdown
-# Link Forty on [Provider Name]
+# LinkForty on [Provider Name]
 
-Quick overview of deploying Link Forty to [Provider].
+Quick overview of deploying LinkForty to [Provider].
 
 ## Quick Start
 
 [One-click deploy button if available]
 
 ## Features
-- What makes this platform good for Link Forty
+- What makes this platform good for LinkForty
 - Key benefits
 
 ## Cost Estimate
@@ -187,7 +187,7 @@ Quick overview of deploying Link Forty to [Provider].
 
 ### Environment Variables
 
-- **Match Link Forty's standards** (see `examples/.env.example`)
+- **Match LinkForty's standards** (see `examples/.env.example`)
 - **Include all required variables**
 - **Document optional variables**
 - **Show example values** (with placeholders for secrets)
@@ -273,7 +273,7 @@ Add your provider to `infra/README.md`:
 
 ```markdown
 ## Summary
-Adds infrastructure template for deploying Link Forty to [Provider Name].
+Adds infrastructure template for deploying LinkForty to [Provider Name].
 
 ## What's Included
 - [ ] Configuration files
@@ -337,7 +337,7 @@ If you can't continue maintaining:
 ### What Core Maintainers Will Do
 
 - Review and merge PRs for your platform
-- Help with general Link Forty questions
+- Help with general LinkForty questions
 - Validate deployments still work (periodically)
 - Archive unmaintained platforms (if necessary)
 
@@ -363,7 +363,7 @@ If you can't continue maintaining:
 - General cloud computing questions
 - Non-Link-Forty application issues
 
-### Core Link Forty Support (Maintainers Provide)
+### Core LinkForty Support (Maintainers Provide)
 
 - Application bugs
 - Database schema issues
@@ -402,7 +402,7 @@ Located at `infra/fly.io/`, this template demonstrates:
 ### Technical Questions
 
 - Review existing templates (especially `infra/fly.io/`)
-- Check Link Forty's main documentation
+- Check LinkForty's main documentation
 - Ask in GitHub Discussions
 
 ## Recognition
@@ -412,10 +412,10 @@ Contributors will be:
 - Mentioned in release notes
 - Credited in the project's contributors list
 
-Thank you for helping make Link Forty accessible on more platforms!
+Thank you for helping make LinkForty accessible on more platforms!
 
 ## License
 
-All infrastructure templates are licensed under the same MIT license as Link Forty Core.
+All infrastructure templates are licensed under the same MIT license as LinkForty Core.
 
 By contributing, you agree to license your contribution under this license.

@@ -1,6 +1,6 @@
-# Deploying Link Forty to Fly.io
+# Deploying LinkForty to Fly.io
 
-This guide walks you through deploying Link Forty to [Fly.io](https://fly.io), a global application platform that makes deployment simple.
+This guide walks you through deploying LinkForty to [Fly.io](https://fly.io), a global application platform that makes deployment simple.
 
 ## Prerequisites
 
@@ -22,7 +22,7 @@ This guide walks you through deploying Link Forty to [Fly.io](https://fly.io), a
    fly auth login
    ```
 
-4. **Link Forty Built Locally**
+4. **LinkForty Built Locally**
    ```bash
    npm install
    npm run build
@@ -46,7 +46,7 @@ This guide walks you through deploying Link Forty to [Fly.io](https://fly.io), a
 
 ## Step 2: Create PostgreSQL Database
 
-Link Forty requires PostgreSQL 13+.
+LinkForty requires PostgreSQL 13+.
 
 ```bash
 # Create a Postgres cluster
@@ -85,7 +85,7 @@ fly redis create --name linkforty-redis --region iad
 
 ## Step 4: Create Your Fly.io App
 
-From the root of your Link Forty project:
+From the root of your LinkForty project:
 
 ```bash
 # Copy fly.toml to root directory
@@ -361,7 +361,7 @@ Before going to production, review [SECURITY.md](./SECURITY.md) for:
 
 - **Fly.io Docs:** https://fly.io/docs/
 - **Fly.io Community:** https://community.fly.io/
-- **Link Forty Issues:** https://github.com/yourusername/linkforty-core/issues
+- **LinkForty Issues:** https://github.com/yourusername/linkforty-core/issues
 - **Security Issues:** See [SECURITY.md](../../SECURITY.md)
 
 ## Resources

@@ -18,7 +18,7 @@ async function start() {
     host: '0.0.0.0',
   });
 
-  console.log('Link Forty server running on http://localhost:3000');
+  console.log('LinkForty server running on http://localhost:3000');
   console.log('');
   console.log('API Endpoints:');
   console.log('  POST   /api/links          - Create a new link');

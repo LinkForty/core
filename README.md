@@ -440,7 +440,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Related Projects
 
 - **@linkforty/ui** - React UI components for link management
-- **[Link Forty Cloud](https://linkforty.com)** - Hosted SaaS version with additional features 
+- **[LinkForty Cloud](https://linkforty.com)** - Hosted SaaS version with additional features 
 
 ## Support
 

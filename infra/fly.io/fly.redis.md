@@ -1,10 +1,10 @@
 # Redis Setup on Fly.io
 
-This guide covers setting up and managing Redis for Link Forty on Fly.io.
+This guide covers setting up and managing Redis for LinkForty on Fly.io.
 
 ## Overview
 
-Redis is **optional but highly recommended** for Link Forty. According to the project documentation, Redis caching can reduce database queries by ~90% for repeated link lookups.
+Redis is **optional but highly recommended** for LinkForty. According to the project documentation, Redis caching can reduce database queries by ~90% for repeated link lookups.
 
 Fly.io partners with [Upstash](https://upstash.com/) to provide managed Redis with:
 - Serverless pricing (pay per request)
@@ -96,13 +96,13 @@ Look for:
 Redis connected successfully
 ```
 
-If Redis is unavailable, Link Forty will still work but will query the database for every link lookup (slower).
+If Redis is unavailable, LinkForty will still work but will query the database for every link lookup (slower).
 
-## How Link Forty Uses Redis
+## How LinkForty Uses Redis
 
 ### Cache Strategy
 
-Link Forty caches link lookups with this pattern:
+LinkForty caches link lookups with this pattern:
 
 1. **Request:** User visits `https://your-app.fly.dev/abc123`
 2. **Check Redis:** Look for cached link data
@@ -181,7 +181,7 @@ FLUSHDB                 # ⚠️ Clear all cache (use with caution)
 
 ### Automatic Invalidation
 
-Link Forty automatically invalidates cache when:
+LinkForty automatically invalidates cache when:
 - Link is updated
 - Link is deleted
 - Link expires
@@ -202,7 +202,7 @@ redis-cli -u "rediss://default:password@host:6379" FLUSHDB
 
 ### Cache TTL Configuration
 
-Default TTL is 1 hour. To adjust, modify the caching layer in Link Forty:
+Default TTL is 1 hour. To adjust, modify the caching layer in LinkForty:
 
 ```typescript
 // In your Redis cache implementation
@@ -355,7 +355,7 @@ Solutions:
 
 ## Running Without Redis
 
-Link Forty works without Redis, but with performance trade-offs:
+LinkForty works without Redis, but with performance trade-offs:
 
 ### Performance Without Redis
 
@@ -372,7 +372,7 @@ Simply don't set `REDIS_URL`:
 fly secrets unset REDIS_URL --app your-linkforty-app
 ```
 
-Link Forty detects missing Redis and falls back to database-only mode.
+LinkForty detects missing Redis and falls back to database-only mode.
 
 ### When to Skip Redis
 

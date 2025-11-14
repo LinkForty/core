@@ -1,10 +1,10 @@
 # @linkforty/core Examples
 
-This directory contains example implementations for deploying Link Forty Core.
+This directory contains example implementations for deploying LinkForty Core.
 
 ## Quick Start with Docker Compose
 
-The easiest way to get started is using Docker Compose, which will set up PostgreSQL, Redis, and the Link Forty server.
+The easiest way to get started is using Docker Compose, which will set up PostgreSQL, Redis, and the LinkForty server.
 
 ### 1. Start All Services
 
@@ -16,7 +16,7 @@ docker-compose up -d
 This will start:
 - PostgreSQL database (port 5432)
 - Redis cache (port 6379)
-- Link Forty server (port 3000)
+- LinkForty server (port 3000)
 
 ### 2. Access the Server
 

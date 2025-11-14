@@ -1,4 +1,4 @@
-# Fly.io configuration for Link Forty
+# Fly.io configuration for LinkForty
 # See https://fly.io/docs/reference/configuration/ for full documentation
 
 app = "linkforty-core" # Change this to your unique app name

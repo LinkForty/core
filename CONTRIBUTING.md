@@ -1,6 +1,6 @@
 # Contributing to @linkforty/core
 
-Thank you for your interest in contributing to Link Forty Core! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to LinkForty Core! This document provides guidelines and instructions for contributing.
 
 ## Code of Conduct
 
@@ -304,4 +304,4 @@ Contributors will be recognized in:
 - CHANGELOG.md for significant contributions
 - GitHub releases notes
 
-Thank you for contributing to Link Forty Core! 🎉
+Thank you for contributing to LinkForty Core! 🎉
