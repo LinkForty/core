@@ -7,6 +7,7 @@ const createLinkSchema = z.object({
   userId: z.string().uuid(),
   originalUrl: z.string().url(),
   title: z.string().optional(),
+  description: z.string().optional(),
   iosUrl: z.string().url().optional(),
   androidUrl: z.string().url().optional(),
   webFallbackUrl: z.string().url().optional(),
@@ -23,6 +24,15 @@ const createLinkSchema = z.object({
     devices: z.array(z.enum(['ios', 'android', 'web'])).optional(),
     languages: z.array(z.string()).optional(),
   }).optional(),
+  ogTitle: z.string().optional(),
+  ogDescription: z.string().optional(),
+  ogImageUrl: z.string().url().optional(),
+  ogType: z.string().optional(),
+  attributionWindowHours: z.number()
+    .int('Attribution window must be an integer')
+    .min(1, 'Attribution window must be at least 1 hour')
+    .max(2160, 'Attribution window must be at most 2160 hours (90 days)')
+    .optional(),
   expiresAt: z.string().datetime().optional(),
 });
 
@@ -124,20 +134,28 @@ export async function linkRoutes(fastify: FastifyInstance) {
 
     const result = await db.query(
       `INSERT INTO links (
-        user_id, short_code, original_url, title,
-        ios_url, android_url, web_fallback_url, utm_parameters, targeting_rules, expires_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        user_id, short_code, original_url, title, description,
+        ios_url, android_url, web_fallback_url, utm_parameters, targeting_rules,
+        og_title, og_description, og_image_url, og_type,
+        attribution_window_hours, expires_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          RETURNING *`,
       [
         data.userId,
         shortCode,
         data.originalUrl,
         data.title || null,
+        data.description || null,
         data.iosUrl || null,
         data.androidUrl || null,
         data.webFallbackUrl || null,
         JSON.stringify(data.utmParameters || {}),
         JSON.stringify(data.targetingRules || {}),
+        data.ogTitle || null,
+        data.ogDescription || null,
+        data.ogImageUrl || null,
+        data.ogType || 'website',
+        data.attributionWindowHours || 168, // Default 7 days
         data.expiresAt || null,
       ]
     );
