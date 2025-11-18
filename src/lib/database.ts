@@ -71,6 +71,7 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
         short_code VARCHAR(20) UNIQUE NOT NULL,
         original_url TEXT NOT NULL,
         title VARCHAR(255),
+        description TEXT,
         ios_url TEXT,
         android_url TEXT,
         web_fallback_url TEXT,
@@ -107,7 +108,63 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
       )
     `);
 
-    // Webhooks table
+    // Device fingerprints table - stores individual fingerprint components for probabilistic matching
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS device_fingerprints (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        click_id UUID NOT NULL REFERENCES click_events(id) ON DELETE CASCADE,
+        fingerprint_hash VARCHAR(64) NOT NULL,
+        ip_address INET,
+        user_agent TEXT,
+        timezone VARCHAR(100),
+        language VARCHAR(10),
+        screen_width INTEGER,
+        screen_height INTEGER,
+        platform VARCHAR(50),
+        platform_version VARCHAR(50),
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // Install events table - tracks app installations and matches to clicks via fingerprinting
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS install_events (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        link_id UUID REFERENCES links(id) ON DELETE SET NULL,
+        click_id UUID REFERENCES click_events(id) ON DELETE SET NULL,
+        fingerprint_hash VARCHAR(64) NOT NULL,
+        confidence_score DECIMAL(5, 2),
+        installed_at TIMESTAMP DEFAULT NOW(),
+        first_open_at TIMESTAMP,
+        deep_link_retrieved BOOLEAN DEFAULT false,
+        deep_link_data JSONB DEFAULT '{}',
+        attribution_window_hours INTEGER DEFAULT 168,
+        ip_address INET,
+        user_agent TEXT,
+        timezone VARCHAR(100),
+        language VARCHAR(10),
+        screen_width INTEGER,
+        screen_height INTEGER,
+        platform VARCHAR(50),
+        platform_version VARCHAR(50),
+        device_id VARCHAR(255),
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // In-app events table - tracks conversion events from mobile apps
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS in_app_events (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        install_id UUID NOT NULL REFERENCES install_events(id) ON DELETE CASCADE,
+        event_name VARCHAR(255) NOT NULL,
+        event_data JSONB DEFAULT '{}',
+        event_timestamp TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // Webhooks table - stores webhook configurations for event postbacks
     await client.query(`
       CREATE TABLE IF NOT EXISTS webhooks (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -125,6 +182,81 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
       )
     `);
 
+    // Add description column to existing links table if it doesn't exist
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='description'
+        ) THEN
+          ALTER TABLE links ADD COLUMN description TEXT;
+        END IF;
+      END $$;
+    `);
+
+    // Add Open Graph (OG) tag columns for social media previews
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='og_title'
+        ) THEN
+          ALTER TABLE links ADD COLUMN og_title VARCHAR(255);
+        END IF;
+      END $$;
+    `);
+
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='og_description'
+        ) THEN
+          ALTER TABLE links ADD COLUMN og_description TEXT;
+        END IF;
+      END $$;
+    `);
+
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='og_image_url'
+        ) THEN
+          ALTER TABLE links ADD COLUMN og_image_url TEXT;
+        END IF;
+      END $$;
+    `);
+
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='og_type'
+        ) THEN
+          ALTER TABLE links ADD COLUMN og_type VARCHAR(50) DEFAULT 'website';
+        END IF;
+      END $$;
+    `);
+
+    // Add attribution window column for configurable install attribution windows
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='attribution_window_hours'
+        ) THEN
+          ALTER TABLE links ADD COLUMN attribution_window_hours INTEGER DEFAULT 168;
+        END IF;
+      END $$;
+    `);
+
     // Create indexes for performance
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_links_short_code ON links(short_code)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_links_user_id ON links(user_id)');
@@ -133,8 +265,23 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
     await client.query('CREATE INDEX IF NOT EXISTS idx_clicks_timestamp ON click_events(clicked_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_clicks_link_date ON click_events(link_id, clicked_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
+
+    // Indexes for deferred deep linking
+    await client.query('CREATE INDEX IF NOT EXISTS idx_fingerprints_hash ON device_fingerprints(fingerprint_hash)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_fingerprints_click_id ON device_fingerprints(click_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_installs_fingerprint ON install_events(fingerprint_hash)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_installs_link_id ON install_events(link_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_installs_timestamp ON install_events(installed_at DESC)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_installs_link_date ON install_events(link_id, installed_at DESC)');
+
+    // Indexes for webhooks
     await client.query('CREATE INDEX IF NOT EXISTS idx_webhooks_user_id ON webhooks(user_id)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_webhooks_active ON webhooks(is_active) WHERE is_active = true');
+
+    // Indexes for in-app events
+    await client.query('CREATE INDEX IF NOT EXISTS idx_in_app_events_install_id ON in_app_events(install_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_in_app_events_name ON in_app_events(event_name)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_in_app_events_timestamp ON in_app_events(event_timestamp DESC)');
 
     console.log('Database schema initialized successfully');
   } catch (error) {
