@@ -12,11 +12,17 @@ export interface Link {
   short_code: string;
   original_url: string;
   title?: string;
+  description?: string;
   ios_url?: string;
   android_url?: string;
   web_fallback_url?: string;
   utmParameters?: UTMParameters;
   targeting_rules?: TargetingRules;
+  og_title?: string;
+  og_description?: string;
+  og_image_url?: string;
+  og_type?: string;
+  attribution_window_hours?: number;
   is_active: boolean;
   expires_at?: string;
   created_at: string;
@@ -62,11 +68,17 @@ export interface ClickEvent {
 export interface CreateLinkRequest {
   originalUrl: string;
   title?: string;
+  description?: string;
   iosUrl?: string;
   androidUrl?: string;
   webFallbackUrl?: string;
   utmParameters?: UTMParameters;
   targetingRules?: TargetingRules;
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImageUrl?: string;
+  ogType?: string;
+  attributionWindowHours?: number;
   customCode?: string;
   expiresAt?: string;
 }
@@ -142,17 +154,27 @@ export interface WebhookPayload {
   event: WebhookEvent;
   event_id: string;
   timestamp: string;
-  data: any; // ClickEvent, InstallEvent, or ConversionEvent
+  data: ClickEvent | InstallEvent | ConversionEvent;
 }
 
-export interface WebhookDeliveryResult {
-  success: boolean;
-  webhookId: string;
-  eventType: WebhookEvent;
-  eventId: string;
-  responseStatus?: number;
-  responseBody?: string;
-  errorMessage?: string;
-  attemptNumber: number;
-  deliveredAt?: string;
+export interface InstallEvent {
+  id: string;
+  linkId?: string;
+  fingerprintHash: string;
+  confidenceScore?: number;
+  installedAt: string;
+  deepLinkData?: any;
+  ipAddress?: string;
+  userAgent?: string;
+  platform?: string;
+}
+
+export interface ConversionEvent {
+  id: string;
+  installId: string;
+  eventName: string;
+  eventProperties: Record<string, any>;
+  revenue?: number;
+  currency?: string;
+  timestamp: string;
 }
