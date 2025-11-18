@@ -1,6 +1,7 @@
 {
   "name": "@linkforty/core",
   "version": "1.0.0",
+  "type": "module",
   "description": "Open-source deeplink management engine with device detection and analytics",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -24,20 +25,23 @@
     "test": "vitest"
   },
   "dependencies": {
-    "fastify": "^4.24.0",
     "@fastify/cors": "^8.4.0",
     "@fastify/redis": "^6.1.0",
-    "pg": "^8.11.0",
-    "nanoid": "^5.0.0",
+    "@fastify/websocket": "^11.2.0",
+    "@types/qrcode": "^1.5.6",
+    "dotenv": "^16.3.0",
+    "fastify": "^4.24.0",
     "geoip-lite": "^1.4.7",
+    "nanoid": "^3.3.11",
+    "pg": "^8.11.0",
+    "qrcode": "^1.5.4",
     "ua-parser-js": "^1.0.37",
-    "zod": "^3.22.0",
-    "dotenv": "^16.3.0"
+    "zod": "^3.22.0"
   },
   "devDependencies": {
+    "@types/geoip-lite": "^1.4.4",
     "@types/node": "^20.8.0",
     "@types/pg": "^8.10.0",
-    "@types/geoip-lite": "^1.4.4",
     "@types/ua-parser-js": "^0.7.39",
     "tsx": "^4.0.0",
     "typescript": "^5.2.0",
