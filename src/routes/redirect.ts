@@ -1,16 +1,18 @@
 import { FastifyInstance } from 'fastify';
 import { db } from '../lib/database.js';
 import { parseUserAgent, getLocationFromIP, buildRedirectUrl, detectDevice } from '../lib/utils.js';
+import { storeFingerprintForClick, type FingerprintData } from '../lib/fingerprint.js';
+import { emitClickEvent } from '../lib/event-emitter.js';
 
 export async function redirectRoutes(fastify: FastifyInstance) {
-  // Handle short link redirects
-  fastify.get('/:shortCode', async (request, reply) => {
-    const { shortCode } = request.params as { shortCode: string };
-
+  // Helper function to handle the actual redirect logic
+  async function handleRedirect(request: any, reply: any, shortCode: string, templateSlug?: string) {
     let linkData: string | null = null;
 
+    // Build cache key (include template if present)
+    const cacheKey = templateSlug ? `link:${templateSlug}:${shortCode}` : `link:${shortCode}`;
+
     // Try to get link from cache if Redis is available
-    const cacheKey = `link:${shortCode}`;
     if (fastify.redis) {
       try {
         linkData = await fastify.redis.get(cacheKey);
@@ -20,13 +22,31 @@ export async function redirectRoutes(fastify: FastifyInstance) {
     }
 
     if (!linkData) {
-      // Get from database
-      const result = await db.query(
-        `SELECT * FROM links
-         WHERE short_code = $1 AND is_active = true
-         AND (expires_at IS NULL OR expires_at > NOW())`,
-        [shortCode]
-      );
+      // Build query based on whether template slug is provided
+      let query: string;
+      let params: any[];
+
+      if (templateSlug) {
+        // Template-based URL: verify both template and link match
+        query = `
+          SELECT l.* FROM links l
+          LEFT JOIN link_templates t ON l.template_id = t.id
+          WHERE l.short_code = $1 AND t.slug = $2
+          AND l.is_active = true
+          AND (l.expires_at IS NULL OR l.expires_at > NOW())
+        `;
+        params = [shortCode, templateSlug];
+      } else {
+        // Legacy URL: just lookup by short code
+        query = `
+          SELECT * FROM links
+          WHERE short_code = $1 AND is_active = true
+          AND (expires_at IS NULL OR expires_at > NOW())
+        `;
+        params = [shortCode];
+      }
+
+      const result = await db.query(query, params);
 
       if (result.rows.length === 0) {
         return reply.status(404).send({ error: 'Link not found' });
@@ -97,8 +117,10 @@ export async function redirectRoutes(fastify: FastifyInstance) {
         const userAgent = request.headers['user-agent'] || '';
         const ip = request.ip;
         const referrer = request.headers.referer || null;
+        const acceptLanguage = request.headers['accept-language'] || '';
 
-        const { deviceType, platform } = parseUserAgent(userAgent);
+        const deviceType = detectDevice(userAgent);
+        const { platform, platformVersion } = parseUserAgent(userAgent);
         const { countryCode, countryName, region, city, latitude, longitude, timezone } = getLocationFromIP(ip);
 
         // Extract UTM parameters from query string
@@ -107,6 +129,13 @@ export async function redirectRoutes(fastify: FastifyInstance) {
         const utmMedium = query?.utm_medium;
         const utmCampaign = query?.utm_campaign;
 
+        // Extract fingerprint data from query params (sent by SDK/client)
+        const fpTimezone = query?.fp_tz || timezone || undefined;
+        const fpLanguage = query?.fp_lang || acceptLanguage.split(',')[0]?.split(';')[0] || undefined;
+        const fpScreenWidth = query?.fp_sw ? parseInt(query.fp_sw, 10) : undefined;
+        const fpScreenHeight = query?.fp_sh ? parseInt(query.fp_sh, 10) : undefined;
+
+        // Insert click event
         const clickResult = await db.query(
           `INSERT INTO click_events (
             link_id, ip_address, user_agent, device_type, platform,
@@ -134,50 +163,107 @@ export async function redirectRoutes(fastify: FastifyInstance) {
           ]
         );
 
-        const clickId = clickResult.rows[0]?.id;
+        const clickId = clickResult.rows[0].id;
+
+        // Store device fingerprint for deferred deep linking
+        const fingerprintData: FingerprintData = {
+          ipAddress: ip,
+          userAgent,
+          timezone: fpTimezone,
+          language: fpLanguage,
+          screenWidth: fpScreenWidth,
+          screenHeight: fpScreenHeight,
+          platform: deviceType,
+          platformVersion,
+        };
+
+        await storeFingerprintForClick(clickId, fingerprintData);
+
+        // Determine redirect URL for event emission
+        let redirectUrl = link.original_url;
+        let redirectReason = 'original_url';
+
+        if (deviceType === 'ios' && link.ios_url) {
+          redirectUrl = link.ios_url;
+          redirectReason = 'ios_url';
+        } else if (deviceType === 'android' && link.android_url) {
+          redirectUrl = link.android_url;
+          redirectReason = 'android_url';
+        } else if (deviceType === 'web' && link.web_fallback_url) {
+          redirectUrl = link.web_fallback_url;
+          redirectReason = 'web_fallback_url';
+        }
+
+        const finalRedirectUrl = buildRedirectUrl(redirectUrl, link.utm_parameters);
+
+        // Emit click event for real-time streaming to WebSocket clients
+        emitClickEvent({
+          eventId: clickId,
+          timestamp: new Date().toISOString(),
+          linkId: link.id,
+          shortCode: link.short_code,
+          userId: link.user_id,
+          ipAddress: ip,
+          userAgent,
+          country: countryCode || undefined,
+          city: city || undefined,
+          deviceType,
+          platform: platform || undefined,
+          redirectUrl: finalRedirectUrl,
+          redirectReason,
+          targetingMatched: true, // If we got here, targeting matched
+          utmParameters: link.utm_parameters || undefined,
+          referer: referrer || undefined,
+          language: fpLanguage,
+        });
 
         // Trigger webhooks for click_event
-        if (clickId) {
-          try {
-            const webhooksResult = await db.query(
-              'SELECT * FROM webhooks WHERE user_id = $1 AND is_active = true',
-              [link.user_id]
+        try {
+          const webhooksResult = await db.query(
+            'SELECT * FROM webhooks WHERE user_id = $1 AND is_active = true',
+            [link.user_id]
+          );
+
+          if (webhooksResult.rows.length > 0) {
+            const { triggerWebhooks } = await import('../lib/webhook.js');
+
+            const clickEventData = {
+              id: clickId,
+              linkId: link.id,
+              clickedAt: new Date().toISOString(),
+              ipAddress: ip,
+              userAgent,
+              deviceType,
+              platform,
+              countryCode,
+              countryName,
+              region,
+              city,
+              latitude,
+              longitude,
+              timezone,
+              utmSource,
+              utmMedium,
+              utmCampaign,
+              referrer,
+            };
+
+            // Delivery logging for webhooks (Cloud premium feature)
+            const { logWebhookDelivery } = await import('../lib/webhook-logger.js');
+            const logDelivery = async (webhookId: string, result: any) => {
+              await logWebhookDelivery(webhookId, 'click_event', clickId, clickEventData, result);
+            };
+
+            await triggerWebhooks(
+              webhooksResult.rows,
+              'click_event',
+              clickId,
+              clickEventData,
+              logDelivery
             );
-
-            if (webhooksResult.rows.length > 0) {
-              const { triggerWebhooks } = await import('../lib/webhook.js');
-
-              const clickEventData = {
-                id: clickId,
-                linkId: link.id,
-                clickedAt: new Date().toISOString(),
-                ipAddress: ip,
-                userAgent,
-                deviceType,
-                platform,
-                countryCode,
-                countryName,
-                region,
-                city,
-                latitude,
-                longitude,
-                timezone,
-                utmSource,
-                utmMedium,
-                utmCampaign,
-                referrer,
-              };
-
-              await triggerWebhooks(
-                webhooksResult.rows,
-                'click_event',
-                clickId,
-                clickEventData
-              );
-            }
-          } catch (webhookError) {
-            fastify.log.error(`Error triggering click webhooks: ${webhookError}`);
           }
+        } catch (webhookError) {
+          fastify.log.error(`Error triggering click webhooks: ${webhookError}`);
         }
       } catch (error) {
         fastify.log.error(`Error tracking click: ${error}`);
@@ -204,5 +290,17 @@ export async function redirectRoutes(fastify: FastifyInstance) {
 
     // Redirect
     return reply.redirect(302, finalUrl);
+  }
+
+  // Template-based shortlink route: /:templateSlug/:shortCode
+  fastify.get('/:templateSlug/:shortCode', async (request, reply) => {
+    const { templateSlug, shortCode } = request.params as { templateSlug: string; shortCode: string };
+    return handleRedirect(request, reply, shortCode, templateSlug);
+  });
+
+  // Legacy shortlink route (no template): /:shortCode
+  fastify.get('/:shortCode', async (request, reply) => {
+    const { shortCode } = request.params as { shortCode: string };
+    return handleRedirect(request, reply, shortCode);
   });
 }
