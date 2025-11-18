@@ -13,6 +13,7 @@ export function parseUserAgent(userAgent: string) {
   return {
     deviceType: result.device.type || 'desktop',
     platform: result.os.name || 'unknown',
+    platformVersion: result.os.version || undefined,
     browser: result.browser.name || 'unknown',
   };
 }

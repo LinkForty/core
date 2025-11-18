@@ -248,18 +248,13 @@ export async function redirectRoutes(fastify: FastifyInstance) {
               referrer,
             };
 
-            // Delivery logging for webhooks (Cloud premium feature)
-            const { logWebhookDelivery } = await import('../lib/webhook-logger.js');
-            const logDelivery = async (webhookId: string, result: any) => {
-              await logWebhookDelivery(webhookId, 'click_event', clickId, clickEventData, result);
-            };
-
+            // Trigger webhooks without delivery logging (basic version)
+            // For delivery logging, use @linkforty/cloud premium features
             await triggerWebhooks(
               webhooksResult.rows,
               'click_event',
               clickId,
-              clickEventData,
-              logDelivery
+              clickEventData
             );
           }
         } catch (webhookError) {

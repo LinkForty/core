@@ -271,18 +271,13 @@ export async function sdkRoutes(fastify: FastifyInstance) {
 
           // Trigger webhooks asynchronously (fire and forget)
           setImmediate(async () => {
-            // Delivery logging for webhooks (Cloud premium feature)
-            const { logWebhookDelivery } = await import('../lib/webhook-logger.js');
-            const logDelivery = async (webhookId: string, result: any) => {
-              await logWebhookDelivery(webhookId, 'conversion_event', eventId, eventData, result);
-            };
-
+            // Trigger webhooks without delivery logging (basic version)
+            // For delivery logging, use @linkforty/cloud premium features
             triggerWebhooks(
               webhooksResult.rows,
               'conversion_event',
               eventId,
-              eventData,
-              logDelivery
+              eventData
             ).catch((error) => {
               fastify.log.error('Failed to trigger conversion webhooks:', error);
             });

@@ -157,6 +157,18 @@ export interface WebhookPayload {
   data: ClickEvent | InstallEvent | ConversionEvent;
 }
 
+export interface WebhookDeliveryResult {
+  success: boolean;
+  webhookId: string;
+  eventType: WebhookEvent;
+  eventId: string;
+  responseStatus?: number;
+  responseBody?: string;
+  attemptNumber: number;
+  deliveredAt?: string;
+  errorMessage?: string;
+}
+
 export interface InstallEvent {
   id: string;
   linkId?: string;

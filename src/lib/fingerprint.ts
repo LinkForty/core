@@ -440,18 +440,13 @@ export async function recordInstallEvent(
               platform: fingerprintData.platform,
             };
 
-            // Delivery logging for webhooks (Cloud premium feature)
-            const { logWebhookDelivery } = await import('./webhook-logger.js');
-            const logDelivery = async (webhookId: string, result: any) => {
-              await logWebhookDelivery(webhookId, 'install_event', installId, installEventData, result);
-            };
-
+            // Trigger webhooks without delivery logging (basic version)
+            // For delivery logging, use @linkforty/cloud premium features
             await triggerWebhooks(
               webhooksResult.rows,
               'install_event',
               installId,
-              installEventData,
-              logDelivery
+              installEventData
             );
           }
         }
