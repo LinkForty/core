@@ -107,12 +107,13 @@ export async function redirectRoutes(fastify: FastifyInstance) {
         const utmMedium = query?.utm_medium;
         const utmCampaign = query?.utm_campaign;
 
-        await db.query(
+        const clickResult = await db.query(
           `INSERT INTO click_events (
             link_id, ip_address, user_agent, device_type, platform,
             country_code, country_name, region, city, latitude, longitude, timezone,
             utm_source, utm_medium, utm_campaign, referrer
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+          RETURNING id`,
           [
             link.id,
             ip,
@@ -132,6 +133,52 @@ export async function redirectRoutes(fastify: FastifyInstance) {
             referrer,
           ]
         );
+
+        const clickId = clickResult.rows[0]?.id;
+
+        // Trigger webhooks for click_event
+        if (clickId) {
+          try {
+            const webhooksResult = await db.query(
+              'SELECT * FROM webhooks WHERE user_id = $1 AND is_active = true',
+              [link.user_id]
+            );
+
+            if (webhooksResult.rows.length > 0) {
+              const { triggerWebhooks } = await import('../lib/webhook.js');
+
+              const clickEventData = {
+                id: clickId,
+                linkId: link.id,
+                clickedAt: new Date().toISOString(),
+                ipAddress: ip,
+                userAgent,
+                deviceType,
+                platform,
+                countryCode,
+                countryName,
+                region,
+                city,
+                latitude,
+                longitude,
+                timezone,
+                utmSource,
+                utmMedium,
+                utmCampaign,
+                referrer,
+              };
+
+              await triggerWebhooks(
+                webhooksResult.rows,
+                'click_event',
+                clickId,
+                clickEventData
+              );
+            }
+          } catch (webhookError) {
+            fastify.log.error(`Error triggering click webhooks: ${webhookError}`);
+          }
+        }
       } catch (error) {
         fastify.log.error(`Error tracking click: ${error}`);
       }

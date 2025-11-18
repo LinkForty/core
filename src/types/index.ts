@@ -100,3 +100,59 @@ export interface AnalyticsData {
     uniqueClicks: number;
   }>;
 }
+
+// Webhook types
+export type WebhookEvent = 'click_event' | 'install_event' | 'conversion_event';
+
+export interface Webhook {
+  id: string;
+  user_id: string;
+  name: string;
+  url: string;
+  secret: string;
+  events: WebhookEvent[];
+  is_active: boolean;
+  retry_count: number;
+  timeout_ms: number;
+  headers: Record<string, string>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateWebhookRequest {
+  name: string;
+  url: string;
+  events: WebhookEvent[];
+  headers?: Record<string, string>;
+  retryCount?: number;
+  timeoutMs?: number;
+}
+
+export interface UpdateWebhookRequest {
+  name?: string;
+  url?: string;
+  events?: WebhookEvent[];
+  isActive?: boolean;
+  headers?: Record<string, string>;
+  retryCount?: number;
+  timeoutMs?: number;
+}
+
+export interface WebhookPayload {
+  event: WebhookEvent;
+  event_id: string;
+  timestamp: string;
+  data: any; // ClickEvent, InstallEvent, or ConversionEvent
+}
+
+export interface WebhookDeliveryResult {
+  success: boolean;
+  webhookId: string;
+  eventType: WebhookEvent;
+  eventId: string;
+  responseStatus?: number;
+  responseBody?: string;
+  errorMessage?: string;
+  attemptNumber: number;
+  deliveredAt?: string;
+}
