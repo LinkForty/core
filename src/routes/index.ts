@@ -1,4 +1,8 @@
 export { redirectRoutes } from './redirect.js';
 export { linkRoutes } from './links.js';
 export { analyticsRoutes } from './analytics.js';
+export { sdkRoutes } from './sdk.js';
+export { qrRoutes } from './qr.js';
 export { webhookRoutes } from './webhooks.js';
+export { previewRoutes } from './preview.js';
+export { debugRoutes } from './debug.js';
