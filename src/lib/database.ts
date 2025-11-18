@@ -107,6 +107,24 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
       )
     `);
 
+    // Webhooks table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS webhooks (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        url TEXT NOT NULL,
+        secret VARCHAR(255) NOT NULL,
+        events TEXT[] NOT NULL DEFAULT '{}',
+        is_active BOOLEAN DEFAULT true,
+        retry_count INTEGER DEFAULT 3,
+        timeout_ms INTEGER DEFAULT 10000,
+        headers JSONB DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
     // Create indexes for performance
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_links_short_code ON links(short_code)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_links_user_id ON links(user_id)');
@@ -115,6 +133,8 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
     await client.query('CREATE INDEX IF NOT EXISTS idx_clicks_timestamp ON click_events(clicked_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_clicks_link_date ON click_events(link_id, clicked_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_webhooks_user_id ON webhooks(user_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_webhooks_active ON webhooks(is_active) WHERE is_active = true');
 
     console.log('Database schema initialized successfully');
   } catch (error) {

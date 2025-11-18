@@ -5,6 +5,7 @@ import { initializeDatabase, DatabaseOptions } from './lib/database.js';
 import { redirectRoutes } from './routes/redirect.js';
 import { linkRoutes } from './routes/links.js';
 import { analyticsRoutes } from './routes/analytics.js';
+import { webhookRoutes } from './routes/webhooks.js';
 
 export interface ServerOptions {
   database?: DatabaseOptions;
@@ -41,6 +42,7 @@ export async function createServer(options: ServerOptions = {}) {
   await fastify.register(redirectRoutes);
   await fastify.register(linkRoutes);
   await fastify.register(analyticsRoutes);
+  await fastify.register(webhookRoutes);
 
   return fastify;
 }
@@ -48,5 +50,6 @@ export async function createServer(options: ServerOptions = {}) {
 // Re-export utilities and types
 export * from './lib/utils.js';
 export * from './lib/database.js';
+export * from './lib/webhook.js';
 export * from './types/index.js';
-export { redirectRoutes, linkRoutes, analyticsRoutes } from './routes/index.js';
+export { redirectRoutes, linkRoutes, analyticsRoutes, webhookRoutes } from './routes/index.js';
