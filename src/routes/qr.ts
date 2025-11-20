@@ -74,10 +74,11 @@ export async function qrRoutes(fastify: FastifyInstance) {
 
     const link = result.rows[0];
 
-    // Build short URL (use original_url as fallback if short_code not available)
-    // In production, you'd want to use your actual domain
+    // Build short URL using configured domain or request hostname
+    // Use SHORTLINK_DOMAIN env var for production deployments
+    const shortLinkDomain = process.env.SHORTLINK_DOMAIN || `${request.protocol}://${request.hostname}`;
     const shortUrl = link.short_code
-      ? `${request.protocol}://${request.hostname}/${link.short_code}`
+      ? `${shortLinkDomain}/${link.short_code}`
       : link.original_url;
 
     try {
