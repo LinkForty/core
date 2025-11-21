@@ -1,6 +1,10 @@
-# Contributing Infrastructure Templates
+<div align="center">
+  <img src="../assets/linkFortyLogo.png" alt="LinkForty Logo" width="150"/>
 
-Thank you for your interest in contributing infrastructure templates to LinkForty! This guide will help you add support for new cloud platforms and deployment methods.
+  # Contributing Infrastructure Templates
+
+  Thank you for your interest in contributing infrastructure templates to LinkForty! This guide will help you add support for new cloud platforms and deployment methods.
+</div>
 
 ## Overview
 

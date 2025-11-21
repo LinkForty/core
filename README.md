@@ -1,8 +1,12 @@
-# @linkforty/core
+<div align="center">
+  <img src="./assets/linkFortyLogo.png" alt="LinkForty Logo" width="200"/>
 
-**Open-source deeplink management engine with device detection and analytics**
+  # @linkforty/core
 
-LinkForty Core is a powerful, self-hosted deeplink management system that enables you to create, manage, and track smart links with device-specific routing, analytics, and UTM parameter support. It's the open-source foundation of the LinkForty platform.
+  **Open-source deeplink management engine with device detection and analytics**
+
+  LinkForty Core is a powerful, self-hosted deeplink management system that enables you to create, manage, and track smart links with device-specific routing, analytics, and UTM parameter support. It's the open-source foundation of the LinkForty platform.
+</div>
 
 [![npm version](https://img.shields.io/npm/v/@linkforty/core.svg)](https://www.npmjs.com/package/@linkforty/core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)

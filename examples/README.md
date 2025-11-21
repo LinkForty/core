@@ -1,6 +1,10 @@
-# @linkforty/core Examples
+<div align="center">
+  <img src="../assets/linkFortyLogo.png" alt="LinkForty Logo" width="150"/>
 
-This directory contains example implementations for deploying LinkForty Core.
+  # @linkforty/core Examples
+
+  This directory contains example implementations for deploying LinkForty Core.
+</div>
 
 ## Quick Start with Docker Compose
 

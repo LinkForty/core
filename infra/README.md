@@ -1,6 +1,10 @@
-# LinkForty Infrastructure
+<div align="center">
+  <img src="../assets/linkFortyLogo.png" alt="LinkForty Logo" width="150"/>
 
-This directory contains infrastructure-as-code templates and deployment guides for running LinkForty in production environments.
+  # LinkForty Infrastructure
+
+  This directory contains infrastructure-as-code templates and deployment guides for running LinkForty in production environments.
+</div>
 
 ## Available Deployment Options
 

@@ -1,6 +1,10 @@
-# Contributing to @linkforty/core
+<div align="center">
+  <img src="./assets/linkFortyLogo.png" alt="LinkForty Logo" width="150"/>
 
-Thank you for your interest in contributing to LinkForty Core! This document provides guidelines and instructions for contributing.
+  # Contributing to @linkforty/core
+
+  Thank you for your interest in contributing to LinkForty Core! This document provides guidelines and instructions for contributing.
+</div>
 
 ## Code of Conduct
 
