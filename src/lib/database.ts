@@ -257,6 +257,103 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
       END $$;
     `);
 
+    // Rename ios_url to ios_app_store_url for clarity
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='ios_url'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='ios_app_store_url'
+        ) THEN
+          ALTER TABLE links RENAME COLUMN ios_url TO ios_app_store_url;
+        END IF;
+      END $$;
+    `);
+
+    // Rename android_url to android_app_store_url for clarity
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='android_url'
+        ) AND NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='android_app_store_url'
+        ) THEN
+          ALTER TABLE links RENAME COLUMN android_url TO android_app_store_url;
+        END IF;
+      END $$;
+    `);
+
+    // Add app URL scheme column (same for iOS and Android per industry best practice)
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='app_scheme'
+        ) THEN
+          ALTER TABLE links ADD COLUMN app_scheme VARCHAR(255);
+        END IF;
+      END $$;
+    `);
+
+    // Add iOS Universal Link URL column
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='ios_universal_link'
+        ) THEN
+          ALTER TABLE links ADD COLUMN ios_universal_link TEXT;
+        END IF;
+      END $$;
+    `);
+
+    // Add Android App Link URL column
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='android_app_link'
+        ) THEN
+          ALTER TABLE links ADD COLUMN android_app_link TEXT;
+        END IF;
+      END $$;
+    `);
+
+    // Add deep link path column for in-app navigation
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='deep_link_path'
+        ) THEN
+          ALTER TABLE links ADD COLUMN deep_link_path TEXT;
+        END IF;
+      END $$;
+    `);
+
+    // Add deep link parameters column for custom app parameters
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='deep_link_parameters'
+        ) THEN
+          ALTER TABLE links ADD COLUMN deep_link_parameters JSONB DEFAULT '{}';
+        END IF;
+      END $$;
+    `);
+
     // Create indexes for performance
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_links_short_code ON links(short_code)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_links_user_id ON links(user_id)');
