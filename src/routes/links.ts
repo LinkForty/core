@@ -8,9 +8,19 @@ const createLinkSchema = z.object({
   originalUrl: z.string().url(),
   title: z.string().optional(),
   description: z.string().optional(),
-  iosUrl: z.string().url().optional(),
-  androidUrl: z.string().url().optional(),
+  // App store URLs (renamed for clarity)
+  iosAppStoreUrl: z.string().url().optional(),
+  androidAppStoreUrl: z.string().url().optional(),
   webFallbackUrl: z.string().url().optional(),
+  // App deep linking configuration
+  appScheme: z.string()
+    .regex(/^[a-z][a-z0-9+.-]*$/, 'Invalid URI scheme format (must start with lowercase letter, contain only lowercase letters, numbers, +, ., or -)')
+    .optional(),
+  iosUniversalLink: z.string().url().optional(),
+  androidAppLink: z.string().url().optional(),
+  deepLinkPath: z.string().optional(),
+  deepLinkParameters: z.record(z.string(), z.any()).optional(),
+  // Existing fields
   customCode: z.string().optional(),
   utmParameters: z.object({
     source: z.string().optional(),
@@ -68,6 +78,7 @@ export async function linkRoutes(fastify: FastifyInstance) {
       clickCount: parseInt(row.click_count),
       utmParameters: row.utm_parameters,
       targetingRules: row.targeting_rules,
+      deepLinkParameters: row.deep_link_parameters,
     }));
   });
 
@@ -102,6 +113,7 @@ export async function linkRoutes(fastify: FastifyInstance) {
       clickCount: parseInt(link.click_count),
       utmParameters: link.utm_parameters,
       targetingRules: link.targeting_rules,
+      deepLinkParameters: link.deep_link_parameters,
     };
   });
 
@@ -135,10 +147,12 @@ export async function linkRoutes(fastify: FastifyInstance) {
     const result = await db.query(
       `INSERT INTO links (
         user_id, short_code, original_url, title, description,
-        ios_url, android_url, web_fallback_url, utm_parameters, targeting_rules,
+        ios_app_store_url, android_app_store_url, web_fallback_url,
+        app_scheme, ios_universal_link, android_app_link, deep_link_path, deep_link_parameters,
+        utm_parameters, targeting_rules,
         og_title, og_description, og_image_url, og_type,
         attribution_window_hours, expires_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
          RETURNING *`,
       [
         data.userId,
@@ -146,9 +160,14 @@ export async function linkRoutes(fastify: FastifyInstance) {
         data.originalUrl,
         data.title || null,
         data.description || null,
-        data.iosUrl || null,
-        data.androidUrl || null,
+        data.iosAppStoreUrl || null,
+        data.androidAppStoreUrl || null,
         data.webFallbackUrl || null,
+        data.appScheme || null,
+        data.iosUniversalLink || null,
+        data.androidAppLink || null,
+        data.deepLinkPath || null,
+        JSON.stringify(data.deepLinkParameters || {}),
         JSON.stringify(data.utmParameters || {}),
         JSON.stringify(data.targetingRules || {}),
         data.ogTitle || null,
@@ -166,6 +185,7 @@ export async function linkRoutes(fastify: FastifyInstance) {
       clickCount: 0,
       utmParameters: link.utm_parameters,
       targetingRules: link.targeting_rules,
+      deepLinkParameters: link.deep_link_parameters,
     };
   });
 
@@ -190,7 +210,7 @@ export async function linkRoutes(fastify: FastifyInstance) {
 
     Object.entries(data).forEach(([key, value]) => {
       if (value !== undefined) {
-        if (key === 'utmParameters' || key === 'targetingRules') {
+        if (key === 'utmParameters' || key === 'targetingRules' || key === 'deepLinkParameters') {
           updates.push(`${key.replace(/([A-Z])/g, '_$1').toLowerCase()} = $${paramIndex}`);
           values.push(JSON.stringify(value));
         } else {
@@ -225,6 +245,7 @@ export async function linkRoutes(fastify: FastifyInstance) {
       ...link,
       utmParameters: link.utm_parameters,
       targetingRules: link.targeting_rules,
+      deepLinkParameters: link.deep_link_parameters,
     };
   });
 
@@ -279,10 +300,12 @@ export async function linkRoutes(fastify: FastifyInstance) {
     const result = await db.query(
       `INSERT INTO links (
         user_id, short_code, original_url, title, description,
-        ios_url, android_url, web_fallback_url, utm_parameters, targeting_rules,
+        ios_app_store_url, android_app_store_url, web_fallback_url,
+        app_scheme, ios_universal_link, android_app_link, deep_link_path, deep_link_parameters,
+        utm_parameters, targeting_rules,
         og_title, og_description, og_image_url, og_type,
         attribution_window_hours, expires_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
          RETURNING *`,
       [
         link.user_id,
@@ -290,9 +313,14 @@ export async function linkRoutes(fastify: FastifyInstance) {
         link.original_url,
         title,
         link.description,
-        link.ios_url,
-        link.android_url,
+        link.ios_app_store_url,
+        link.android_app_store_url,
         link.web_fallback_url,
+        link.app_scheme,
+        link.ios_universal_link,
+        link.android_app_link,
+        link.deep_link_path,
+        link.deep_link_parameters,
         link.utm_parameters,
         link.targeting_rules,
         link.og_title,
@@ -310,6 +338,7 @@ export async function linkRoutes(fastify: FastifyInstance) {
       clickCount: 0,
       utmParameters: newLink.utm_parameters,
       targetingRules: newLink.targeting_rules,
+      deepLinkParameters: newLink.deep_link_parameters,
     };
   });
 
