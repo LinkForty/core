@@ -179,16 +179,32 @@ export async function redirectRoutes(fastify: FastifyInstance) {
 
         await storeFingerprintForClick(clickId, fingerprintData);
 
-        // Determine redirect URL for event emission
+        // Determine redirect URL for event emission (using same logic as main redirect)
         let redirectUrl = link.original_url;
         let redirectReason = 'original_url';
 
-        if (deviceType === 'ios' && link.ios_url) {
-          redirectUrl = link.ios_url;
-          redirectReason = 'ios_url';
-        } else if (deviceType === 'android' && link.android_url) {
-          redirectUrl = link.android_url;
-          redirectReason = 'android_url';
+        if (deviceType === 'ios') {
+          if (link.ios_universal_link) {
+            redirectUrl = link.ios_universal_link;
+            redirectReason = 'ios_universal_link';
+          } else if (link.app_scheme && link.deep_link_path) {
+            redirectUrl = `${link.app_scheme}://${link.deep_link_path.replace(/^\//, '')}`;
+            redirectReason = 'app_scheme';
+          } else if (link.ios_app_store_url) {
+            redirectUrl = link.ios_app_store_url;
+            redirectReason = 'ios_app_store_url';
+          }
+        } else if (deviceType === 'android') {
+          if (link.android_app_link) {
+            redirectUrl = link.android_app_link;
+            redirectReason = 'android_app_link';
+          } else if (link.app_scheme && link.deep_link_path) {
+            redirectUrl = `${link.app_scheme}://${link.deep_link_path.replace(/^\//, '')}`;
+            redirectReason = 'app_scheme';
+          } else if (link.android_app_store_url) {
+            redirectUrl = link.android_app_store_url;
+            redirectReason = 'android_app_store_url';
+          }
         } else if (deviceType === 'web' && link.web_fallback_url) {
           redirectUrl = link.web_fallback_url;
           redirectReason = 'web_fallback_url';
@@ -265,23 +281,81 @@ export async function redirectRoutes(fastify: FastifyInstance) {
       }
     });
 
-    // Determine redirect URL based on device
+    // Determine redirect URL based on device with smart fallback chain
     const userAgent = request.headers['user-agent'] || '';
     const device = detectDevice(userAgent);
 
     let redirectUrl = link.original_url;
+    let useSchemeUrl = false; // Track if we're using a URI scheme URL
 
-    // Check for device-specific URLs
-    if (device === 'ios' && link.ios_url) {
-      redirectUrl = link.ios_url;
-    } else if (device === 'android' && link.android_url) {
-      redirectUrl = link.android_url;
-    } else if (link.web_fallback_url && device === 'web') {
-      redirectUrl = link.web_fallback_url;
+    if (device === 'ios') {
+      // iOS Priority:
+      // 1. Universal Link (HTTPS URL with AASA file) - if app installed, opens app
+      // 2. URI scheme (myapp://path) - fallback when Universal Links fail
+      // 3. App Store URL - for users who don't have the app
+      // 4. Original URL - ultimate fallback
+
+      if (link.ios_universal_link) {
+        redirectUrl = link.ios_universal_link;
+      } else if (link.app_scheme && link.deep_link_path) {
+        // Build URI scheme URL: myapp://product/123
+        redirectUrl = `${link.app_scheme}://${link.deep_link_path.replace(/^\//, '')}`;
+        useSchemeUrl = true;
+      } else if (link.ios_app_store_url) {
+        redirectUrl = link.ios_app_store_url;
+      }
+
+    } else if (device === 'android') {
+      // Android Priority:
+      // 1. App Link (HTTPS URL with Digital Asset Links) - if app installed, opens app
+      // 2. URI scheme (myapp://path) - fallback when App Links fail
+      // 3. Play Store URL - for users who don't have the app
+      // 4. Original URL - ultimate fallback
+
+      if (link.android_app_link) {
+        redirectUrl = link.android_app_link;
+      } else if (link.app_scheme && link.deep_link_path) {
+        // Build URI scheme URL: myapp://product/123
+        redirectUrl = `${link.app_scheme}://${link.deep_link_path.replace(/^\//, '')}`;
+        useSchemeUrl = true;
+      } else if (link.android_app_store_url) {
+        redirectUrl = link.android_app_store_url;
+      }
+
+    } else if (device === 'web') {
+      // Web fallback
+      redirectUrl = link.web_fallback_url || link.original_url;
     }
 
-    // Add UTM parameters
-    const finalUrl = buildRedirectUrl(redirectUrl, link.utm_parameters);
+    // Build final URL with parameters
+    let finalUrl = redirectUrl;
+
+    if (!useSchemeUrl) {
+      // For HTTP(S) URLs, add UTM parameters
+      finalUrl = buildRedirectUrl(redirectUrl, link.utm_parameters);
+
+      // Add deep link parameters as query params
+      if (link.deep_link_parameters && Object.keys(link.deep_link_parameters).length > 0) {
+        try {
+          const url = new URL(finalUrl);
+          Object.entries(link.deep_link_parameters).forEach(([key, value]) => {
+            url.searchParams.set(key, String(value));
+          });
+          finalUrl = url.toString();
+        } catch (error) {
+          // If URL parsing fails, continue without deep link parameters
+          console.error('Failed to add deep link parameters:', error);
+        }
+      }
+    } else {
+      // For URI scheme URLs, append query params differently
+      if (link.deep_link_parameters && Object.keys(link.deep_link_parameters).length > 0) {
+        const params = new URLSearchParams(
+          Object.entries(link.deep_link_parameters).map(([k, v]) => [k, String(v)])
+        );
+        finalUrl += `?${params.toString()}`;
+      }
+    }
 
     // Redirect
     return reply.redirect(302, finalUrl);
