@@ -468,10 +468,10 @@ See [`infra/CONTRIBUTING.md`](infra/CONTRIBUTING.md) to add support for addition
 
 - [x] ✅ Webhook support for click events (v1.1.0)
 - [x] ✅ Docker images with multi-architecture support (v1.4.0)
+- [x] ✅ QR code generation with caching (v1.4.0)
 - [ ] Bulk link operations via API
-- [ ] Link grouping and tags
+- [ ] Link grouping and project organization
 - [ ] A/B testing support
-- [ ] QR code generation
 - [ ] Custom domain support (in SaaS version)
 
 ## Contributing
