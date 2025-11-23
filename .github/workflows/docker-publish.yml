@@ -129,16 +129,41 @@ jobs:
                 PORT: 3000
               ports:
                 - "3000:3000"
+              healthcheck:
+                test: ["CMD", "curl", "-f", "http://localhost:3000/api/sdk/v1/health"]
+                interval: 5s
+                timeout: 5s
+                retries: 10
+                start_period: 10s
           EOF
 
           # Start services
           docker compose -f docker-compose.test.yml up -d
 
-          # Wait for health checks
-          sleep 30
+          # Wait for linkforty to be healthy
+          echo "Waiting for linkforty service to be healthy..."
+          timeout=60
+          elapsed=0
+          while [ $elapsed -lt $timeout ]; do
+            if docker compose -f docker-compose.test.yml ps | grep linkforty | grep -q "healthy"; then
+              echo "Service is healthy!"
+              break
+            fi
+            echo "Waiting... ($elapsed seconds elapsed)"
+            sleep 5
+            elapsed=$((elapsed + 5))
+          done
+
+          if [ $elapsed -ge $timeout ]; then
+            echo "Service failed to become healthy within $timeout seconds"
+            echo "Container logs:"
+            docker compose -f docker-compose.test.yml logs linkforty
+            exit 1
+          fi
 
           # Test API endpoint
-          curl -f http://localhost:3000/health || exit 1
+          echo "Testing API endpoint..."
+          curl -f http://localhost:3000/api/sdk/v1/health || exit 1
 
           # Cleanup
           docker compose -f docker-compose.test.yml down -v
