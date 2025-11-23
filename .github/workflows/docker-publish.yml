@@ -92,8 +92,6 @@ jobs:
 
           # Create a test docker-compose.yml using the published image
           cat > docker-compose.test.yml <<EOF
-          version: '3.8'
-
           services:
             postgres:
               image: postgres:15-alpine
@@ -123,7 +121,7 @@ jobs:
                 redis:
                   condition: service_healthy
               environment:
-                DATABASE_URL: postgresql://linkforty:changeme@postgres:5432/linkforty
+                DATABASE_URL: postgresql://linkforty:changeme@postgres:5432/linkforty?sslmode=disable
                 REDIS_URL: redis://redis:6379
                 NODE_ENV: production
                 PORT: 3000
