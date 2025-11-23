@@ -9,6 +9,8 @@
 </div>
 
 [![npm version](https://img.shields.io/npm/v/@linkforty/core.svg)](https://www.npmjs.com/package/@linkforty/core)
+[![Docker Pulls](https://img.shields.io/docker/pulls/linkforty/core)](https://hub.docker.com/r/linkforty/core)
+[![Docker Image Size](https://img.shields.io/docker/image-size/linkforty/core/latest)](https://hub.docker.com/r/linkforty/core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 ## Features 
@@ -52,18 +54,38 @@ async function start() {
 start();
 ```
 
-### 2. Self-Hosting with Docker
+### 2. Docker (Recommended for Production)
+
+**Quick Start:**
 
 ```bash
-# Clone the examples
-git clone https://github.com/linkforty/core.git
-cd core/examples
+# Pull the latest image
+docker pull linkforty/core:latest
 
-# Start services
+# Run with Docker Compose
+curl -O https://raw.githubusercontent.com/linkforty/core/main/docker-compose.yml
 docker compose up -d
-
-# Server will be available at http://localhost:3000
 ```
+
+**Or use Docker CLI:**
+
+```bash
+docker run -d \
+  --name linkforty \
+  -p 3000:3000 \
+  -e DATABASE_URL=postgresql://user:pass@host:5432/linkforty?sslmode=disable \
+  -e REDIS_URL=redis://host:6379 \
+  linkforty/core:latest
+```
+
+**Features:**
+- ✅ Pre-built multi-architecture images (AMD64 + ARM64)
+- ✅ Automatic updates with version tags
+- ✅ Non-root user for security
+- ✅ Built-in health checks
+- ✅ Supply chain attestations (SBOM + Provenance)
+
+See [DOCKER.md](DOCKER.md) for complete deployment guide.
 
 ## API Reference
 
@@ -379,17 +401,35 @@ Deploy to managed platforms with minimal DevOps overhead:
 
 See [`infra/`](infra/) directory for all deployment options and platform-specific guides.
 
-### Docker Deployment (Self-Hosted)
+### 🐳 Docker Deployment (Recommended for Self-Hosting)
 
-For local development or self-managed infrastructure:
+**Production-ready Docker images available on Docker Hub:**
 
 ```bash
-git clone https://github.com/linkforty/core.git
-cd core/examples
+# One-command deployment
+curl -O https://raw.githubusercontent.com/linkforty/core/main/docker-compose.yml
 docker compose up -d
 ```
 
-See [`examples/docker-compose.yml`](examples/docker-compose.yml) for complete Docker setup.
+**Image Details:**
+- **Registry:** `linkforty/core`
+- **Tags:** `latest`, `v1.x.x`, `main`
+- **Architectures:** linux/amd64, linux/arm64
+- **Base:** Node.js 22 Alpine (minimal, secure)
+- **Security:** Non-root user, SBOM attestations
+
+**Version Pinning (Recommended):**
+```yaml
+services:
+  linkforty:
+    image: linkforty/core:v1.4.0  # Pin to specific version
+```
+
+See [DOCKER.md](DOCKER.md) for complete deployment guide including:
+- Environment configuration
+- Health checks
+- Backup strategies
+- Production best practices
 
 ### Manual Deployment
 
@@ -426,7 +466,8 @@ See [`infra/CONTRIBUTING.md`](infra/CONTRIBUTING.md) to add support for addition
 
 ## Roadmap
 
-- [ ] Webhook support for click events
+- [x] ✅ Webhook support for click events (v1.1.0)
+- [x] ✅ Docker images with multi-architecture support (v1.4.0)
 - [ ] Bulk link operations via API
 - [ ] Link grouping and tags
 - [ ] A/B testing support
