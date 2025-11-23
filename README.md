@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="./assets/linkFortyLogo.png" alt="LinkForty Logo" width="200"/>
+  <img src="./assets/logo.png" alt="LinkForty Logo" width="140"/>
 
-  # @linkforty/core
+  # LinkForty Core
 
   **Open-source deeplink management engine with device detection and analytics**
 
