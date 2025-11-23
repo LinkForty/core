@@ -34,7 +34,7 @@ This guide covers deploying LinkForty using Docker and Docker Compose.
 
 ```bash
 # Pull the latest image
-docker pull linkforty/linkforty:latest
+docker pull linkforty/core:latest
 
 # Run with required services
 docker run -d \
@@ -42,7 +42,7 @@ docker run -d \
   -p 3000:3000 \
   -e DATABASE_URL=postgresql://user:pass@host:5432/db \
   -e REDIS_URL=redis://host:6379 \
-  linkforty/linkforty:latest
+  linkforty/core:latest
 ```
 
 ## Configuration
@@ -83,7 +83,7 @@ If you have an existing PostgreSQL or Redis instance:
 # docker-compose.yml
 services:
   linkforty:
-    image: linkforty/linkforty:latest
+    image: linkforty/core:latest
     environment:
       DATABASE_URL: postgresql://user:pass@your-db-host:5432/linkforty
       REDIS_URL: redis://your-redis-host:6379
@@ -175,7 +175,7 @@ docker inspect --format='{{json .State.Health}}' linkforty | jq
 ```yaml
 services:
   linkforty:
-    image: linkforty/linkforty:v1.3.0  # Pin to specific version
+    image: linkforty/core:v1.3.0  # Pin to specific version
 ```
 
 ### Updating
@@ -239,7 +239,7 @@ services:
 The published images support both AMD64 and ARM64:
 ```bash
 # Automatically pulls correct architecture
-docker pull linkforty/linkforty:latest
+docker pull linkforty/core:latest
 ```
 
 ### Custom Dockerfile
@@ -247,7 +247,7 @@ docker pull linkforty/linkforty:latest
 If you need to customize the image:
 
 ```dockerfile
-FROM linkforty/linkforty:latest
+FROM linkforty/core:latest
 
 # Add custom scripts
 COPY ./custom-scripts /app/scripts

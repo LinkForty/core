@@ -13,7 +13,7 @@ on:
 
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: linkforty/linkforty
+  IMAGE_NAME: linkforty/core
 
 jobs:
   build-and-push:
