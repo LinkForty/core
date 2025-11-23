@@ -351,7 +351,7 @@ export async function redirectRoutes(fastify: FastifyInstance) {
       // For URI scheme URLs, append query params differently
       if (link.deep_link_parameters && Object.keys(link.deep_link_parameters).length > 0) {
         const params = new URLSearchParams(
-          Object.entries(link.deep_link_parameters).map(([k, v]) => [k, String(v)])
+          Object.entries(link.deep_link_parameters).map(([k, v]) => [k, String(v)] as [string, string])
         );
         finalUrl += `?${params.toString()}`;
       }
