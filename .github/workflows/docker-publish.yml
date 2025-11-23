@@ -89,12 +89,50 @@ jobs:
       - name: Test docker-compose setup
         run: |
           cd examples
-          # Update docker-compose to use the published image
-          sed -i 's|build:|#build:|g' docker-compose.yml
-          sed -i "s|context: ..|image: ${{ env.IMAGE_NAME }}:sha-${GITHUB_SHA::7}|g" docker-compose.yml
+
+          # Create a test docker-compose.yml using the published image
+          cat > docker-compose.test.yml <<EOF
+          version: '3.8'
+
+          services:
+            postgres:
+              image: postgres:15-alpine
+              environment:
+                POSTGRES_DB: linkforty
+                POSTGRES_USER: linkforty
+                POSTGRES_PASSWORD: changeme
+              healthcheck:
+                test: ["CMD-SHELL", "pg_isready -U linkforty"]
+                interval: 5s
+                timeout: 5s
+                retries: 5
+
+            redis:
+              image: redis:7-alpine
+              healthcheck:
+                test: ["CMD", "redis-cli", "ping"]
+                interval: 5s
+                timeout: 5s
+                retries: 5
+
+            linkforty:
+              image: ${{ env.IMAGE_NAME }}:sha-${GITHUB_SHA::7}
+              depends_on:
+                postgres:
+                  condition: service_healthy
+                redis:
+                  condition: service_healthy
+              environment:
+                DATABASE_URL: postgresql://linkforty:changeme@postgres:5432/linkforty
+                REDIS_URL: redis://redis:6379
+                NODE_ENV: production
+                PORT: 3000
+              ports:
+                - "3000:3000"
+          EOF
 
           # Start services
-          docker compose up -d
+          docker compose -f docker-compose.test.yml up -d
 
           # Wait for health checks
           sleep 30
@@ -103,7 +141,7 @@ jobs:
           curl -f http://localhost:3000/health || exit 1
 
           # Cleanup
-          docker compose down -v
+          docker compose -f docker-compose.test.yml down -v
 
   create-release:
     needs: build-and-push
