@@ -14,7 +14,7 @@ The easiest way to get started is using Docker Compose, which will set up Postgr
 
 ```bash
 cd examples
-docker-compose up -d
+docker compose up -d
 ```
 
 This will start:
@@ -44,18 +44,18 @@ curl -X POST http://localhost:3000/api/links \
 ### 3. View Logs
 
 ```bash
-docker-compose logs -f linkforty
+docker compose logs -f linkforty
 ```
 
 ### 4. Stop Services
 
 ```bash
-docker-compose down
+docker compose down
 ```
 
 To remove volumes (data will be lost):
 ```bash
-docker-compose down -v
+docker compose down -v
 ```
 
 ## Basic Server (Node.js)

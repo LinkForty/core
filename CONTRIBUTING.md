@@ -45,7 +45,7 @@ cp .env.example .env
 
 ```bash
 # Using Docker
-docker-compose -f examples/docker-compose.yml up -d postgres redis
+docker compose -f examples/docker-compose.yml up -d postgres redis
 ```
 
 5. **Run database migrations**

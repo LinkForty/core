@@ -60,7 +60,7 @@ git clone https://github.com/linkforty/core.git
 cd core/examples
 
 # Start services
-docker-compose up -d
+docker compose up -d
 
 # Server will be available at http://localhost:3000
 ```
@@ -386,7 +386,7 @@ For local development or self-managed infrastructure:
 ```bash
 git clone https://github.com/linkforty/core.git
 cd core/examples
-docker-compose up -d
+docker compose up -d
 ```
 
 See [`examples/docker-compose.yml`](examples/docker-compose.yml) for complete Docker setup.

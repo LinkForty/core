@@ -94,7 +94,7 @@ jobs:
           sed -i "s|context: ..|image: ${{ env.IMAGE_NAME }}:sha-${GITHUB_SHA::7}|g" docker-compose.yml
 
           # Start services
-          docker-compose up -d
+          docker compose up -d
 
           # Wait for health checks
           sleep 30
@@ -103,7 +103,7 @@ jobs:
           curl -f http://localhost:3000/health || exit 1
 
           # Cleanup
-          docker-compose down -v
+          docker compose down -v
 
   create-release:
     needs: build-and-push
@@ -135,7 +135,7 @@ jobs:
             Run with Docker Compose:
             ```bash
             curl -o docker-compose.yml https://raw.githubusercontent.com/linkforty/core/v${{ steps.version.outputs.VERSION }}/examples/docker-compose.yml
-            docker-compose up -d
+            docker compose up -d
             ```
 
             See [CHANGELOG.md](https://github.com/linkforty/core/blob/main/CHANGELOG.md) for details.
