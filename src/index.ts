@@ -7,6 +7,7 @@ import { linkRoutes } from './routes/links.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { sdkRoutes } from './routes/sdk.js';
 import { webhookRoutes } from './routes/webhooks.js';
+import { qrRoutes } from './routes/qr.js';
 
 export interface ServerOptions {
   database?: DatabaseOptions;
@@ -45,6 +46,7 @@ export async function createServer(options: ServerOptions = {}) {
   await fastify.register(analyticsRoutes);
   await fastify.register(sdkRoutes);
   await fastify.register(webhookRoutes);
+  await fastify.register(qrRoutes);
 
   return fastify;
 }
