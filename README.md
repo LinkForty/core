@@ -464,15 +464,6 @@ See [`infra/CONTRIBUTING.md`](infra/CONTRIBUTING.md) to add support for addition
 - **CORS configuration**: Configurable CORS for API access control
 - **Link expiration**: Automatic handling of expired links
 
-## Roadmap
-
-- [x] ✅ Webhook support for click events (v1.1.0)
-- [x] ✅ Docker images with multi-architecture support (v1.4.0)
-- [ ] Bulk link operations via API
-- [ ] Link grouping and tags
-- [ ] A/B testing support
-- [ ] QR code generation
-- [ ] Custom domain support (in SaaS version)
 
 ## Contributing
 
