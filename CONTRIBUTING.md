@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="./assets/linkFortyLogo.png" alt="LinkForty Logo" width="150"/>
+  <img src="./assets/logo.png" alt="LinkForty Logo" width="150"/>
 
   # Contributing to @linkforty/core
 
