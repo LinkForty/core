@@ -464,6 +464,116 @@ See [`infra/CONTRIBUTING.md`](infra/CONTRIBUTING.md) to add support for addition
 - **CORS configuration**: Configurable CORS for API access control
 - **Link expiration**: Automatic handling of expired links
 
+## Mobile SDK Integration
+
+LinkForty Core supports iOS Universal Links and Android App Links for seamless deep linking in mobile applications.
+
+### iOS Universal Links Setup
+
+1. **Set environment variables:**
+   ```bash
+   IOS_TEAM_ID=ABC123XYZ  # Your Apple Developer Team ID
+   IOS_BUNDLE_ID=com.yourcompany.yourapp
+   ```
+
+2. **Configure in Xcode:**
+   - Add "Associated Domains" capability
+   - Add domain: `applinks:yourdomain.com`
+
+3. **Verify AASA file:**
+   ```bash
+   curl https://yourdomain.com/.well-known/apple-app-site-association
+   ```
+
+   Expected response:
+   ```json
+   {
+     "applinks": {
+       "apps": [],
+       "details": [
+         {
+           "appID": "ABC123XYZ.com.yourcompany.yourapp",
+           "paths": ["*"]
+         }
+       ]
+     }
+   }
+   ```
+
+### Android App Links Setup
+
+1. **Get your SHA-256 fingerprint:**
+   ```bash
+   # Debug keystore
+   keytool -list -v -keystore ~/.android/debug.keystore \
+     -alias androiddebugkey -storepass android -keypass android
+
+   # Release keystore
+   keytool -list -v -keystore /path/to/release.keystore \
+     -alias your-alias
+   ```
+
+2. **Set environment variables:**
+   ```bash
+   ANDROID_PACKAGE_NAME=com.yourcompany.yourapp
+   ANDROID_SHA256_FINGERPRINTS=AA:BB:CC:DD:...
+
+   # Multiple fingerprints (debug + release)
+   ANDROID_SHA256_FINGERPRINTS=AA:BB:CC:...,DD:EE:FF:...
+   ```
+
+3. **Configure in AndroidManifest.xml:**
+   ```xml
+   <intent-filter android:autoVerify="true">
+     <action android:name="android.intent.action.VIEW" />
+     <category android:name="android.intent.category.DEFAULT" />
+     <category android:name="android.intent.category.BROWSABLE" />
+     <data android:scheme="https" />
+     <data android:host="yourdomain.com" />
+   </intent-filter>
+   ```
+
+4. **Verify assetlinks.json:**
+   ```bash
+   curl https://yourdomain.com/.well-known/assetlinks.json
+   ```
+
+   Expected response:
+   ```json
+   [
+     {
+       "relation": ["delegate_permission/common.handle_all_urls"],
+       "target": {
+         "namespace": "android_app",
+         "package_name": "com.yourcompany.yourapp",
+         "sha256_cert_fingerprints": ["AA:BB:CC:..."]
+       }
+     }
+   ]
+   ```
+
+### Available Mobile SDKs
+
+- **React Native**: `npm install @linkforty/react-native-sdk`
+- **iOS**: Coming soon
+- **Android**: Coming soon
+- **Flutter**: Coming soon
+
+See [SDK Integration Guide](https://docs.linkforty.com/guides/sdk-integration) for detailed documentation.
+
+### Testing Domain Verification
+
+Test iOS Universal Links with Apple's validator:
+```bash
+https://search.developer.apple.com/appsearch-validation-tool/
+```
+
+Test Android App Links with Google's validator:
+```bash
+adb shell am start -a android.intent.action.VIEW \
+  -d "https://yourdomain.com/test"
+```
+
 
 ## Contributing
 
