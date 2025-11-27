@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2025-11-26
+
+### Added
+
+#### Mobile SDK Support
+- **Well-Known Routes**: Added domain verification endpoints for iOS Universal Links and Android App Links
+- **Apple App Site Association (AASA)**: Automatic generation of `.well-known/apple-app-site-association` file
+- **Digital Asset Links**: Automatic generation of `.well-known/assetlinks.json` for Android
+- **Environment Configuration**: New environment variables for mobile app configuration
+  - `IOS_TEAM_ID` - Apple Developer Team ID
+  - `IOS_BUNDLE_ID` - iOS app bundle identifier
+  - `ANDROID_PACKAGE_NAME` - Android package name
+  - `ANDROID_SHA256_FINGERPRINTS` - Android app SHA-256 fingerprints (comma-separated for multiple keystores)
+
+#### New API Endpoints
+- `GET /.well-known/apple-app-site-association` - iOS Universal Links verification
+- `GET /.well-known/assetlinks.json` - Android App Links verification
+
+#### Documentation
+- Added Mobile SDK Integration section to README
+- Added environment variable examples for mobile app configuration
+- Added testing guide for domain verification endpoints
+- Comprehensive error messages with documentation links when configuration is missing
+
+### Compatibility
+- Fully backward compatible - mobile SDK features are opt-in via environment variables
+- Works with existing Core deployments without any changes
+- Compatible with LinkForty React Native SDK and future mobile SDKs
+
+---
+
 ## [1.1.0] - 2025-11-18
 
 ### Added
@@ -159,5 +190,6 @@ This is the first stable release of @linkforty/core, providing a complete, produ
 
 ---
 
+[1.5.0]: https://github.com/linkforty/core/releases/tag/v1.5.0
 [1.1.0]: https://github.com/linkforty/core/releases/tag/v1.1.0
 [1.0.0]: https://github.com/linkforty/core/releases/tag/v1.0.0
