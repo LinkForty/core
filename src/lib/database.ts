@@ -380,6 +380,19 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
     await client.query('CREATE INDEX IF NOT EXISTS idx_in_app_events_name ON in_app_events(event_name)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_in_app_events_timestamp ON in_app_events(event_timestamp DESC)');
 
+    // Add deep_link_parameters column for custom deep link parameters
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='deep_link_parameters'
+        ) THEN
+          ALTER TABLE links ADD COLUMN deep_link_parameters JSONB DEFAULT '{}';
+        END IF;
+      END $$;
+    `);
+
     console.log('Database schema initialized successfully');
   } catch (error) {
     console.error('Error initializing database:', error);
