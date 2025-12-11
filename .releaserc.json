@@ -15,7 +15,7 @@
           { "type": "refactor", "release": "patch" },
           { "type": "test", "release": false },
           { "type": "build", "release": false },
-          { "type": "ci", "release": false" },
+          { "type": "ci", "release": false },
           { "breaking": true, "release": "major" }
         ]
       }
@@ -34,7 +34,7 @@
             { "type": "refactor", "section": "Code Refactoring" },
             { "type": "test", "section": "Tests", "hidden": true },
             { "type": "build", "section": "Build System", "hidden": true },
-            { "type": "ci", "section": "CI/CD", "hidden": true" }
+            { "type": "ci", "section": "CI/CD", "hidden": true }
           ]
         }
       }

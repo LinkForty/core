@@ -14,8 +14,8 @@ RUN addgroup -g 1001 -S linkforty && \
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production && \
+# Install dependencies (skip prepare script since we already built in CI)
+RUN npm ci --only=production --ignore-scripts && \
     npm cache clean --force
 
 # Copy source files
