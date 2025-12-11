@@ -67,7 +67,9 @@
             "path": "dist/**/*",
             "label": "Distribution"
           }
-        ]
+        ],
+        "failComment": false,
+        "failTitle": false
       }
     ]
   ]
