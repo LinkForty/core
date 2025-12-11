@@ -9,6 +9,8 @@
 </div>
 
 [![npm version](https://img.shields.io/npm/v/@linkforty/core.svg)](https://www.npmjs.com/package/@linkforty/core)
+[![CI](https://github.com/linkforty/core/actions/workflows/ci.yml/badge.svg)](https://github.com/linkforty/core/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/linkforty/core/branch/main/graph/badge.svg)](https://codecov.io/gh/linkforty/core)
 [![Docker Pulls](https://img.shields.io/docker/pulls/linkforty/core)](https://hub.docker.com/r/linkforty/core)
 [![Docker Image Size](https://img.shields.io/docker/image-size/linkforty/core/latest)](https://hub.docker.com/r/linkforty/core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
