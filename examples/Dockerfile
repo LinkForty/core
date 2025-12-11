@@ -3,7 +3,9 @@ FROM node:22-alpine
 WORKDIR /app
 
 # Install curl and dumb-init for health checks and signal handling
-RUN apk add --no-cache curl dumb-init
+# Split to avoid busybox trigger issues in ARM64 QEMU builds
+RUN apk add --no-cache --no-scripts curl dumb-init && \
+    /bin/busybox --install -s || true
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S linkforty && \
