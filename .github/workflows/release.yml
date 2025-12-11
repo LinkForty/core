@@ -17,6 +17,7 @@ jobs:
     # IMPORTANT: Only runs on main branch from the main repo (not forks)
     if: github.repository == 'linkforty/core' && github.ref == 'refs/heads/main'
     timeout-minutes: 20
+    environment: npm-production
 
     permissions:
       contents: write # To create releases and tags
@@ -37,6 +38,9 @@ jobs:
           node-version: '20'
           cache: 'npm'
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Update npm to latest
+        run: npm install -g npm@latest
 
       - name: Install dependencies
         run: npm ci
