@@ -42,7 +42,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -119,7 +119,7 @@ jobs:
                 retries: 5
 
             linkforty:
-              image: ${{ env.IMAGE_NAME }}:sha-${GITHUB_SHA::7}
+              image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${GITHUB_SHA::7}
               depends_on:
                 postgres:
                   condition: service_healthy
@@ -195,7 +195,7 @@ jobs:
 
             Pull the image:
             ```bash
-            docker pull ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
             ```
 
             Run with Docker Compose:
