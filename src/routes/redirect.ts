@@ -4,6 +4,65 @@ import { parseUserAgent, getLocationFromIP, buildRedirectUrl, detectDevice } fro
 import { storeFingerprintForClick, type FingerprintData } from '../lib/fingerprint.js';
 import { emitClickEvent } from '../lib/event-emitter.js';
 
+/**
+ * Detect iOS in-app browsers where Universal Links don't fire.
+ * These browsers use WKWebView which bypasses the Universal Links mechanism.
+ */
+function isIOSInAppBrowser(userAgent: string): boolean {
+  const inAppPatterns = [
+    /GSA\//i,              // Google Search App (Gmail in-app browser)
+    /Gmail\//i,            // Gmail
+    /FBAN|FBAV/i,          // Facebook
+    /Instagram/i,          // Instagram
+    /Twitter/i,            // Twitter/X
+    /LinkedIn/i,           // LinkedIn
+    /MicroMessenger/i,     // WeChat
+    /Outlook/i,            // Outlook
+    /YahooMobile/i,        // Yahoo Mail
+  ];
+  return inAppPatterns.some(pattern => pattern.test(userAgent));
+}
+
+/**
+ * Generate an interstitial HTML page for iOS in-app browsers.
+ * Tries to open the app via custom scheme URL, falls back to the App Store.
+ */
+function generateInterstitialHTML(schemeUrl: string, fallbackUrl: string, title?: string): string {
+  const safeSchemeUrl = schemeUrl.replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  const safeFallbackUrl = fallbackUrl.replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  const safeTitle = (title || 'the app').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  return `<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Opening ${safeTitle}...</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f9fafb; color: #111827; text-align: center; }
+  .container { padding: 2rem; }
+  .spinner { width: 40px; height: 40px; border: 3px solid #e5e7eb; border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1.5rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 0.5rem; }
+  p { font-size: 0.875rem; color: #6b7280; margin: 0 0 2rem; }
+  .btn { display: inline-block; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-size: 0.875rem; font-weight: 500; text-decoration: none; margin: 0.25rem; }
+  .btn-primary { background: #3b82f6; color: #fff; }
+  .btn-secondary { background: #e5e7eb; color: #374151; }
+</style>
+</head><body>
+<div class="container">
+  <div class="spinner"></div>
+  <h1>Opening ${safeTitle}...</h1>
+  <p>If the app doesn't open automatically:</p>
+  <a class="btn btn-primary" href="${safeSchemeUrl}">Open App</a>
+  <a class="btn btn-secondary" href="${safeFallbackUrl}">Download App</a>
+</div>
+<script>
+  window.location = "${safeSchemeUrl}";
+  setTimeout(function() { window.location.replace("${safeFallbackUrl}"); }, 1500);
+</script>
+</body></html>`;
+}
+
 export async function redirectRoutes(fastify: FastifyInstance) {
   // Helper function to handle the actual redirect logic
   async function handleRedirect(request: any, reply: any, shortCode: string, templateSlug?: string) {
@@ -354,6 +413,31 @@ export async function redirectRoutes(fastify: FastifyInstance) {
           Object.entries(link.deep_link_parameters).map(([k, v]) => [k, String(v)] as [string, string])
         );
         finalUrl += `?${params.toString()}`;
+      }
+    }
+
+    // For iOS in-app browsers (Gmail, Facebook, etc.), serve an interstitial page
+    // that tries to open the app via custom scheme, then falls back to the App Store.
+    // Universal Links don't fire from WKWebView, so a direct 302 would skip the app entirely.
+    if (device === 'ios' && isIOSInAppBrowser(userAgent)) {
+      const schemeUrl = link.custom_scheme_url
+        || (link.app_scheme && link.deep_link_path
+            ? `${link.app_scheme}://${link.deep_link_path.replace(/^\//, '')}`
+            : null);
+
+      if (schemeUrl) {
+        let fullSchemeUrl = schemeUrl;
+        if (link.deep_link_parameters && Object.keys(link.deep_link_parameters).length > 0) {
+          const params = new URLSearchParams(
+            Object.entries(link.deep_link_parameters).map(([k, v]: [string, any]) => [k, String(v)] as [string, string])
+          );
+          fullSchemeUrl += (fullSchemeUrl.includes('?') ? '&' : '?') + params.toString();
+        }
+
+        const storeFallback = link.ios_app_store_url || link.web_fallback_url || link.original_url;
+        return reply
+          .header('Content-Type', 'text/html; charset=utf-8')
+          .send(generateInterstitialHTML(fullSchemeUrl, storeFallback, link.title || link.og_title));
       }
     }
 
