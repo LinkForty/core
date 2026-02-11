@@ -4,9 +4,12 @@ import { db } from '../lib/database.js';
 import {
   recordInstallEvent,
   generateFingerprintHash,
+  storeFingerprintForClick,
   type FingerprintData,
 } from '../lib/fingerprint.js';
 import { triggerWebhooks } from '../lib/webhook.js';
+import { parseUserAgent, getLocationFromIP, detectDevice } from '../lib/utils.js';
+import { emitClickEvent } from '../lib/event-emitter.js';
 
 /**
  * SDK Routes - Mobile SDK endpoints for deferred deep linking
@@ -114,7 +117,8 @@ export async function sdkRoutes(fastify: FastifyInstance) {
            l.ios_url,
            l.android_url,
            l.web_fallback_url,
-           l.utm_parameters
+           l.utm_parameters,
+           l.deep_link_parameters
          FROM install_events ie
          LEFT JOIN links l ON ie.link_id = l.id
          WHERE ie.fingerprint_hash = $1
@@ -171,6 +175,7 @@ export async function sdkRoutes(fastify: FastifyInstance) {
               androidUrl: install.android_url,
               webFallbackUrl: install.web_fallback_url,
               utmParameters: install.utm_parameters,
+              deepLinkParameters: install.deep_link_parameters,
             }
           : null,
       });
@@ -296,6 +301,244 @@ export async function sdkRoutes(fastify: FastifyInstance) {
         message: error.message,
       });
     }
+  });
+
+  /**
+   * GET /api/sdk/v1/resolve/:shortCode
+   * GET /api/sdk/v1/resolve/:templateSlug/:shortCode
+   *
+   * Resolve a short link to its deep link data without triggering a redirect.
+   * Used by mobile SDKs when the OS intercepts a LinkForty URL via App Links
+   * or Universal Links before the server can process the redirect.
+   *
+   * Also records a click event and stores a device fingerprint for attribution,
+   * since the normal redirect flow was bypassed.
+   *
+   * Query params (optional fingerprint data for click attribution):
+   * - fp_tz: Device timezone
+   * - fp_lang: Device language
+   * - fp_sw: Screen width
+   * - fp_sh: Screen height
+   * - fp_platform: Platform (ios/android)
+   * - fp_pv: Platform version
+   *
+   * Response:
+   * - shortCode: The link's short code
+   * - linkId: UUID of the link
+   * - deepLinkPath: In-app destination path
+   * - appScheme: Custom URI scheme
+   * - iosUrl: iOS App Store URL
+   * - androidUrl: Android Play Store URL
+   * - webUrl: Web fallback URL
+   * - utmParameters: UTM tracking parameters
+   * - customParameters: Custom deep link parameters (key-value pairs)
+   * - clickedAt: Timestamp of this resolution
+   */
+  async function handleResolve(request: any, reply: any, shortCode: string, templateSlug?: string) {
+    let linkData: string | null = null;
+
+    // Build cache key (same pattern as redirect.ts)
+    const cacheKey = templateSlug ? `link:${templateSlug}:${shortCode}` : `link:${shortCode}`;
+
+    // Try Redis cache first
+    if (fastify.redis) {
+      try {
+        linkData = await fastify.redis.get(cacheKey);
+      } catch (error) {
+        fastify.log.warn('Redis cache lookup failed, falling back to database');
+      }
+    }
+
+    if (!linkData) {
+      let query: string;
+      let params: any[];
+
+      if (templateSlug) {
+        query = `
+          SELECT l.* FROM links l
+          LEFT JOIN link_templates t ON l.template_id = t.id
+          WHERE l.short_code = $1 AND t.slug = $2
+          AND l.is_active = true
+          AND (l.expires_at IS NULL OR l.expires_at > NOW())
+        `;
+        params = [shortCode, templateSlug];
+      } else {
+        query = `
+          SELECT * FROM links
+          WHERE short_code = $1 AND is_active = true
+          AND (expires_at IS NULL OR expires_at > NOW())
+        `;
+        params = [shortCode];
+      }
+
+      const result = await db.query(query, params);
+
+      if (result.rows.length === 0) {
+        return reply.status(404).send({ error: 'Link not found' });
+      }
+
+      linkData = JSON.stringify(result.rows[0]);
+
+      // Cache for 5 minutes
+      if (fastify.redis) {
+        try {
+          await fastify.redis.setex(cacheKey, 300, linkData);
+        } catch (error) {
+          fastify.log.warn('Redis cache set failed');
+        }
+      }
+    }
+
+    const link = JSON.parse(linkData);
+
+    // Record click event + fingerprint asynchronously (mirrors redirect.ts pattern)
+    setImmediate(async () => {
+      try {
+        const userAgent = request.headers['user-agent'] || '';
+        const ip = request.ip;
+        const referrer = request.headers.referer || null;
+        const acceptLanguage = request.headers['accept-language'] || '';
+
+        const deviceType = detectDevice(userAgent);
+        const { platform, platformVersion } = parseUserAgent(userAgent);
+        const { countryCode, countryName, region, city, latitude, longitude, timezone } = getLocationFromIP(ip);
+
+        // Extract fingerprint data from query params (sent by SDK)
+        const query = request.query as Record<string, string | undefined>;
+        const fpTimezone = query?.fp_tz || timezone || undefined;
+        const fpLanguage = query?.fp_lang || acceptLanguage.split(',')[0]?.split(';')[0] || undefined;
+        const fpScreenWidth = query?.fp_sw ? parseInt(query.fp_sw, 10) : undefined;
+        const fpScreenHeight = query?.fp_sh ? parseInt(query.fp_sh, 10) : undefined;
+
+        // Insert click event
+        const clickResult = await db.query(
+          `INSERT INTO click_events (
+            link_id, ip_address, user_agent, device_type, platform,
+            country_code, country_name, region, city, latitude, longitude, timezone,
+            utm_source, utm_medium, utm_campaign, referrer
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+          RETURNING id`,
+          [
+            link.id,
+            ip,
+            userAgent,
+            deviceType,
+            platform,
+            countryCode,
+            countryName,
+            region,
+            city,
+            latitude,
+            longitude,
+            timezone,
+            query?.utm_source || null,
+            query?.utm_medium || null,
+            query?.utm_campaign || null,
+            referrer,
+          ]
+        );
+
+        const clickId = clickResult.rows[0].id;
+
+        // Store device fingerprint for deferred deep linking
+        const fingerprintData: FingerprintData = {
+          ipAddress: ip,
+          userAgent,
+          timezone: fpTimezone,
+          language: fpLanguage,
+          screenWidth: fpScreenWidth,
+          screenHeight: fpScreenHeight,
+          platform: deviceType,
+          platformVersion,
+        };
+
+        await storeFingerprintForClick(clickId, fingerprintData);
+
+        // Emit click event for real-time streaming
+        emitClickEvent({
+          eventId: clickId,
+          timestamp: new Date().toISOString(),
+          linkId: link.id,
+          shortCode: link.short_code,
+          userId: link.user_id,
+          ipAddress: ip,
+          userAgent,
+          country: countryCode || undefined,
+          city: city || undefined,
+          deviceType,
+          platform: platform || undefined,
+          redirectUrl: '',
+          redirectReason: 'sdk_resolve',
+          targetingMatched: true,
+          utmParameters: link.utm_parameters || undefined,
+          referer: referrer || undefined,
+          language: fpLanguage,
+        });
+
+        // Trigger webhooks for click_event
+        try {
+          const webhooksResult = await db.query(
+            'SELECT * FROM webhooks WHERE user_id = $1 AND is_active = true',
+            [link.user_id]
+          );
+
+          if (webhooksResult.rows.length > 0) {
+            const clickEventData = {
+              id: clickId,
+              linkId: link.id,
+              clickedAt: new Date().toISOString(),
+              ipAddress: ip,
+              userAgent,
+              deviceType,
+              platform,
+              countryCode,
+              countryName,
+              region,
+              city,
+              latitude,
+              longitude,
+              timezone,
+              referrer,
+            };
+
+            await triggerWebhooks(
+              webhooksResult.rows,
+              'click_event',
+              clickId,
+              clickEventData
+            );
+          }
+        } catch (webhookError) {
+          fastify.log.error(`Error triggering click webhooks: ${webhookError}`);
+        }
+      } catch (error) {
+        fastify.log.error(`Error tracking click from resolve: ${error}`);
+      }
+    });
+
+    // Return JSON response with deep link data
+    return reply.status(200).send({
+      shortCode: link.short_code,
+      linkId: link.id,
+      deepLinkPath: link.deep_link_path || undefined,
+      appScheme: link.app_scheme || undefined,
+      iosUrl: link.ios_app_store_url || undefined,
+      androidUrl: link.android_app_store_url || undefined,
+      webUrl: link.web_fallback_url || undefined,
+      utmParameters: link.utm_parameters || undefined,
+      customParameters: link.deep_link_parameters || undefined,
+      clickedAt: new Date().toISOString(),
+    });
+  }
+
+  fastify.get('/api/sdk/v1/resolve/:shortCode', async (request, reply) => {
+    const { shortCode } = request.params as { shortCode: string };
+    return handleResolve(request, reply, shortCode);
+  });
+
+  fastify.get('/api/sdk/v1/resolve/:templateSlug/:shortCode', async (request, reply) => {
+    const { templateSlug, shortCode } = request.params as { templateSlug: string; shortCode: string };
+    return handleResolve(request, reply, shortCode, templateSlug);
   });
 
   /**

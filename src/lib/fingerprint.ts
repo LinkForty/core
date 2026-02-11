@@ -379,7 +379,8 @@ export async function recordInstallEvent(
          android_url,
          web_fallback_url,
          utm_parameters,
-         targeting_rules
+         targeting_rules,
+         deep_link_parameters
        FROM links
        WHERE id = $1`,
       [match.linkId]
@@ -395,6 +396,7 @@ export async function recordInstallEvent(
         webFallbackUrl: link.web_fallback_url,
         utmParameters: link.utm_parameters,
         targetingRules: link.targeting_rules,
+        deepLinkParameters: link.deep_link_parameters,
         clickedAt: match.clickedAt,
         confidenceScore: match.confidenceScore,
         matchedFactors: match.matchedFactors,

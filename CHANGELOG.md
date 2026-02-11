@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file. This projec
 
 Automated releases are managed by [semantic-release](https://github.com/semantic-release/semantic-release).
 
+## 1.4.4 (2026-02-11)
+
+### Features
+
+* Add SDK resolve endpoint for App Links and Universal Links deep linking (`GET /api/sdk/v1/resolve/:shortCode` and `GET /api/sdk/v1/resolve/:templateSlug/:shortCode`) — returns deep link data as JSON when the mobile OS intercepts a LinkForty URL before the server can process the redirect
+* Include `deep_link_parameters` in deferred deep linking responses from `/api/sdk/v1/install` and `/api/sdk/v1/attribution/:fingerprint`
+
+### Bug Fixes
+
+* Fix deferred deep links not returning custom parameters — the install attribution query now selects `deep_link_parameters` from the links table and includes them in the SDK response
+
 ## 1.0.0 (2025-12-11)
 
 ### Features
