@@ -297,9 +297,15 @@ Closes #123
 - **GitHub Issues**: For bug reports and feature requests
 - **Discord**: [Join our community](https://discord.gg/linkforty) (if available)
 
+## Contributor License Agreement (CLA)
+
+All contributors must sign our [Contributor License Agreement](CLA.md) before their first pull request can be merged. When you open a PR, the CLA Assistant bot will post a link to sign via GitHub OAuth — it's a one-time step.
+
+The CLA allows us to use your contributions in both the open-source Core project (AGPL-3.0) and the commercial LinkForty Cloud product. You retain full ownership of your contributions.
+
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be licensed under the AGPL-3.0 License, and you agree to the terms of the [CLA](CLA.md).
 
 ## Recognition
 

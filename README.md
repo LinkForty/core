@@ -13,7 +13,7 @@
 [![codecov](https://codecov.io/gh/linkforty/core/branch/main/graph/badge.svg)](https://codecov.io/gh/linkforty/core)
 [![Docker Pulls](https://img.shields.io/docker/pulls/linkforty/core)](https://hub.docker.com/r/linkforty/core)
 [![Docker Image Size](https://img.shields.io/docker/image-size/linkforty/core/latest)](https://hub.docker.com/r/linkforty/core)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 
 ## Features 
 
@@ -583,7 +583,7 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for det
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+AGPL-3.0 - see [LICENSE](LICENSE) file for details.
 
 ## Related Projects
 

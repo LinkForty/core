@@ -254,10 +254,16 @@ Our CI/CD pipeline is designed with security in mind:
 - **Branch protection** - No direct pushes to main
 - **Provenance** - NPM packages include build provenance for supply chain security
 
+## Contributor License Agreement (CLA)
+
+All contributors must sign our [Contributor License Agreement](../CLA.md) before their first pull request can be merged. When you open a PR, the CLA Assistant bot will post a link to sign via GitHub OAuth — it's a one-time step.
+
+The CLA allows us to use your contributions in both the open-source Core project (AGPL-3.0) and the commercial LinkForty Cloud product. You retain full ownership of your contributions.
+
 ## Questions?
 
-- 💬 Open a [Discussion](https://github.com/linkforty/core/discussions)
-- 🐛 Report bugs via [Issues](https://github.com/linkforty/core/issues)
-- 📧 Email: hello@linkforty.com
+- Open a [Discussion](https://github.com/linkforty/core/discussions)
+- Report bugs via [Issues](https://github.com/linkforty/core/issues)
+- Email: hello@linkforty.com
 
-Thank you for contributing to LinkForty Core! 🎉
+Thank you for contributing to LinkForty Core!

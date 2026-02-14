@@ -67,6 +67,7 @@ npm test
 - [ ] New and existing unit tests pass locally with my changes
 - [ ] Any dependent changes have been merged and published
 - [ ] I have used conventional commit messages (e.g., `feat:`, `fix:`)
+- [ ] I have signed the [Contributor License Agreement](../CLA.md) (the CLA bot will prompt you)
 
 ## Breaking Changes
 

@@ -5,7 +5,7 @@
   "description": "Open-source deeplink management engine with device detection and analytics",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "repository": {
     "type": "git",
     "url": "https://github.com/linkforty/core"
