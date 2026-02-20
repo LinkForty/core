@@ -9,7 +9,7 @@ import { subscribeToClickEvents, ClickEventData } from '../lib/event-emitter.js'
  */
 const simulateRequestSchema = z.object({
   linkId: z.string().uuid(),
-  userId: z.string().uuid(),
+  userId: z.string().uuid().optional(),
   deviceType: z.enum(['ios', 'android', 'web']).optional(),
   userAgent: z.string().optional(),
   country: z.string().length(2).optional(), // ISO country code
@@ -33,10 +33,18 @@ export async function debugRoutes(fastify: FastifyInstance) {
     const data = simulateRequestSchema.parse(request.body);
 
     // Fetch the link
-    const linkResult = await db.query(
-      `SELECT * FROM links WHERE id = $1 AND user_id = $2`,
-      [data.linkId, data.userId]
-    );
+    let linkResult;
+    if (data.userId) {
+      linkResult = await db.query(
+        `SELECT * FROM links WHERE id = $1 AND user_id = $2`,
+        [data.linkId, data.userId]
+      );
+    } else {
+      linkResult = await db.query(
+        `SELECT * FROM links WHERE id = $1`,
+        [data.linkId]
+      );
+    }
 
     if (linkResult.rows.length === 0) {
       throw new Error('Link not found');
@@ -299,20 +307,9 @@ export async function debugRoutes(fastify: FastifyInstance) {
     '/api/debug/live',
     { websocket: true },
     (connection: any, request: FastifyRequest<{
-      Querystring: { userId: string; linkId?: string };
+      Querystring: { userId?: string; linkId?: string };
     }>) => {
       const { userId, linkId } = request.query;
-
-      if (!userId) {
-        connection.socket.send(
-          JSON.stringify({
-            type: 'error',
-            message: 'userId query parameter is required',
-          })
-        );
-        connection.socket.close();
-        return;
-      }
 
       // Send welcome message
       connection.socket.send(
@@ -320,7 +317,7 @@ export async function debugRoutes(fastify: FastifyInstance) {
           type: 'connected',
           message: 'Connected to live request inspector',
           filters: {
-            userId,
+            userId: userId || 'all',
             linkId: linkId || 'all',
           },
         })
@@ -328,8 +325,8 @@ export async function debugRoutes(fastify: FastifyInstance) {
 
       // Subscribe to click events
       const unsubscribe = subscribeToClickEvents((eventData: ClickEventData) => {
-        // Filter by userId
-        if (eventData.userId !== userId) {
+        // Filter by userId if provided
+        if (userId && eventData.userId !== userId) {
           return;
         }
 
