@@ -7,7 +7,7 @@ import type { Webhook, WebhookEvent } from '../types/index.js';
 const webhookEventSchema = z.enum(['click_event', 'install_event', 'conversion_event']);
 
 const createWebhookSchema = z.object({
-  userId: z.string().uuid(),
+  userId: z.string().uuid().optional(),
   name: z.string().min(1).max(255),
   url: z.string().url(),
   events: z.array(webhookEventSchema).min(1),
@@ -27,23 +27,28 @@ const updateWebhookSchema = z.object({
 });
 
 export async function webhookRoutes(fastify: FastifyInstance) {
-  // Get all webhooks for a user
+  // Get all webhooks (optionally filtered by userId)
   fastify.get('/api/webhooks', async (request: FastifyRequest<{
-    Querystring: { userId: string }
+    Querystring: { userId?: string }
   }>) => {
     const { userId } = request.query;
 
-    if (!userId) {
-      throw new Error('userId query parameter is required');
+    let result;
+    if (userId) {
+      result = await db.query(
+        `SELECT id, user_id, name, url, events, is_active, retry_count, timeout_ms, headers, created_at, updated_at
+         FROM webhooks
+         WHERE user_id = $1
+         ORDER BY created_at DESC`,
+        [userId]
+      );
+    } else {
+      result = await db.query(
+        `SELECT id, user_id, name, url, events, is_active, retry_count, timeout_ms, headers, created_at, updated_at
+         FROM webhooks
+         ORDER BY created_at DESC`
+      );
     }
-
-    const result = await db.query(
-      `SELECT id, user_id, name, url, events, is_active, retry_count, timeout_ms, headers, created_at, updated_at
-       FROM webhooks
-       WHERE user_id = $1
-       ORDER BY created_at DESC`,
-      [userId]
-    );
 
     // Don't expose secrets in list view
     return result.rows;
@@ -52,19 +57,23 @@ export async function webhookRoutes(fastify: FastifyInstance) {
   // Get a single webhook with secret
   fastify.get('/api/webhooks/:id', async (request: FastifyRequest<{
     Params: { id: string }
-    Querystring: { userId: string }
+    Querystring: { userId?: string }
   }>) => {
     const { id } = request.params;
     const { userId } = request.query;
 
-    if (!userId) {
-      throw new Error('userId query parameter is required');
+    let result;
+    if (userId) {
+      result = await db.query(
+        'SELECT * FROM webhooks WHERE id = $1 AND user_id = $2',
+        [id, userId]
+      );
+    } else {
+      result = await db.query(
+        'SELECT * FROM webhooks WHERE id = $1',
+        [id]
+      );
     }
-
-    const result = await db.query(
-      'SELECT * FROM webhooks WHERE id = $1 AND user_id = $2',
-      [id, userId]
-    );
 
     if (result.rows.length === 0) {
       throw new Error('Webhook not found');
@@ -85,7 +94,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
       [
-        data.userId,
+        data.userId || null,
         data.name,
         data.url,
         secret,
@@ -102,15 +111,11 @@ export async function webhookRoutes(fastify: FastifyInstance) {
   // Update a webhook
   fastify.put('/api/webhooks/:id', async (request: FastifyRequest<{
     Params: { id: string }
-    Querystring: { userId: string }
+    Querystring: { userId?: string }
   }>) => {
     const { id } = request.params;
     const { userId } = request.query;
     const data = updateWebhookSchema.parse(request.body);
-
-    if (!userId) {
-      throw new Error('userId query parameter is required');
-    }
 
     // Build dynamic update query
     const updates: string[] = [];
@@ -151,12 +156,18 @@ export async function webhookRoutes(fastify: FastifyInstance) {
     }
 
     updates.push(`updated_at = NOW()`);
-    values.push(id, userId);
+    values.push(id);
+
+    let whereClause = `WHERE id = $${paramCount++}`;
+    if (userId) {
+      values.push(userId);
+      whereClause += ` AND user_id = $${paramCount}`;
+    }
 
     const result = await db.query(
       `UPDATE webhooks
        SET ${updates.join(', ')}
-       WHERE id = $${paramCount++} AND user_id = $${paramCount}
+       ${whereClause}
        RETURNING *`,
       values
     );
@@ -171,19 +182,23 @@ export async function webhookRoutes(fastify: FastifyInstance) {
   // Delete a webhook
   fastify.delete('/api/webhooks/:id', async (request: FastifyRequest<{
     Params: { id: string }
-    Querystring: { userId: string }
+    Querystring: { userId?: string }
   }>) => {
     const { id } = request.params;
     const { userId } = request.query;
 
-    if (!userId) {
-      throw new Error('userId query parameter is required');
+    let result;
+    if (userId) {
+      result = await db.query(
+        'DELETE FROM webhooks WHERE id = $1 AND user_id = $2 RETURNING id',
+        [id, userId]
+      );
+    } else {
+      result = await db.query(
+        'DELETE FROM webhooks WHERE id = $1 RETURNING id',
+        [id]
+      );
     }
-
-    const result = await db.query(
-      'DELETE FROM webhooks WHERE id = $1 AND user_id = $2 RETURNING id',
-      [id, userId]
-    );
 
     if (result.rows.length === 0) {
       throw new Error('Webhook not found');
@@ -195,20 +210,24 @@ export async function webhookRoutes(fastify: FastifyInstance) {
   // Test a webhook
   fastify.post('/api/webhooks/:id/test', async (request: FastifyRequest<{
     Params: { id: string }
-    Querystring: { userId: string }
+    Querystring: { userId?: string }
   }>) => {
     const { id } = request.params;
     const { userId } = request.query;
 
-    if (!userId) {
-      throw new Error('userId query parameter is required');
-    }
-
     // Get webhook
-    const webhookResult = await db.query(
-      'SELECT * FROM webhooks WHERE id = $1 AND user_id = $2',
-      [id, userId]
-    );
+    let webhookResult;
+    if (userId) {
+      webhookResult = await db.query(
+        'SELECT * FROM webhooks WHERE id = $1 AND user_id = $2',
+        [id, userId]
+      );
+    } else {
+      webhookResult = await db.query(
+        'SELECT * FROM webhooks WHERE id = $1',
+        [id]
+      );
+    }
 
     if (webhookResult.rows.length === 0) {
       throw new Error('Webhook not found');

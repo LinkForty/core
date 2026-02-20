@@ -14,7 +14,7 @@ export interface ClickEventData {
   timestamp: string;
   linkId: string;
   shortCode: string;
-  userId: string;
+  userId?: string;
   organizationId?: string;
 
   // Request details

@@ -1,14 +1,6 @@
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface Link {
   id: string;
-  userId: string;
+  userId?: string;
   short_code: string;
   original_url: string;
   title?: string;
@@ -207,30 +199,3 @@ export interface ConversionEvent {
   timestamp: string;
 }
 
-// Organization app configuration (stored in organizations.settings.appConfig)
-export interface AppConfig {
-  appScheme?: string;                    // URI scheme for deep linking (e.g., "myapp" or "com.company.app")
-  iosBundleId?: string;                  // iOS bundle identifier (e.g., "com.company.app")
-  androidPackageName?: string;           // Android package name (e.g., "com.company.app")
-  iosUniversalLinkDomain?: string;       // Domain for iOS Universal Links (e.g., "app.company.com")
-  androidAppLinkDomain?: string;         // Domain for Android App Links (e.g., "app.company.com")
-}
-
-// Organization settings structure (stored in organizations.settings JSONB field)
-export interface OrganizationSettings {
-  appConfig?: AppConfig;
-  // Future settings can be added here (branding, notifications, etc.)
-}
-
-// Organization entity
-export interface Organization {
-  id: string;
-  name: string;
-  slug: string;
-  ownerId: string;
-  settings?: OrganizationSettings;
-  subscriptionTier?: 'free' | 'starter' | 'pro' | 'enterprise';
-  subscriptionStatus?: 'active' | 'canceled' | 'past_due' | 'trialing';
-  createdAt: string;
-  updatedAt: string;
-}

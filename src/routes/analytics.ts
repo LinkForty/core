@@ -2,15 +2,15 @@ import { FastifyInstance, FastifyRequest } from 'fastify';
 import { db } from '../lib/database.js';
 
 export async function analyticsRoutes(fastify: FastifyInstance) {
-  // Get overall analytics for a user
+  // Get overall analytics (optionally filtered by userId)
   fastify.get('/api/analytics/overview', async (request: FastifyRequest<{
-    Querystring: { userId: string; days?: number }
+    Querystring: { userId?: string; days?: number }
   }>) => {
     const { userId, days = 30 } = request.query;
 
-    if (!userId) {
-      throw new Error('userId query parameter is required');
-    }
+    const userFilter = userId ? 'AND l.user_id = $1' : '';
+    const userFilterWhere = userId ? 'WHERE l.user_id = $1' : '';
+    const params = userId ? [userId] : [];
 
     // Get total and unique clicks
     const clicksResult = await db.query(
@@ -19,8 +19,8 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
          COUNT(DISTINCT ip_address) as unique_clicks
        FROM click_events ce
               JOIN links l ON ce.link_id = l.id
-       WHERE l.user_id = $1 AND ce.clicked_at >= NOW() - INTERVAL '${days} days'`,
-      [userId]
+       WHERE ce.clicked_at >= NOW() - INTERVAL '${days} days' ${userFilter}`,
+      params
     );
 
     // Get clicks by date
@@ -30,10 +30,10 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
          COUNT(*) as clicks
        FROM click_events ce
          JOIN links l ON ce.link_id = l.id
-       WHERE l.user_id = $1 AND ce.clicked_at >= NOW() - INTERVAL '${days} days'
+       WHERE ce.clicked_at >= NOW() - INTERVAL '${days} days' ${userFilter}
        GROUP BY DATE(ce.clicked_at)
        ORDER BY date`,
-      [userId]
+      params
     );
 
     // Get clicks by country
@@ -44,10 +44,10 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
          COUNT(*) as clicks
        FROM click_events ce
               JOIN links l ON ce.link_id = l.id
-       WHERE l.user_id = $1 AND ce.clicked_at >= NOW() - INTERVAL '${days} days'
+       WHERE ce.clicked_at >= NOW() - INTERVAL '${days} days' ${userFilter}
        GROUP BY ce.country_code, ce.country_name
        ORDER BY clicks DESC`,
-      [userId]
+      params
     );
 
     // Get clicks by device
@@ -57,10 +57,10 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
          COUNT(*) as clicks
        FROM click_events ce
               JOIN links l ON ce.link_id = l.id
-       WHERE l.user_id = $1 AND ce.clicked_at >= NOW() - INTERVAL '${days} days'
+       WHERE ce.clicked_at >= NOW() - INTERVAL '${days} days' ${userFilter}
        GROUP BY ce.device_type
        ORDER BY clicks DESC`,
-      [userId]
+      params
     );
 
     // Get clicks by platform
@@ -70,10 +70,10 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
          COUNT(*) as clicks
        FROM click_events ce
               JOIN links l ON ce.link_id = l.id
-       WHERE l.user_id = $1 AND ce.clicked_at >= NOW() - INTERVAL '${days} days'
+       WHERE ce.clicked_at >= NOW() - INTERVAL '${days} days' ${userFilter}
        GROUP BY ce.platform
        ORDER BY clicks DESC`,
-      [userId]
+      params
     );
 
     // Get top performing links
@@ -88,11 +88,11 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
        FROM links l
               LEFT JOIN click_events ce ON l.id = ce.link_id
          AND ce.clicked_at >= NOW() - INTERVAL '${days} days'
-       WHERE l.user_id = $1
+       ${userFilterWhere}
        GROUP BY l.id
        ORDER BY total_clicks DESC
          LIMIT 10`,
-      [userId]
+      params
     );
 
     return {
@@ -129,20 +129,24 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
   // Get link-specific analytics
   fastify.get('/api/analytics/links/:linkId', async (request: FastifyRequest<{
     Params: { linkId: string };
-    Querystring: { userId: string; days?: number };
+    Querystring: { userId?: string; days?: number };
   }>) => {
     const { linkId } = request.params;
     const { userId, days = 30 } = request.query;
 
-    if (!userId) {
-      throw new Error('userId query parameter is required');
+    // Verify link exists (and ownership if userId provided)
+    let linkResult;
+    if (userId) {
+      linkResult = await db.query(
+        'SELECT id FROM links WHERE id = $1 AND user_id = $2',
+        [linkId, userId]
+      );
+    } else {
+      linkResult = await db.query(
+        'SELECT id FROM links WHERE id = $1',
+        [linkId]
+      );
     }
-
-    // Verify link ownership
-    const linkResult = await db.query(
-      'SELECT id FROM links WHERE id = $1 AND user_id = $2',
-      [linkId, userId]
-    );
 
     if (linkResult.rows.length === 0) {
       throw new Error('Link not found');

@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file. This projec
 
 Automated releases are managed by [semantic-release](https://github.com/semantic-release/semantic-release).
 
+## 1.5.0 (2026-02-20)
+
+### BREAKING CHANGES - Making Core less opinionated
+
+* **Remove `users` table from Core** — Core no longer creates or manages a `users` table. Authentication and user management are now the consumer's responsibility, aligning Core with a framework-first philosophy (bring your own auth). Consumers that relied on Core's `users` table must create it themselves before any tables that reference `users(id)`.
+* **Make `user_id` nullable on `links` and `webhooks` tables** — The `user_id` column on both `links` and `webhooks` is now nullable with no foreign key constraint. This enables single-tenant usage without a user model.
+* **Remove `User`, `Organization`, `AppConfig`, and `OrganizationSettings` types** — These Cloud-only types have been removed from `@linkforty/core/types`. Consumers that imported them must define their own.
+
+### Features
+
+* **Optional `userId` across all API endpoints** — All link, analytics, webhook, and debug endpoints now accept `userId` as an optional parameter. When provided, queries are scoped to that user (multi-tenant mode). When omitted, all records are accessible (single-tenant mode).
+* **Single-tenant mode** — Core can now be used without any user/auth model. Create and manage links, view analytics, and configure webhooks without providing a `userId`.
+* **WebSocket live debug stream no longer requires `userId`** — When `userId` is omitted, the `/api/debug/live` WebSocket streams all click events.
+
+### Removed
+
+* `users` table DDL and `idx_users_email` index from `initializeDatabase()`
+* `JWT_SECRET` and email configuration sections from `.env.example`
+* `User`, `Organization`, `AppConfig`, `OrganizationSettings` interfaces from types
+
 ## 1.4.4 (2026-02-11)
 
 ### Features

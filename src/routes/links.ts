@@ -4,7 +4,7 @@ import { db } from '../lib/database.js';
 import { generateShortCode } from '../lib/utils.js';
 
 const createLinkSchema = z.object({
-  userId: z.string().uuid(),
+  userId: z.string().uuid().optional(),
   originalUrl: z.string().url(),
   title: z.string().optional(),
   description: z.string().optional(),
@@ -51,27 +51,39 @@ const updateLinkSchema = createLinkSchema.partial().extend({
 }).omit({ userId: true });
 
 export async function linkRoutes(fastify: FastifyInstance) {
-  // Get all links for a user
+  // Get all links (optionally filtered by userId)
   fastify.get('/api/links', async (request: FastifyRequest<{
-    Querystring: { userId: string }
+    Querystring: { userId?: string }
   }>) => {
     const { userId } = request.query;
 
-    if (!userId) {
-      throw new Error('userId query parameter is required');
+    let query: string;
+    let params: any[];
+
+    if (userId) {
+      query = `
+        SELECT l.*,
+               COUNT(ce.id) as click_count
+        FROM links l
+               LEFT JOIN click_events ce ON l.id = ce.link_id
+        WHERE l.user_id = $1
+        GROUP BY l.id
+        ORDER BY l.created_at DESC
+      `;
+      params = [userId];
+    } else {
+      query = `
+        SELECT l.*,
+               COUNT(ce.id) as click_count
+        FROM links l
+               LEFT JOIN click_events ce ON l.id = ce.link_id
+        GROUP BY l.id
+        ORDER BY l.created_at DESC
+      `;
+      params = [];
     }
 
-    const query = `
-      SELECT l.*,
-             COUNT(ce.id) as click_count
-      FROM links l
-             LEFT JOIN click_events ce ON l.id = ce.link_id
-      WHERE l.user_id = $1
-      GROUP BY l.id
-      ORDER BY l.created_at DESC
-    `;
-
-    const result = await db.query(query, [userId]);
+    const result = await db.query(query, params);
 
     return result.rows.map(row => ({
       ...row,
@@ -85,23 +97,31 @@ export async function linkRoutes(fastify: FastifyInstance) {
   // Get single link
   fastify.get('/api/links/:id', async (request: FastifyRequest<{
     Params: { id: string };
-    Querystring: { userId: string };
+    Querystring: { userId?: string };
   }>) => {
     const { id } = request.params;
     const { userId } = request.query;
 
-    if (!userId) {
-      throw new Error('userId query parameter is required');
+    let result;
+    if (userId) {
+      result = await db.query(
+        `SELECT l.*, COUNT(ce.id) as click_count
+         FROM links l
+                LEFT JOIN click_events ce ON l.id = ce.link_id
+         WHERE l.id = $1 AND l.user_id = $2
+         GROUP BY l.id`,
+        [id, userId]
+      );
+    } else {
+      result = await db.query(
+        `SELECT l.*, COUNT(ce.id) as click_count
+         FROM links l
+                LEFT JOIN click_events ce ON l.id = ce.link_id
+         WHERE l.id = $1
+         GROUP BY l.id`,
+        [id]
+      );
     }
-
-    const result = await db.query(
-      `SELECT l.*, COUNT(ce.id) as click_count
-       FROM links l
-              LEFT JOIN click_events ce ON l.id = ce.link_id
-       WHERE l.id = $1 AND l.user_id = $2
-       GROUP BY l.id`,
-      [id, userId]
-    );
 
     if (result.rows.length === 0) {
       throw new Error('Link not found');
@@ -155,7 +175,7 @@ export async function linkRoutes(fastify: FastifyInstance) {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
          RETURNING *`,
       [
-        data.userId,
+        data.userId || null,
         shortCode,
         data.originalUrl,
         data.title || null,
@@ -192,14 +212,10 @@ export async function linkRoutes(fastify: FastifyInstance) {
   // Update link
   fastify.put('/api/links/:id', async (request: FastifyRequest<{
     Params: { id: string };
-    Querystring: { userId: string };
+    Querystring: { userId?: string };
   }>) => {
     const { id } = request.params;
     const { userId } = request.query;
-
-    if (!userId) {
-      throw new Error('userId query parameter is required');
-    }
 
     const data = updateLinkSchema.parse(request.body);
 
@@ -227,11 +243,17 @@ export async function linkRoutes(fastify: FastifyInstance) {
     }
 
     updates.push('updated_at = NOW()');
-    values.push(id, userId);
+    values.push(id);
+
+    let whereClause = `WHERE id = $${paramIndex}`;
+    if (userId) {
+      values.push(userId);
+      whereClause += ` AND user_id = $${paramIndex + 1}`;
+    }
 
     const result = await db.query(
       `UPDATE links SET ${updates.join(', ')}
-       WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}
+       ${whereClause}
          RETURNING *`,
       values
     );
@@ -252,20 +274,24 @@ export async function linkRoutes(fastify: FastifyInstance) {
   // Duplicate link
   fastify.post('/api/links/:id/duplicate', async (request: FastifyRequest<{
     Params: { id: string };
-    Querystring: { userId: string };
+    Querystring: { userId?: string };
   }>) => {
     const { id } = request.params;
     const { userId } = request.query;
 
-    if (!userId) {
-      throw new Error('userId query parameter is required');
-    }
-
     // Get original link
-    const originalLink = await db.query(
-      'SELECT * FROM links WHERE id = $1 AND user_id = $2',
-      [id, userId]
-    );
+    let originalLink;
+    if (userId) {
+      originalLink = await db.query(
+        'SELECT * FROM links WHERE id = $1 AND user_id = $2',
+        [id, userId]
+      );
+    } else {
+      originalLink = await db.query(
+        'SELECT * FROM links WHERE id = $1',
+        [id]
+      );
+    }
 
     if (originalLink.rows.length === 0) {
       throw new Error('Link not found');
@@ -345,19 +371,23 @@ export async function linkRoutes(fastify: FastifyInstance) {
   // Delete link
   fastify.delete('/api/links/:id', async (request: FastifyRequest<{
     Params: { id: string };
-    Querystring: { userId: string };
+    Querystring: { userId?: string };
   }>) => {
     const { id } = request.params;
     const { userId } = request.query;
 
-    if (!userId) {
-      throw new Error('userId query parameter is required');
+    let result;
+    if (userId) {
+      result = await db.query(
+        'DELETE FROM links WHERE id = $1 AND user_id = $2 RETURNING id',
+        [id, userId]
+      );
+    } else {
+      result = await db.query(
+        'DELETE FROM links WHERE id = $1 RETURNING id',
+        [id]
+      );
     }
-
-    const result = await db.query(
-      'DELETE FROM links WHERE id = $1 AND user_id = $2 RETURNING id',
-      [id, userId]
-    );
 
     if (result.rows.length === 0) {
       throw new Error('Link not found');
