@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file. This projec
 
 Automated releases are managed by [semantic-release](https://github.com/semantic-release/semantic-release).
 
+## 1.5.1 (2026-02-20)
+
+### Documentation
+
+* **Rewrite README for v1.5.0 framework changes** — Updated description to reflect framework-first philosophy, removed `users` table from schema docs, made `userId` optional in all API examples, added missing endpoints (webhooks, QR codes, SDK, debug, well-known, OG preview), added missing database tables (device_fingerprints, install_events, in_app_events, webhooks), fixed field names (`iosAppStoreUrl`/`androidAppStoreUrl`), fixed SDK package name to `@linkforty/mobile-sdk-react-native`
+
 ## 1.5.0 (2026-02-20)
 
 ### BREAKING CHANGES - Making Core less opinionated
