@@ -4,6 +4,7 @@ export { analyticsRoutes } from './analytics.js';
 export { sdkRoutes } from './sdk.js';
 export { qrRoutes } from './qr.js';
 export { webhookRoutes } from './webhooks.js';
+export { templateRoutes } from './templates.js';
 export { previewRoutes } from './preview.js';
 export { debugRoutes } from './debug.js';
 export { wellKnownRoutes } from './well-known.js';

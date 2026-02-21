@@ -7,6 +7,7 @@ import { linkRoutes } from './routes/links.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { sdkRoutes } from './routes/sdk.js';
 import { webhookRoutes } from './routes/webhooks.js';
+import { templateRoutes } from './routes/templates.js';
 import { qrRoutes } from './routes/qr.js';
 import { wellKnownRoutes } from './routes/well-known.js';
 
@@ -48,6 +49,7 @@ export async function createServer(options: ServerOptions = {}) {
   await fastify.register(analyticsRoutes);
   await fastify.register(sdkRoutes);
   await fastify.register(webhookRoutes);
+  await fastify.register(templateRoutes);
   await fastify.register(qrRoutes);
 
   return fastify;
@@ -60,4 +62,4 @@ export * from './lib/fingerprint.js';
 export * from './lib/webhook.js';
 export * from './lib/event-emitter.js';
 export * from './types/index.js';
-export { redirectRoutes, linkRoutes, analyticsRoutes, sdkRoutes, webhookRoutes, qrRoutes, previewRoutes, debugRoutes, wellKnownRoutes } from './routes/index.js';
+export { redirectRoutes, linkRoutes, analyticsRoutes, sdkRoutes, webhookRoutes, templateRoutes, qrRoutes, previewRoutes, debugRoutes, wellKnownRoutes } from './routes/index.js';

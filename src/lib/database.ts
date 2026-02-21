@@ -51,6 +51,21 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
   const client = await connectWithRetry();
 
   try {
+    // Link templates table (must be created before links, which references it)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS link_templates (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID,
+        name VARCHAR(255) NOT NULL,
+        slug VARCHAR(100) UNIQUE NOT NULL,
+        description TEXT,
+        settings JSONB DEFAULT '{}',
+        is_default BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
     // Links table
     await client.query(`
       CREATE TABLE IF NOT EXISTS links (
@@ -168,6 +183,19 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       )
+    `);
+
+    // Add template_id column to links table
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='template_id'
+        ) THEN
+          ALTER TABLE links ADD COLUMN template_id UUID REFERENCES link_templates(id) ON DELETE SET NULL;
+        END IF;
+      END $$;
     `);
 
     // Add description column to existing links table if it doesn't exist
@@ -356,6 +384,11 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
     await client.query('CREATE INDEX IF NOT EXISTS idx_installs_link_id ON install_events(link_id)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_installs_timestamp ON install_events(installed_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_installs_link_date ON install_events(link_id, installed_at DESC)');
+
+    // Indexes for link templates
+    await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_link_templates_slug ON link_templates(slug)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_link_templates_user_id ON link_templates(user_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_links_template_id ON links(template_id)');
 
     // Indexes for webhooks
     await client.query('CREATE INDEX IF NOT EXISTS idx_webhooks_user_id ON webhooks(user_id)');

@@ -1,6 +1,40 @@
+// Template types
+export interface LinkTemplateSettings {
+  defaultIosUrl?: string;
+  defaultAndroidUrl?: string;
+  defaultWebFallbackUrl?: string;
+  defaultAttributionWindowHours?: number;
+  utmParameters?: UTMParameters;
+  targetingRules?: TargetingRules;
+  expiresAfterDays?: number;
+}
+
+export interface LinkTemplate {
+  id: string;
+  userId?: string;
+  name: string;
+  slug: string;
+  description?: string;
+  settings: LinkTemplateSettings;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateTemplateRequest {
+  name: string;
+  description?: string;
+  settings?: LinkTemplateSettings;
+  isDefault?: boolean;
+}
+
+export interface UpdateTemplateRequest extends Partial<CreateTemplateRequest> {}
+
 export interface Link {
   id: string;
   userId?: string;
+  template_id?: string;
+  template_slug?: string;
   short_code: string;
   original_url: string;
   title?: string;
@@ -66,6 +100,7 @@ export interface ClickEvent {
 }
 
 export interface CreateLinkRequest {
+  templateId?: string;
   originalUrl: string;
   title?: string;
   description?: string;

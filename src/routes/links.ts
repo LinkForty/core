@@ -5,6 +5,7 @@ import { generateShortCode } from '../lib/utils.js';
 
 const createLinkSchema = z.object({
   userId: z.string().uuid().optional(),
+  templateId: z.string().uuid().optional(),
   originalUrl: z.string().url(),
   title: z.string().optional(),
   description: z.string().optional(),
@@ -63,21 +64,25 @@ export async function linkRoutes(fastify: FastifyInstance) {
     if (userId) {
       query = `
         SELECT l.*,
+               t.slug as template_slug,
                COUNT(ce.id) as click_count
         FROM links l
+               LEFT JOIN link_templates t ON l.template_id = t.id
                LEFT JOIN click_events ce ON l.id = ce.link_id
         WHERE l.user_id = $1
-        GROUP BY l.id
+        GROUP BY l.id, t.slug
         ORDER BY l.created_at DESC
       `;
       params = [userId];
     } else {
       query = `
         SELECT l.*,
+               t.slug as template_slug,
                COUNT(ce.id) as click_count
         FROM links l
+               LEFT JOIN link_templates t ON l.template_id = t.id
                LEFT JOIN click_events ce ON l.id = ce.link_id
-        GROUP BY l.id
+        GROUP BY l.id, t.slug
         ORDER BY l.created_at DESC
       `;
       params = [];
@@ -105,20 +110,22 @@ export async function linkRoutes(fastify: FastifyInstance) {
     let result;
     if (userId) {
       result = await db.query(
-        `SELECT l.*, COUNT(ce.id) as click_count
+        `SELECT l.*, t.slug as template_slug, COUNT(ce.id) as click_count
          FROM links l
+                LEFT JOIN link_templates t ON l.template_id = t.id
                 LEFT JOIN click_events ce ON l.id = ce.link_id
          WHERE l.id = $1 AND l.user_id = $2
-         GROUP BY l.id`,
+         GROUP BY l.id, t.slug`,
         [id, userId]
       );
     } else {
       result = await db.query(
-        `SELECT l.*, COUNT(ce.id) as click_count
+        `SELECT l.*, t.slug as template_slug, COUNT(ce.id) as click_count
          FROM links l
+                LEFT JOIN link_templates t ON l.template_id = t.id
                 LEFT JOIN click_events ce ON l.id = ce.link_id
          WHERE l.id = $1
-         GROUP BY l.id`,
+         GROUP BY l.id, t.slug`,
         [id]
       );
     }
@@ -166,16 +173,17 @@ export async function linkRoutes(fastify: FastifyInstance) {
 
     const result = await db.query(
       `INSERT INTO links (
-        user_id, short_code, original_url, title, description,
+        user_id, template_id, short_code, original_url, title, description,
         ios_app_store_url, android_app_store_url, web_fallback_url,
         app_scheme, ios_universal_link, android_app_link, deep_link_path, deep_link_parameters,
         utm_parameters, targeting_rules,
         og_title, og_description, og_image_url, og_type,
         attribution_window_hours, expires_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
          RETURNING *`,
       [
         data.userId || null,
+        data.templateId || null,
         shortCode,
         data.originalUrl,
         data.title || null,
@@ -325,16 +333,17 @@ export async function linkRoutes(fastify: FastifyInstance) {
 
     const result = await db.query(
       `INSERT INTO links (
-        user_id, short_code, original_url, title, description,
+        user_id, template_id, short_code, original_url, title, description,
         ios_app_store_url, android_app_store_url, web_fallback_url,
         app_scheme, ios_universal_link, android_app_link, deep_link_path, deep_link_parameters,
         utm_parameters, targeting_rules,
         og_title, og_description, og_image_url, og_type,
         attribution_window_hours, expires_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
          RETURNING *`,
       [
         link.user_id,
+        link.template_id || null,
         shortCode,
         link.original_url,
         title,

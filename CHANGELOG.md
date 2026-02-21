@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file. This projec
 
 Automated releases are managed by [semantic-release](https://github.com/semantic-release/semantic-release).
 
+## 1.6.0 (2026-02-20)
+
+### Features
+
+* **Add link templates** — New `link_templates` table and full CRUD API (`GET/POST/PUT/DELETE /api/templates`, `PUT /api/templates/:id/set-default`). Templates provide reusable default settings (platform URLs, UTM parameters, targeting rules, attribution windows) that are applied when creating links. Auto-generates unique 8-character alphanumeric slugs for template-based short URLs (`/:templateSlug/:shortCode`).
+* **Add `templateId` to link creation** — Links can now be assigned to a template via the optional `templateId` field. Template slug is included in link query responses as `template_slug`.
+* **Add `LinkTemplate`, `LinkTemplateSettings`, `CreateTemplateRequest`, `UpdateTemplateRequest` types** — New TypeScript interfaces for template management, exported from `@linkforty/core/types`.
+
 ## 1.5.1 (2026-02-20)
 
 ### Documentation
