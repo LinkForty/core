@@ -1,3 +1,10 @@
+## [1.6.1](https://github.com/linkforty/core/compare/v1.6.0...v1.6.1) (2026-02-25)
+
+
+### Documentation
+
+* add SDK feature specification for contributors ([9272bb7](https://github.com/linkforty/core/commit/9272bb7fec6c94e571947984496f76c8f8eb6e63))
+
 # Changelog
 
 All notable changes to this project will be documented in this file. This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
