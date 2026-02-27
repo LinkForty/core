@@ -1,3 +1,10 @@
+## [1.6.3](https://github.com/linkforty/core/compare/v1.6.2...v1.6.3) (2026-02-27)
+
+
+### Documentation
+
+* optimize README for LLM discoverability and fix SDK listings ([2804f7e](https://github.com/linkforty/core/commit/2804f7ec0c57e67b4b8a889da83478b7a7742b49))
+
 ## [1.6.2](https://github.com/linkforty/core/compare/v1.6.1...v1.6.2) (2026-02-27)
 
 
