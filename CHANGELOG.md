@@ -1,3 +1,10 @@
+## [1.6.2](https://github.com/linkforty/core/compare/v1.6.1...v1.6.2) (2026-02-27)
+
+
+### Documentation
+
+* add llms.txt for LLM-optimized integration reference ([52c95dd](https://github.com/linkforty/core/commit/52c95dde70f88002e1f31cf69b7be8b15736492c))
+
 ## [1.6.1](https://github.com/linkforty/core/compare/v1.6.0...v1.6.1) (2026-02-25)
 
 
