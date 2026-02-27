@@ -72,6 +72,7 @@
     "dist",
     "migrations",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "llms.txt"
   ]
 }
