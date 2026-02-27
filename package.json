@@ -12,11 +12,23 @@
   },
   "keywords": [
     "deeplink",
+    "deep-linking",
     "onelink",
     "mobile-links",
     "device-detection",
     "url-shortener",
-    "analytics"
+    "analytics",
+    "branch-alternative",
+    "appsflyer-alternative",
+    "firebase-dynamic-links",
+    "deferred-deep-linking",
+    "universal-links",
+    "app-links",
+    "attribution",
+    "open-source",
+    "self-hosted",
+    "smart-links",
+    "mobile-attribution"
   ],
   "scripts": {
     "build": "tsc",

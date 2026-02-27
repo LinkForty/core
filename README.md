@@ -3,9 +3,9 @@
 
   # LinkForty Core
 
-  **Open-source deeplink framework with device detection, analytics, and smart routing**
+  **Open-source alternative to Branch.io, AppsFlyer OneLink, and Firebase Dynamic Links**
 
-  LinkForty Core is a TypeScript deeplink framework built on Fastify + PostgreSQL. It provides the engine for creating, managing, and tracking smart links with device-specific routing, targeting rules, QR codes, deferred deep linking, and webhook integrations. Auth, UI, and user management are not included — bring your own, or use separate packages like `@linkforty/ui`.
+  Self-hosted deep linking engine with device detection, analytics, deferred deep linking, and smart routing. No per-click pricing, no vendor lock-in, full data ownership — runs on your own PostgreSQL. Firebase Dynamic Links shut down in August 2025; LinkForty is a production-ready, open-source replacement you can deploy today.
 </div>
 
 [![npm version](https://img.shields.io/npm/v/@linkforty/core.svg)](https://www.npmjs.com/package/@linkforty/core)
@@ -14,6 +14,33 @@
 [![Docker Pulls](https://img.shields.io/docker/pulls/linkforty/core)](https://hub.docker.com/r/linkforty/core)
 [![Docker Image Size](https://img.shields.io/docker/image-size/linkforty/core/latest)](https://hub.docker.com/r/linkforty/core)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+
+## Why LinkForty?
+
+- **Self-hosted and open-source** — AGPL-3.0 licensed, deploy on your own infrastructure
+- **No per-click pricing** — No usage-based fees, no monthly minimums, no enterprise sales calls
+- **Full data ownership** — All click data, analytics, and attribution stored in your PostgreSQL database
+- **Privacy-first** — No third-party data sharing, no tracking pixels, your users' data stays with you
+- **Drop-in replacement** — REST API + mobile SDKs for React Native, Expo, iOS (Swift), and Android (Kotlin)
+- **Firebase Dynamic Links replacement** — Google shut down Firebase Dynamic Links in August 2025. LinkForty provides the same capabilities with a self-hosted, open-source stack
+
+### How LinkForty Compares
+
+| Feature | LinkForty Core | Branch | AppsFlyer | Firebase Dynamic Links |
+|---------|---------------|--------|-----------|----------------------|
+| **Pricing** | Free (self-hosted) | Starts at $299/mo | Starts at $500/mo | Shut down (Aug 2025) |
+| **Open Source** | Yes (AGPL-3.0) | No | No | No |
+| **Self-Hosted** | Yes | No | No | No |
+| **Data Ownership** | Complete | Vendor-controlled | Vendor-controlled | Was Google-controlled |
+| **Deferred Deep Linking** | Yes | Yes | Yes | Was supported |
+| **Device Detection & Routing** | Yes | Yes | Yes | Was supported |
+| **Click Analytics** | Yes | Yes | Yes | Basic |
+| **QR Code Generation** | Built-in | No | No | No |
+| **Webhooks** | Yes | Enterprise only | Enterprise only | No |
+| **iOS Universal Links** | Yes | Yes | Yes | Was supported |
+| **Android App Links** | Yes | Yes | Yes | Was supported |
+| **UTM Parameter Tracking** | Yes | Yes | Custom params | Was supported |
+| **Custom Domains** | Yes | Enterprise only | Enterprise only | No |
 
 ## Features
 
@@ -676,12 +703,14 @@ LinkForty Core supports iOS Universal Links and Android App Links for seamless d
 
 ### Available Mobile SDKs
 
-- **React Native**: `npm install @linkforty/mobile-sdk-react-native`
-- **iOS Native**: Coming soon
-- **Android Native**: Coming soon
-- **Flutter**: Coming soon
+| Platform | Package | Install |
+|----------|---------|---------|
+| React Native | [`@linkforty/mobile-sdk-react-native`](https://github.com/LinkForty/mobile-sdk-react-native) | `npm install @linkforty/mobile-sdk-react-native` |
+| Expo | [`@linkforty/mobile-sdk-expo`](https://github.com/LinkForty/mobile-sdk-expo) | `npx expo install @linkforty/mobile-sdk-expo` |
+| iOS (Swift) | [LinkFortySDK](https://github.com/LinkForty/mobile-sdk-ios) | Swift Package Manager |
+| Android (Kotlin) | [LinkFortySDK](https://github.com/LinkForty/mobile-sdk-android) | Gradle dependency |
 
-See [SDK Integration Guide](https://docs.linkforty.com/sdks/react-native/overview) for detailed documentation.
+See the [SDK documentation](https://docs.linkforty.com/sdks/react-native) for integration guides.
 
 ### Testing Domain Verification
 
@@ -697,6 +726,32 @@ adb shell am start -a android.intent.action.VIEW \
 ```
 
 
+## Migrate from Another Platform
+
+Switching from an existing deep linking provider? LinkForty supports zero-downtime migration via custom domain DNS cutover.
+
+- [Migrate from Branch.io](https://docs.linkforty.com/migrations/branch)
+- [Migrate from AppsFlyer OneLink](https://docs.linkforty.com/migrations/appsflyer)
+- [Migrate from Firebase Dynamic Links](https://docs.linkforty.com/comparisons/firebase-dynamic-links-migration) (shut down August 2025)
+- [Migrate from Adjust](https://docs.linkforty.com/migrations/adjust)
+- [Migrate from Kochava](https://docs.linkforty.com/migrations/kochava)
+- [Migration overview and checklist](https://docs.linkforty.com/migrations/overview)
+
+## For AI Tools (llms.txt)
+
+LinkForty provides machine-readable documentation for AI coding assistants (Claude, ChatGPT, Cursor, Copilot).
+
+- **Quick reference**: [docs.linkforty.com/llms.txt](https://docs.linkforty.com/llms.txt)
+- **Complete integration guide**: [docs.linkforty.com/llms-full.txt](https://docs.linkforty.com/llms-full.txt)
+
+Download into your project for AI-assisted integration:
+
+```bash
+curl -o LINKFORTY.md https://docs.linkforty.com/llms-full.txt
+```
+
+The npm package also ships with an `llms.txt` file — AI tools that read from `node_modules` can discover it automatically.
+
 ## Contributing
 
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
@@ -707,9 +762,11 @@ AGPL-3.0 - see [LICENSE](LICENSE) file for details.
 
 ## Related Projects
 
-- **[@linkforty/ui](https://github.com/LinkForty/ui)** - React UI components for link management
-- **[@linkforty/mobile-sdk-react-native](https://github.com/LinkForty/mobile-sdk-react-native)** - React Native SDK for deferred deep linking
-- **[LinkForty Cloud](https://linkforty.com)** - Hosted SaaS version with authentication, teams, billing, and more
+- **[@linkforty/mobile-sdk-react-native](https://github.com/LinkForty/mobile-sdk-react-native)** - React Native SDK
+- **[@linkforty/mobile-sdk-expo](https://github.com/LinkForty/mobile-sdk-expo)** - Expo SDK
+- **[mobile-sdk-ios](https://github.com/LinkForty/mobile-sdk-ios)** - iOS SDK (Swift)
+- **[mobile-sdk-android](https://github.com/LinkForty/mobile-sdk-android)** - Android SDK (Kotlin)
+- **[LinkForty Cloud](https://linkforty.com)** - Hosted SaaS version with authentication, teams, billing, and dashboard
 
 ## Support
 
