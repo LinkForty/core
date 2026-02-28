@@ -1,3 +1,11 @@
+## [1.6.4](https://github.com/linkforty/core/compare/v1.6.3...v1.6.4) (2026-02-28)
+
+
+### Documentation
+
+* add Docker Hub overview with competitor positioning ([48353b9](https://github.com/linkforty/core/commit/48353b9e2aa4099db65a78464c70332a04d8dbdb))
+* remove shields.io badge from Docker Hub overview ([33c5f20](https://github.com/linkforty/core/commit/33c5f2024ca2e918ea28c2c77bbe665d3109dfc6))
+
 ## [1.6.3](https://github.com/linkforty/core/compare/v1.6.2...v1.6.3) (2026-02-27)
 
 
