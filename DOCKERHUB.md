@@ -6,8 +6,6 @@ Self-hosted deep linking engine with device detection, analytics, deferred deep 
 
 Firebase Dynamic Links shut down in August 2025. LinkForty is a production-ready, open-source replacement.
 
-[![GitHub](https://img.shields.io/github/stars/LinkForty/core?style=social)](https://github.com/LinkForty/core)
-
 ## Quick Start
 
 ```bash
