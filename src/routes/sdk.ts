@@ -114,8 +114,8 @@ export async function sdkRoutes(fastify: FastifyInstance) {
            ie.*,
            l.short_code,
            l.original_url,
-           l.ios_url,
-           l.android_url,
+           l.ios_app_store_url,
+           l.android_app_store_url,
            l.web_fallback_url,
            l.utm_parameters,
            l.deep_link_parameters
@@ -171,8 +171,8 @@ export async function sdkRoutes(fastify: FastifyInstance) {
           ? {
               shortCode: install.short_code,
               originalUrl: install.original_url,
-              iosUrl: install.ios_url,
-              androidUrl: install.android_url,
+              iosUrl: install.ios_app_store_url,
+              androidUrl: install.android_app_store_url,
               webFallbackUrl: install.web_fallback_url,
               utmParameters: install.utm_parameters,
               deepLinkParameters: install.deep_link_parameters,

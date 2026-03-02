@@ -109,12 +109,12 @@ export async function debugRoutes(fastify: FastifyInstance) {
     let redirectUrl = link.original_url;
     let redirectReason = 'original_url (default)';
 
-    if (deviceType === 'ios' && link.ios_url) {
-      redirectUrl = link.ios_url;
-      redirectReason = 'ios_url (iOS device detected)';
-    } else if (deviceType === 'android' && link.android_url) {
-      redirectUrl = link.android_url;
-      redirectReason = 'android_url (Android device detected)';
+    if (deviceType === 'ios' && link.ios_app_store_url) {
+      redirectUrl = link.ios_app_store_url;
+      redirectReason = 'ios_app_store_url (iOS device detected)';
+    } else if (deviceType === 'android' && link.android_app_store_url) {
+      redirectUrl = link.android_app_store_url;
+      redirectReason = 'android_app_store_url (Android device detected)';
     } else if (deviceType === 'web' && link.web_fallback_url) {
       redirectUrl = link.web_fallback_url;
       redirectReason = 'web_fallback_url (Web device detected)';

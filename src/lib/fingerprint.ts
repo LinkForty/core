@@ -375,8 +375,8 @@ export async function recordInstallEvent(
       `SELECT
          short_code,
          original_url,
-         ios_url,
-         android_url,
+         ios_app_store_url,
+         android_app_store_url,
          web_fallback_url,
          utm_parameters,
          targeting_rules,
@@ -391,8 +391,8 @@ export async function recordInstallEvent(
       deepLinkData = {
         shortCode: link.short_code,
         originalUrl: link.original_url,
-        iosUrl: link.ios_url,
-        androidUrl: link.android_url,
+        iosUrl: link.ios_app_store_url,
+        androidUrl: link.android_app_store_url,
         webFallbackUrl: link.web_fallback_url,
         utmParameters: link.utm_parameters,
         targetingRules: link.targeting_rules,
