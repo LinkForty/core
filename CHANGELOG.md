@@ -1,3 +1,10 @@
+## [1.6.5](https://github.com/linkforty/core/compare/v1.6.4...v1.6.5) (2026-03-02)
+
+
+### Bug Fixes
+
+* rename ios_url/android_url to ios_app_store_url/android_app_store_url in SQL queries ([#3](https://github.com/linkforty/core/issues/3)) ([49f52c0](https://github.com/linkforty/core/commit/49f52c0d4ee78af416288c219b3c24c1ee24145d))
+
 ## [1.6.4](https://github.com/linkforty/core/compare/v1.6.3...v1.6.4) (2026-02-28)
 
 
