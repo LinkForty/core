@@ -310,6 +310,7 @@ Canonical field names for cross-SDK data models. SDKs should use platform-approp
 | description | string | No | Link description |
 | customCode | string | No | Custom short code |
 | utmParameters | UTMParameters | No | Campaign tracking parameters |
+| externalUserId | string | No | Identifier for the app user creating the link (enables per-user deduplication and share attribution) |
 
 ### CreateLinkResult
 
@@ -318,6 +319,7 @@ Canonical field names for cross-SDK data models. SDKs should use platform-approp
 | url | string | Yes | Full shareable URL |
 | shortCode | string | Yes | Generated short code |
 | linkId | string | Yes | Link UUID |
+| deduplicated | boolean | No | True if an existing link was returned instead of creating a new one |
 
 ### UTMParameters
 
