@@ -149,22 +149,17 @@ Allows apps to create short links on behalf of the user (e.g., for sharing conte
 
 ### What the SDK must do
 
-1. Accept link creation options (deep link parameters, title, description, custom code, UTM parameters)
-2. Require an API key to be configured
-3. Send the request to the server and return the created link's URL, short code, and link ID
-4. Support two creation paths:
-   - **Without template ID:** Use `POST /api/sdk/v1/links` (Cloud-only, auto-selects template)
-   - **With template ID:** Use `POST /api/links` (dashboard endpoint, requires template ID and optionally template slug for URL construction)
+1. Accept link creation options including a template ID, deep link parameters, title, description, custom code, and UTM parameters
+2. Require an API key and a template ID to be configured
+3. Send the request to `POST /api/links` and return the created link's URL, short code, and link ID
 
-### API endpoints
+### API endpoint
 
-- `POST /api/sdk/v1/links` (simplified, Cloud-only)
-- `POST /api/links` (dashboard endpoint)
+- `POST /api/links`
 
 ### Important
 
-- This feature requires an API key. SDKs must fail clearly if no API key is configured.
-- The simplified endpoint (`/api/sdk/v1/links`) only exists in Cloud, not in self-hosted Core.
+- This feature requires an API key and a template ID. SDKs must fail clearly if no API key is configured or if no template ID is provided.
 
 ---
 
@@ -224,6 +219,7 @@ SDKs must handle these error scenarios. The mechanism (typed enums, error codes,
 | Network failure during URL resolution | Fall back to local URL parsing |
 | Network failure during event tracking | Queue the event for retry (see [Offline Resilience](#12-offline-resilience)) |
 | Link creation without API key | Throw/return an error |
+| Link creation without template ID | Throw/return an error |
 | Server returns error response | Surface the error to the caller |
 | Invalid configuration | Throw/return an error during initialization |
 
@@ -266,8 +262,7 @@ All endpoints are relative to the configured base URL.
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| `POST` | `/api/sdk/v1/links` | API key | Create link (auto-selects template) |
-| `POST` | `/api/links` | API key | Create link (explicit template ID) |
+| `POST` | `/api/links` | API key | Create link (requires template ID) |
 
 ### Authentication
 
@@ -308,8 +303,8 @@ Canonical field names for cross-SDK data models. SDKs should use platform-approp
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| templateId | string | No | Template UUID (uses `/api/links` if provided) |
-| templateSlug | string | No | Template slug (for URL construction with templateId) |
+| templateId | string | Yes | Template UUID |
+| templateSlug | string | No | Template slug (for URL construction) |
 | deepLinkParameters | map<string, string> | No | In-app routing parameters |
 | title | string | No | Link title |
 | description | string | No | Link description |
