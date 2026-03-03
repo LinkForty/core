@@ -1,6 +1,6 @@
 {
   "name": "@linkforty/core",
-  "version": "1.6.5",
+  "version": "1.6.6",
   "type": "module",
   "description": "Open-source deeplink management engine with device detection and analytics",
   "main": "dist/index.js",

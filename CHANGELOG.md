@@ -1,3 +1,10 @@
+## [1.6.6](https://github.com/linkforty/core/compare/v1.6.5...v1.6.6) (2026-03-03)
+
+
+### Documentation
+
+* require template ID for SDK link creation ([#4](https://github.com/linkforty/core/issues/4)) ([bff8420](https://github.com/linkforty/core/commit/bff8420))
+
 ## [1.6.5](https://github.com/linkforty/core/compare/v1.6.4...v1.6.5) (2026-03-02)
 
 
