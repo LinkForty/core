@@ -1,3 +1,10 @@
+## [1.12.2](https://github.com/linkforty/core/compare/v1.12.1...v1.12.2) (2026-03-04)
+
+
+### Documentation
+
+* add revenue event convention to SDK event endpoint comment ([5880109](https://github.com/linkforty/core/commit/588010969ad20a006c76e17aca5b8577ae2a7745))
+
 ## [1.6.6](https://github.com/linkforty/core/compare/v1.6.5...v1.6.6) (2026-03-03)
 
 
