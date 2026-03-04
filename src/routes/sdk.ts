@@ -193,6 +193,10 @@ export async function sdkRoutes(fastify: FastifyInstance) {
    * Track in-app events (purchases, signups, etc.)
    * Used for conversion tracking and webhook triggers
    *
+   * Revenue convention (all SDKs):
+   *   eventName: "revenue"
+   *   eventData: { revenue: number, currency: string, ...properties }
+   *
    * Request body:
    * - installId: UUID of the install event
    * - eventName: Name of the event (e.g., "purchase", "signup", "level_complete")
