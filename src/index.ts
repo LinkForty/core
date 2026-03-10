@@ -20,11 +20,14 @@ export interface ServerOptions {
     origin: string | string[];
   };
   logger?: boolean;
+  /** When true or a number (proxy hop count), Fastify trusts X-Forwarded-For so request.ip is the real client IP. Set when behind a reverse proxy. */
+  trustProxy?: boolean | number;
 }
 
 export async function createServer(options: ServerOptions = {}) {
   const fastify = Fastify({
     logger: options.logger !== undefined ? options.logger : true,
+    trustProxy: options.trustProxy,
   });
 
   // CORS
@@ -57,6 +60,7 @@ export async function createServer(options: ServerOptions = {}) {
 
 // Re-export utilities and types
 export * from './lib/utils.js';
+export * from './lib/client-ip.js';
 export * from './lib/database.js';
 export * from './lib/fingerprint.js';
 export * from './lib/webhook.js';

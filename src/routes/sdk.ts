@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from '../lib/database.js';
+import { getClientIp } from '../lib/client-ip.js';
 import {
   recordInstallEvent,
   generateFingerprintHash,
@@ -21,7 +22,7 @@ export async function sdkRoutes(fastify: FastifyInstance) {
    * Report app installation and retrieve deferred deep link data
    *
    * Request body:
-   * - ipAddress: Client IP (auto-detected if not provided)
+   * - ipAddress: Optional, for debug only (untrusted; server uses connection/proxy headers for trusted IP)
    * - userAgent: Client user agent
    * - timezone: Device timezone (e.g., "America/New_York")
    * - language: Device language (e.g., "en-US")
@@ -55,8 +56,8 @@ export async function sdkRoutes(fastify: FastifyInstance) {
 
     const body = schema.parse(request.body);
 
-    // Use client-provided IP or fallback to request IP
-    const ipAddress = body.ipAddress || request.ip;
+    // Trusted IP from connection/proxy headers only; never use body.ipAddress for attribution/fingerprint
+    const ipAddress = getClientIp(request);
 
     const fingerprintData: FingerprintData = {
       ipAddress,
@@ -82,6 +83,7 @@ export async function sdkRoutes(fastify: FastifyInstance) {
         confidenceScore: result.match?.confidenceScore || 0,
         matchedFactors: result.match?.matchedFactors || [],
         deepLinkData: result.deepLinkData,
+        ...(body.ipAddress != null && { clientReportedIp: body.ipAddress }),
       });
     } catch (error: any) {
       fastify.log.error(`Error recording install event: ${error}`);
@@ -408,7 +410,7 @@ export async function sdkRoutes(fastify: FastifyInstance) {
     setImmediate(async () => {
       try {
         const userAgent = request.headers['user-agent'] || '';
-        const ip = request.ip;
+        const ip = getClientIp(request);
         const referrer = request.headers.referer || null;
         const acceptLanguage = request.headers['accept-language'] || '';
 
