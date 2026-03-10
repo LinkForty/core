@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { db } from './database';
+import { db } from './database.js';
 
 /**
  * Device fingerprint data structure
