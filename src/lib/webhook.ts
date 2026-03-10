@@ -97,7 +97,7 @@ export async function deliverWebhook(
   payload: WebhookPayload,
   logDelivery?: (result: WebhookDeliveryResult) => Promise<void>
 ): Promise<WebhookDeliveryResult> {
-  const maxRetries = webhook.retry_count || 3;
+  const maxRetries = webhook.retry_count ?? 3;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     const result = await attemptWebhookDelivery(webhook, payload, attempt);
