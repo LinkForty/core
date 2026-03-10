@@ -1,3 +1,10 @@
+## [1.13.0](https://github.com/linkforty/core/compare/v1.12.2...v1.13.0) (2026-03-10)
+
+
+### Features
+
+* add sdk_event webhook event type ([3a2809f](https://github.com/linkforty/core/commit/3a2809f164fadd4b8863a38dc151e5a5db9beb00))
+
 ## [1.12.2](https://github.com/linkforty/core/compare/v1.12.1...v1.12.2) (2026-03-04)
 
 
