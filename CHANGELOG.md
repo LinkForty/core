@@ -1,3 +1,10 @@
+## [1.13.1](https://github.com/linkforty/core/compare/v1.13.0...v1.13.1) (2026-03-10)
+
+
+### Bug Fixes
+
+* use vitest Mock type for db.query mock to fix CI type errors ([86237e1](https://github.com/linkforty/core/commit/86237e1e8092ebd330247864a1738776a2e2f71d))
+
 ## [1.13.0](https://github.com/linkforty/core/compare/v1.12.2...v1.13.0) (2026-03-10)
 
 
