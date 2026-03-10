@@ -10,7 +10,7 @@ vi.mock('./database', () => ({
 import * as fingerprint from './fingerprint';
 import { db } from './database';
 
-const mockDbQuery = db.query as unknown as ReturnType<typeof vi.fn>;
+const mockDbQuery = vi.mocked(db.query);
 
 const baseFingerprint = {
   ipAddress: '192.168.1.100',
@@ -186,7 +186,7 @@ describe('matchInstallToClick', () => {
       platform_version: '11.0',
     };
 
-    // Second row: IP + user agent + timezone (score 80)
+    // Second row: IP + user agent + timezone + language + screen (score 100)
     const rowB = {
       click_id: 'click-b',
       link_id: 'link-b',
@@ -216,7 +216,7 @@ describe('matchInstallToClick', () => {
     expect(result).not.toBeNull();
     expect(result?.clickId).toBe('click-b');
     expect(result?.confidenceScore).toBe(100);
-    expect(result?.matchedFactors).toEqual(expect.arrayContaining(['ip', 'user_agent', 'timezone']));
+    expect(result?.matchedFactors).toEqual(expect.arrayContaining(['ip', 'user_agent', 'timezone', 'language', 'screen']));
   });
 
   it('skips clicks that are outside the attribution window', async () => {
