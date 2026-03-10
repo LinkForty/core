@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 
 // Mock the database module so tests don't require a real Postgres connection.
 vi.mock('./database', () => ({
@@ -10,7 +10,7 @@ vi.mock('./database', () => ({
 import * as fingerprint from './fingerprint';
 import { db } from './database';
 
-const mockDbQuery = vi.mocked(db.query);
+const mockDbQuery = db.query as Mock;
 
 const baseFingerprint = {
   ipAddress: '192.168.1.100',
