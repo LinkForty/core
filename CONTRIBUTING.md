@@ -41,6 +41,8 @@ cp .env.example .env
 # Edit .env with your local database credentials
 ```
 
+For self-hosted deployments behind a reverse proxy, set `TRUST_PROXY=1` (or the number of proxy hops) so client IP is taken from `X-Forwarded-For`. Client-provided `ipAddress` in the SDK install body is not used as the trusted IP (debug metadata only).
+
 4. **Start PostgreSQL and Redis**
 
 ```bash

@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { db } from '../lib/database.js';
+import { getClientIp } from '../lib/client-ip.js';
 import { parseUserAgent, getLocationFromIP, buildRedirectUrl, detectDevice } from '../lib/utils.js';
 import { storeFingerprintForClick, type FingerprintData } from '../lib/fingerprint.js';
 import { emitClickEvent } from '../lib/event-emitter.js';
@@ -128,7 +129,7 @@ export async function redirectRoutes(fastify: FastifyInstance) {
     // Check targeting rules BEFORE redirecting
     if (link.targeting_rules) {
       const userAgent = request.headers['user-agent'] || '';
-      const ip = request.ip;
+      const ip = getClientIp(request);
       const acceptLanguage = request.headers['accept-language'] || '';
 
       // Get user's actual data for targeting checks
@@ -174,7 +175,7 @@ export async function redirectRoutes(fastify: FastifyInstance) {
     setImmediate(async () => {
       try {
         const userAgent = request.headers['user-agent'] || '';
-        const ip = request.ip;
+        const ip = getClientIp(request);
         const referrer = request.headers.referer || null;
         const acceptLanguage = request.headers['accept-language'] || '';
 
