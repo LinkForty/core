@@ -1,3 +1,10 @@
+## [1.13.2](https://github.com/linkforty/core/compare/v1.13.1...v1.13.2) (2026-03-10)
+
+
+### Bug Fixes
+
+* restore .js extension in fingerprint.ts database import for ESM resolution ([486cd65](https://github.com/linkforty/core/commit/486cd654a8cf91363009547df2183012c80602af))
+
 ## [1.13.1](https://github.com/linkforty/core/compare/v1.13.0...v1.13.1) (2026-03-10)
 
 
