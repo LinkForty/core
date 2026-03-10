@@ -257,7 +257,7 @@ DELETE /api/webhooks/:id?userId=user-uuid
 POST   /api/webhooks/:id/test?userId=user-uuid
 ```
 
-Events: `click_event`, `install_event`, `conversion_event`. Payloads are HMAC SHA-256 signed.
+Events: `click_event`, `install_event`, `conversion_event`, `sdk_event`. Payloads are HMAC SHA-256 signed.
 
 ### Mobile SDK Endpoints
 

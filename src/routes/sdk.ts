@@ -257,7 +257,7 @@ export async function sdkRoutes(fastify: FastifyInstance) {
         timestamp: eventTimestamp,
       });
 
-      // Trigger conversion_event webhooks if install was attributed to a link
+      // Trigger webhooks if install was attributed to a link
       if (install.link_id) {
         // Query webhooks for the user who owns the link
         const webhooksResult = await db.query(
@@ -280,8 +280,7 @@ export async function sdkRoutes(fastify: FastifyInstance) {
 
           // Trigger webhooks asynchronously (fire and forget)
           setImmediate(async () => {
-            // Trigger webhooks without delivery logging (basic version)
-            // For delivery logging, use @linkforty/cloud premium features
+            // Trigger conversion_event webhooks (attributed installs only)
             triggerWebhooks(
               webhooksResult.rows,
               'conversion_event',
@@ -289,6 +288,16 @@ export async function sdkRoutes(fastify: FastifyInstance) {
               eventData
             ).catch((error) => {
               fastify.log.error('Failed to trigger conversion webhooks:', error);
+            });
+
+            // Trigger sdk_event webhooks (all SDK-tracked events)
+            triggerWebhooks(
+              webhooksResult.rows,
+              'sdk_event',
+              eventId,
+              eventData
+            ).catch((error) => {
+              fastify.log.error('Failed to trigger sdk_event webhooks:', error);
             });
           });
         }

@@ -157,7 +157,7 @@ export interface AnalyticsData {
 }
 
 // Webhook types
-export type WebhookEvent = 'click_event' | 'install_event' | 'conversion_event';
+export type WebhookEvent = 'click_event' | 'install_event' | 'conversion_event' | 'sdk_event';
 
 export interface Webhook {
   id: string;
