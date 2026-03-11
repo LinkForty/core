@@ -1,4 +1,8 @@
 // Template types
+
+/**
+ * Default settings applied to links created from a template.
+ */
 export interface LinkTemplateSettings {
   defaultIosUrl?: string;
   defaultAndroidUrl?: string;
@@ -9,6 +13,9 @@ export interface LinkTemplateSettings {
   expiresAfterDays?: number;
 }
 
+/**
+ * A reusable link template that pre-populates settings when creating new links.
+ */
 export interface LinkTemplate {
   id: string;
   userId?: string;
@@ -30,6 +37,9 @@ export interface CreateTemplateRequest {
 
 export interface UpdateTemplateRequest extends Partial<CreateTemplateRequest> {}
 
+/**
+ * A short link with routing, deep-linking, UTM, targeting, and Open Graph metadata.
+ */
 export interface Link {
   id: string;
   userId?: string;
@@ -64,6 +74,9 @@ export interface Link {
   click_count?: number;
 }
 
+/**
+ * Standard UTM tracking parameters appended to redirect URLs for campaign attribution.
+ */
 export interface UTMParameters {
   source?: string;
   medium?: string;
@@ -72,12 +85,19 @@ export interface UTMParameters {
   content?: string;
 }
 
+/**
+ * Rules that control which redirect URL a visitor receives based on their
+ * country, device type, or browser language.
+ */
 export interface TargetingRules {
   countries?: string[];
   devices?: ('ios' | 'android' | 'web')[];
   languages?: string[];
 }
 
+/**
+ * A recorded click event on a short link, including device, location, and UTM data.
+ */
 export interface ClickEvent {
   id: string;
   linkId: string;
@@ -130,6 +150,10 @@ export interface UpdateLinkRequest extends Partial<CreateLinkRequest> {
   isActive?: boolean;
 }
 
+/**
+ * Aggregated analytics for one or more links over a time period, broken down
+ * by date, geography, device, browser, UTM parameters, and referrer.
+ */
 export interface AnalyticsData {
   totalClicks: number;
   uniqueClicks: number;
@@ -157,8 +181,16 @@ export interface AnalyticsData {
 }
 
 // Webhook types
+
+/**
+ * Discriminated event type sent in webhook payloads.
+ * Consumers should filter webhooks by subscribing to specific event types.
+ */
 export type WebhookEvent = 'click_event' | 'install_event' | 'conversion_event' | 'sdk_event';
 
+/**
+ * A registered webhook endpoint that receives event notifications from LinkForty.
+ */
 export interface Webhook {
   id: string;
   user_id: string;
@@ -193,6 +225,9 @@ export interface UpdateWebhookRequest {
   timeoutMs?: number;
 }
 
+/**
+ * The JSON body delivered to a webhook endpoint for every event.
+ */
 export interface WebhookPayload {
   event: WebhookEvent;
   event_id: string;
@@ -200,6 +235,9 @@ export interface WebhookPayload {
   data: ClickEvent | InstallEvent | ConversionEvent;
 }
 
+/**
+ * Outcome of a single webhook delivery attempt, including HTTP status and retry info.
+ */
 export interface WebhookDeliveryResult {
   success: boolean;
   webhookId: string;
@@ -212,6 +250,9 @@ export interface WebhookDeliveryResult {
   errorMessage?: string;
 }
 
+/**
+ * An app install event, optionally attributed to a prior click via device fingerprinting.
+ */
 export interface InstallEvent {
   id: string;
   linkId?: string;
@@ -224,6 +265,9 @@ export interface InstallEvent {
   platform?: string;
 }
 
+/**
+ * A post-install in-app conversion event (e.g., purchase, sign-up) tied to an install.
+ */
 export interface ConversionEvent {
   id: string;
   installId: string;
