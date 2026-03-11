@@ -11,6 +11,9 @@ import { templateRoutes } from './routes/templates.js';
 import { qrRoutes } from './routes/qr.js';
 import { wellKnownRoutes } from './routes/well-known.js';
 
+/**
+ * Configuration options for creating a LinkForty server instance.
+ */
 export interface ServerOptions {
   database?: DatabaseOptions;
   redis?: {
@@ -22,6 +25,15 @@ export interface ServerOptions {
   logger?: boolean;
 }
 
+/**
+ * Create and configure a LinkForty Fastify server instance.
+ *
+ * Registers CORS, optional Redis, the database connection, and all built-in
+ * route plugins. The returned instance is ready to call `listen()` on.
+ *
+ * @param options - Server configuration (database, Redis, CORS, logger).
+ * @returns A configured Fastify instance with all routes registered.
+ */
 export async function createServer(options: ServerOptions = {}) {
   const fastify = Fastify({
     logger: options.logger !== undefined ? options.logger : true,
