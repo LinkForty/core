@@ -30,6 +30,10 @@
     "smart-links",
     "mobile-attribution"
   ],
+  "engines": {
+    "node": ">=18",
+    "npm": ">=9"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
