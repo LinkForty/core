@@ -1,6 +1,7 @@
 import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import redis from '@fastify/redis';
+import { randomUUID } from 'crypto';
 import { initializeDatabase, DatabaseOptions } from './lib/database.js';
 import { redirectRoutes } from './routes/redirect.js';
 import { linkRoutes } from './routes/links.js';
@@ -25,6 +26,11 @@ export interface ServerOptions {
 export async function createServer(options: ServerOptions = {}) {
   const fastify = Fastify({
     logger: options.logger !== undefined ? options.logger : true,
+    genReqId: (req) => (req.headers['x-request-id'] as string) || randomUUID(),
+  });
+
+  fastify.addHook('onSend', async (request, reply) => {
+    reply.header('x-request-id', request.id);
   });
 
   // CORS
