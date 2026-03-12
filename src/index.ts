@@ -1,7 +1,7 @@
 import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import redis from '@fastify/redis';
-import { initializeDatabase, DatabaseOptions } from './lib/database.js';
+import { initializeDatabase, DatabaseOptions, db } from './lib/database.js';
 import { redirectRoutes } from './routes/redirect.js';
 import { linkRoutes } from './routes/links.js';
 import { analyticsRoutes } from './routes/analytics.js';
@@ -53,6 +53,24 @@ export async function createServer(options: ServerOptions = {}) {
   await fastify.register(qrRoutes);
 
   return fastify;
+}
+
+export function registerGracefulShutdown(fastify: FastifyInstance): void {
+  const shutdown = async (signal: string) => {
+    fastify.log.info(`Received ${signal}, shutting down gracefully`);
+    try {
+      await fastify.close();
+      await db.end();
+      fastify.log.info('Shutdown complete');
+      process.exit(0);
+    } catch (err) {
+      fastify.log.error(err, 'Error during shutdown');
+      process.exit(1);
+    }
+  };
+
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
+  process.once('SIGINT', () => shutdown('SIGINT'));
 }
 
 // Re-export utilities and types
