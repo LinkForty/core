@@ -1,4 +1,4 @@
-import { createServer } from '@linkforty/core';
+import { createServer, registerGracefulShutdown } from '@linkforty/core';
 
 async function start() {
   const server = await createServer({
@@ -17,6 +17,8 @@ async function start() {
     port: Number(process.env.PORT) || 3000,
     host: '0.0.0.0',
   });
+
+  registerGracefulShutdown(server);
 
   console.log('LinkForty server running on http://localhost:3000');
   console.log('');
