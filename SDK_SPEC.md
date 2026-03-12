@@ -4,7 +4,7 @@
 >
 > This spec defines **what** each SDK must accomplish, not **how**. Implementation details (method names, parameter conventions, error types) are platform-specific and left to each SDK.
 
-**Last updated:** 2026-02-16
+**Last updated:** 2026-03-12
 
 ---
 
@@ -17,11 +17,12 @@
 - [5. Event Tracking](#5-event-tracking)
 - [6. Revenue Tracking](#6-revenue-tracking)
 - [7. Programmatic Link Creation](#7-programmatic-link-creation)
-- [8. Attribution Data Access](#8-attribution-data-access)
-- [9. Data Management](#9-data-management)
-- [10. Configuration](#10-configuration)
-- [11. Error Handling](#11-error-handling)
-- [12. Offline Resilience](#12-offline-resilience)
+- [8. User Identity](#8-user-identity)
+- [9. Attribution Data Access](#9-attribution-data-access)
+- [10. Data Management](#10-data-management)
+- [11. Configuration](#11-configuration)
+- [12. Error Handling](#12-error-handling)
+- [13. Offline Resilience](#13-offline-resilience)
 - [API Endpoints Reference](#api-endpoints-reference)
 - [Models Reference](#models-reference)
 - [Feature Parity Matrix](#feature-parity-matrix)
@@ -120,7 +121,7 @@ Tracks in-app events for conversion attribution. Events are tied to the install 
 
 1. Accept an event name and optional properties dictionary
 2. Send the event to the server with the install ID and timestamp
-3. Handle failures gracefully (see [Offline Resilience](#12-offline-resilience))
+3. Handle failures gracefully (see [Offline Resilience](#13-offline-resilience))
 
 ### API endpoint
 
@@ -149,21 +150,47 @@ Allows apps to create short links on behalf of the user (e.g., for sharing conte
 
 ### What the SDK must do
 
-1. Accept link creation options including a template ID, deep link parameters, title, description, custom code, and UTM parameters
-2. Require an API key and a template ID to be configured
-3. Send the request to `POST /api/links` and return the created link's URL, short code, and link ID
+1. Accept link creation options including an optional template ID, deep link parameters, title, description, custom code, UTM parameters, and external user ID
+2. Require an API key to be configured
+3. Choose the appropriate endpoint:
+   - **With template ID:** Send to `POST /api/links` (dashboard endpoint, requires explicit template)
+   - **Without template ID:** Send to `POST /api/sdk/v1/links` (simplified endpoint, auto-selects the organization's most recent template)
+4. Return the created link's URL, short code, link ID, and deduplication status
+5. If an SDK-level external user ID is set (see [User Identity](#8-user-identity)), include it in the request body unless overridden per-call
 
-### API endpoint
+### API endpoints
 
-- `POST /api/links`
+- `POST /api/sdk/v1/links` — simplified endpoint (auto-selects template, Cloud only)
+- `POST /api/links` — dashboard endpoint (requires template ID)
 
 ### Important
 
-- This feature requires an API key and a template ID. SDKs must fail clearly if no API key is configured or if no template ID is provided.
+- This feature requires an API key. SDKs must fail clearly if no API key is configured.
 
 ---
 
-## 8. Attribution Data Access
+## 8. User Identity
+
+Allows apps to associate an external user identifier with SDK operations, primarily link creation. This enables per-user deduplication and share attribution on the dashboard.
+
+### What the SDK must do
+
+1. Provide a method to set an external user ID (any string: UUID, email, integer, etc.)
+2. Provide a method to get the current external user ID
+3. Passing null/nil clears the stored ID
+4. The stored ID is automatically attached to all `createLink()` calls unless overridden per-call via `CreateLinkOptions.externalUserId`
+5. The ID is stored in memory only (not persisted to disk)
+6. Clearing SDK data or resetting the SDK also clears the external user ID
+
+### Behavioral requirements
+
+- The external user ID does not require initialization — it can be set before or after `initialize()`
+- Per-call `externalUserId` in `CreateLinkOptions` takes precedence over the SDK-level value
+- The value is not sent to any endpoint automatically — it is only included in link creation requests
+
+---
+
+## 9. Attribution Data Access
 
 The SDK must provide access to cached attribution data from local storage without requiring a network call.
 
@@ -175,7 +202,7 @@ The SDK must provide access to cached attribution data from local storage withou
 
 ---
 
-## 9. Data Management
+## 10. Data Management
 
 ### What the SDK must support
 
@@ -184,7 +211,7 @@ The SDK must provide access to cached attribution data from local storage withou
 
 ---
 
-## 10. Configuration
+## 11. Configuration
 
 ### Required configuration
 
@@ -207,7 +234,7 @@ The SDK must provide access to cached attribution data from local storage withou
 
 ---
 
-## 11. Error Handling
+## 12. Error Handling
 
 SDKs must handle these error scenarios. The mechanism (typed enums, error codes, exceptions) is platform-specific.
 
@@ -217,15 +244,14 @@ SDKs must handle these error scenarios. The mechanism (typed enums, error codes,
 | Double initialization | Warn or throw |
 | Network failure during install report | Treat as organic install, deliver null to callback |
 | Network failure during URL resolution | Fall back to local URL parsing |
-| Network failure during event tracking | Queue the event for retry (see [Offline Resilience](#12-offline-resilience)) |
+| Network failure during event tracking | Queue the event for retry (see [Offline Resilience](#13-offline-resilience)) |
 | Link creation without API key | Throw/return an error |
-| Link creation without template ID | Throw/return an error |
 | Server returns error response | Surface the error to the caller |
 | Invalid configuration | Throw/return an error during initialization |
 
 ---
 
-## 12. Offline Resilience
+## 13. Offline Resilience
 
 ### Event queue
 
@@ -262,6 +288,7 @@ All endpoints are relative to the configured base URL.
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
+| `POST` | `/api/sdk/v1/links` | API key | Create link (auto-selects template) |
 | `POST` | `/api/links` | API key | Create link (requires template ID) |
 
 ### Authentication
@@ -303,7 +330,7 @@ Canonical field names for cross-SDK data models. SDKs should use platform-approp
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| templateId | string | Yes | Template UUID |
+| templateId | string | No | Template UUID (auto-selected if omitted) |
 | templateSlug | string | No | Template slug (for URL construction) |
 | deepLinkParameters | map<string, string> | No | In-app routing parameters |
 | title | string | No | Link title |
@@ -359,17 +386,17 @@ Status of each feature across SDKs. Update this table when adding features or SD
 | 3 | [Direct deep linking](#3-direct-deep-linking) | Done | Done | Done | Done |
 | 4 | [Server-side URL resolution](#4-server-side-url-resolution) | Done | Done | Done | Done |
 | 5 | [Event tracking](#5-event-tracking) | Done | Done | Done | Done |
-| 6 | [Revenue tracking](#6-revenue-tracking) | Done | Missing | Done | Done |
+| 6 | [Revenue tracking](#6-revenue-tracking) | Done | Done | Done | Done |
 | 7 | [Link creation](#7-programmatic-link-creation) | Done | Done | Done | Done |
-| 8 | [Attribution data access](#8-attribution-data-access) | Done | Partial | Done | Done |
-| 9 | [Data management](#9-data-management) | Done | Partial | Done | Done |
-| 10 | [Configuration validation](#10-configuration) | Done | Missing | Done | Done |
-| 11 | [Error handling](#11-error-handling) | Done | Partial | Done | Done |
-| 12 | [Offline resilience (event queue)](#12-offline-resilience) | Done | Missing | Done | Done |
+| 8 | [User identity](#8-user-identity) | Done | Done | Done | Done |
+| 9 | [Attribution data access](#9-attribution-data-access) | Done | Partial | Done | Done |
+| 10 | [Data management](#10-data-management) | Done | Partial | Done | Done |
+| 11 | [Configuration validation](#11-configuration) | Done | Missing | Done | Done |
+| 12 | [Error handling](#12-error-handling) | Done | Partial | Done | Done |
+| 13 | [Offline resilience (event queue)](#13-offline-resilience) | Done | Missing | Done | Done |
 
 ### Parity notes
 
-- **React Native -- Revenue tracking:** No dedicated revenue method; must use generic event tracking
 - **React Native -- Attribution data access:** `isFirstLaunch()` is private, not exposed to consumers
 - **React Native -- Data management:** No `reset()` method (only `clearData()`)
 - **React Native -- Error handling:** Uses generic `Error` throws instead of typed error cases
