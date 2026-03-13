@@ -1,3 +1,10 @@
+## [1.13.3](https://github.com/linkforty/core/compare/v1.13.2...v1.13.3) (2026-03-13)
+
+
+### Documentation
+
+* add User Identity section and update SDK spec for setExternalUserId ([735bf72](https://github.com/linkforty/core/commit/735bf72bbe27dd822b2a02215c67278c19951f67)), closes [#8](https://github.com/linkforty/core/issues/8)
+
 ## [1.13.2](https://github.com/linkforty/core/compare/v1.13.1...v1.13.2) (2026-03-10)
 
 
