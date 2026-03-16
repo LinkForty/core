@@ -1,3 +1,10 @@
+## [1.13.4](https://github.com/linkforty/core/compare/v1.13.3...v1.13.4) (2026-03-16)
+
+
+### Bug Fixes
+
+* **server:** trust proxy and trusted client IP for redirect and attribution ([#10](https://github.com/linkforty/core/issues/10)) ([de12521](https://github.com/linkforty/core/commit/de12521699bb08ece3d9afa49375546da97525ab))
+
 ## [1.13.3](https://github.com/linkforty/core/compare/v1.13.2...v1.13.3) (2026-03-13)
 
 
