@@ -8,7 +8,7 @@
   "license": "AGPL-3.0-only",
   "repository": {
     "type": "git",
-    "url": "https://github.com/linkforty/core"
+    "url": "https://github.com/LinkForty/core"
   },
   "keywords": [
     "deeplink",
