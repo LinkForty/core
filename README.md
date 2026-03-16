@@ -312,8 +312,13 @@ interface ServerOptions {
     origin: string | string[];  // CORS allowed origins (default: '*')
   };
   logger?: boolean;         // Enable Fastify logger (default: true)
+  trustProxy?: boolean | number;  // Trust X-Forwarded-For when behind a proxy (default: false)
 }
 ```
+
+### Running behind a reverse proxy
+
+When Core runs behind a reverse proxy, CDN, or load balancer, set `trustProxy` so the server uses the real client IP from `X-Forwarded-For` for redirect targeting, geo, attribution, and fingerprinting. Pass it when creating the server (e.g. `trustProxy: true` or a number of proxy hops) or set the `TRUST_PROXY` environment variable (e.g. `TRUST_PROXY=1`). Client-provided `ipAddress` in the SDK install request body is **not** used as the trusted IP; it is optional debug metadata only and must not be relied on for attribution.
 
 ### Environment Variables
 
@@ -323,6 +328,8 @@ REDIS_URL=redis://localhost:6379
 PORT=3000
 NODE_ENV=production
 CORS_ORIGIN=*
+# When behind a reverse proxy: TRUST_PROXY=1 (or number of hops) so client IP is read from X-Forwarded-For
+# TRUST_PROXY=1
 
 # Mobile SDK (optional — for iOS Universal Links and Android App Links)
 IOS_TEAM_ID=ABC123XYZ

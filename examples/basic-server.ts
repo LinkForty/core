@@ -1,5 +1,14 @@
 import { createServer } from '@linkforty/core';
 
+function getTrustProxy(): boolean | number | undefined {
+  const v = process.env.TRUST_PROXY;
+  if (v === undefined || v === '') return undefined;
+  if (v === '1' || v.toLowerCase() === 'true') return true;
+  const n = Number(v);
+  if (!Number.isNaN(n) && n >= 0) return n;
+  return undefined;
+}
+
 async function start() {
   const server = await createServer({
     database: {
@@ -11,6 +20,7 @@ async function start() {
     cors: {
       origin: process.env.CORS_ORIGIN || '*',
     },
+    trustProxy: getTrustProxy(),
   });
 
   await server.listen({
