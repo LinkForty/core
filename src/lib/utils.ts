@@ -95,20 +95,27 @@ export function getLocationFromIP(ip: string) {
 }
 
 export function buildRedirectUrl(
-  originalUrl: string,
+  originalUrl: string | null | undefined,
   utmParameters?: Record<string, string>
-): string {
-  const url = new URL(originalUrl);
+): string | null {
+  if (!originalUrl) return null;
 
-  if (utmParameters) {
-    Object.entries(utmParameters).forEach(([key, value]) => {
-      if (value) {
-        url.searchParams.set(`utm_${key}`, value);
-      }
-    });
+  try {
+    const url = new URL(originalUrl);
+
+    if (utmParameters) {
+      Object.entries(utmParameters).forEach(([key, value]) => {
+        if (value) {
+          url.searchParams.set(`utm_${key}`, value);
+        }
+      });
+    }
+
+    return url.toString();
+  } catch {
+    // If URL is invalid, return it as-is rather than crashing
+    return originalUrl;
   }
-
-  return url.toString();
 }
 
 export function detectDevice(userAgent: string): 'ios' | 'android' | 'web' {
