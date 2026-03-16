@@ -1,3 +1,9 @@
+## <small>1.13.5 (2026-03-16)</small>
+
+* fix: update release workflow for npm trusted publishing with OIDC ([b26ad63](https://github.com/linkforty/core/commit/b26ad63))
+* fix: upgrade @semantic-release/npm to v13 for OIDC trusted publishing support ([386048a](https://github.com/linkforty/core/commit/386048a))
+* fix: upgrade semantic-release to v25 for OIDC trusted publishing ([1050651](https://github.com/linkforty/core/commit/1050651))
+
 ## [1.13.4](https://github.com/linkforty/core/compare/v1.13.3...v1.13.4) (2026-03-16)
 
 
