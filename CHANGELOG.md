@@ -1,3 +1,7 @@
+## <small>1.13.7 (2026-03-16)</small>
+
+* fix: implement URL fallback chain in redirect handler to prevent 500 errors (#17) ([3e3ee12](https://github.com/LinkForty/core/commit/3e3ee12)), closes [#17](https://github.com/LinkForty/core/issues/17)
+
 ## <small>1.13.6 (2026-03-16)</small>
 
 * fix: correct repository URL casing for npm provenance verification ([4e0487a](https://github.com/LinkForty/core/commit/4e0487a))
