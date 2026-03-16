@@ -68,7 +68,7 @@
     "@types/ua-parser-js": "^0.7.39",
     "@vitest/coverage-v8": "^1.0.0",
     "conventional-changelog-conventionalcommits": "^7.0.2",
-    "semantic-release": "^23.0.0",
+    "semantic-release": "^25.0.0",
     "tsx": "^4.0.0",
     "typescript": "^5.2.0",
     "vitest": "^1.0.0"
