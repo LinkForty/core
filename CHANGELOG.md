@@ -1,3 +1,7 @@
+## <small>1.13.6 (2026-03-16)</small>
+
+* fix: correct repository URL casing for npm provenance verification ([4e0487a](https://github.com/LinkForty/core/commit/4e0487a))
+
 ## <small>1.13.5 (2026-03-16)</small>
 
 * fix: update release workflow for npm trusted publishing with OIDC ([b26ad63](https://github.com/linkforty/core/commit/b26ad63))
