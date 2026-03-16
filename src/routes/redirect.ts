@@ -88,9 +88,12 @@ export async function redirectRoutes(fastify: FastifyInstance) {
 
       if (templateSlug) {
         // Template-based URL: verify both template and link match
+        // Also fetch template settings and org settings for URL fallback chain
         query = `
-          SELECT l.* FROM links l
+          SELECT l.*, t.settings AS template_settings, o.settings AS org_settings
+          FROM links l
           LEFT JOIN link_templates t ON l.template_id = t.id
+          LEFT JOIN organizations o ON l.organization_id = o.id
           WHERE l.short_code = $1 AND t.slug = $2
           AND l.is_active = true
           AND (l.expires_at IS NULL OR l.expires_at > NOW())
@@ -98,10 +101,14 @@ export async function redirectRoutes(fastify: FastifyInstance) {
         params = [shortCode, templateSlug];
       } else {
         // Legacy URL: just lookup by short code
+        // Also fetch template settings and org settings for URL fallback chain
         query = `
-          SELECT * FROM links
-          WHERE short_code = $1 AND is_active = true
-          AND (expires_at IS NULL OR expires_at > NOW())
+          SELECT l.*, t.settings AS template_settings, o.settings AS org_settings
+          FROM links l
+          LEFT JOIN link_templates t ON l.template_id = t.id
+          LEFT JOIN organizations o ON l.organization_id = o.id
+          WHERE l.short_code = $1 AND l.is_active = true
+          AND (l.expires_at IS NULL OR l.expires_at > NOW())
         `;
         params = [shortCode];
       }
@@ -240,6 +247,14 @@ export async function redirectRoutes(fastify: FastifyInstance) {
         await storeFingerprintForClick(clickId, fingerprintData);
 
         // Determine redirect URL for event emission (using same logic as main redirect)
+        // Use the same fallback chain: link → template → workspace
+        const tplSettings = link.template_settings || {};
+        const oSettings = link.org_settings || {};
+        const oAppConfig = oSettings.appConfig || {};
+        const iosStoreUrl = link.ios_app_store_url || tplSettings.defaultIosUrl || oAppConfig.iosAppStoreUrl || null;
+        const androidStoreUrl = link.android_app_store_url || tplSettings.defaultAndroidUrl || oAppConfig.androidAppStoreUrl || null;
+        const webFallback = link.web_fallback_url || tplSettings.defaultWebFallbackUrl || oAppConfig.webFallbackUrl || null;
+
         let redirectUrl = link.original_url;
         let redirectReason = 'original_url';
 
@@ -250,9 +265,12 @@ export async function redirectRoutes(fastify: FastifyInstance) {
           } else if (link.app_scheme && link.deep_link_path) {
             redirectUrl = `${link.app_scheme}://${link.deep_link_path.replace(/^\//, '')}`;
             redirectReason = 'app_scheme';
-          } else if (link.ios_app_store_url) {
-            redirectUrl = link.ios_app_store_url;
+          } else if (iosStoreUrl) {
+            redirectUrl = iosStoreUrl;
             redirectReason = 'ios_app_store_url';
+          } else if (webFallback) {
+            redirectUrl = webFallback;
+            redirectReason = 'web_fallback_url';
           }
         } else if (deviceType === 'android') {
           if (link.android_app_link) {
@@ -261,16 +279,19 @@ export async function redirectRoutes(fastify: FastifyInstance) {
           } else if (link.app_scheme && link.deep_link_path) {
             redirectUrl = `${link.app_scheme}://${link.deep_link_path.replace(/^\//, '')}`;
             redirectReason = 'app_scheme';
-          } else if (link.android_app_store_url) {
-            redirectUrl = link.android_app_store_url;
+          } else if (androidStoreUrl) {
+            redirectUrl = androidStoreUrl;
             redirectReason = 'android_app_store_url';
+          } else if (webFallback) {
+            redirectUrl = webFallback;
+            redirectReason = 'web_fallback_url';
           }
-        } else if (deviceType === 'web' && link.web_fallback_url) {
-          redirectUrl = link.web_fallback_url;
+        } else if (deviceType === 'web' && webFallback) {
+          redirectUrl = webFallback;
           redirectReason = 'web_fallback_url';
         }
 
-        const finalRedirectUrl = buildRedirectUrl(redirectUrl, link.utm_parameters);
+        const finalRedirectUrl = buildRedirectUrl(redirectUrl, link.utm_parameters) || redirectUrl;
 
         // Emit click event for real-time streaming to WebSocket clients
         emitClickEvent({
@@ -342,8 +363,19 @@ export async function redirectRoutes(fastify: FastifyInstance) {
     });
 
     // Determine redirect URL based on device with smart fallback chain
+    // Fallback chain: link URLs → template default URLs → workspace settings URLs
     const userAgent = request.headers['user-agent'] || '';
     const device = detectDevice(userAgent);
+
+    // Extract fallback URLs from template settings and org settings
+    const templateSettings = link.template_settings || {};
+    const orgSettings = link.org_settings || {};
+    const orgAppConfig = orgSettings.appConfig || {};
+
+    // Resolve platform URLs with fallback chain: link → template → workspace
+    const iosUrl = link.ios_app_store_url || templateSettings.defaultIosUrl || orgAppConfig.iosAppStoreUrl || null;
+    const androidUrl = link.android_app_store_url || templateSettings.defaultAndroidUrl || orgAppConfig.androidAppStoreUrl || null;
+    const webFallbackUrl = link.web_fallback_url || templateSettings.defaultWebFallbackUrl || orgAppConfig.webFallbackUrl || null;
 
     let redirectUrl = link.original_url;
     let useSchemeUrl = false; // Track if we're using a URI scheme URL
@@ -352,8 +384,9 @@ export async function redirectRoutes(fastify: FastifyInstance) {
       // iOS Priority:
       // 1. Universal Link (HTTPS URL with AASA file) - if app installed, opens app
       // 2. URI scheme (myapp://path) - fallback when Universal Links fail
-      // 3. App Store URL - for users who don't have the app
-      // 4. Original URL - ultimate fallback
+      // 3. App Store URL (link → template → workspace) - for users who don't have the app
+      // 4. Web fallback URL - browser-based fallback
+      // 5. Original URL - ultimate fallback
 
       if (link.ios_universal_link) {
         redirectUrl = link.ios_universal_link;
@@ -361,16 +394,19 @@ export async function redirectRoutes(fastify: FastifyInstance) {
         // Build URI scheme URL: myapp://product/123
         redirectUrl = `${link.app_scheme}://${link.deep_link_path.replace(/^\//, '')}`;
         useSchemeUrl = true;
-      } else if (link.ios_app_store_url) {
-        redirectUrl = link.ios_app_store_url;
+      } else if (iosUrl) {
+        redirectUrl = iosUrl;
+      } else if (webFallbackUrl) {
+        redirectUrl = webFallbackUrl;
       }
 
     } else if (device === 'android') {
       // Android Priority:
       // 1. App Link (HTTPS URL with Digital Asset Links) - if app installed, opens app
       // 2. URI scheme (myapp://path) - fallback when App Links fail
-      // 3. Play Store URL - for users who don't have the app
-      // 4. Original URL - ultimate fallback
+      // 3. Play Store URL (link → template → workspace) - for users who don't have the app
+      // 4. Web fallback URL - browser-based fallback
+      // 5. Original URL - ultimate fallback
 
       if (link.android_app_link) {
         redirectUrl = link.android_app_link;
@@ -378,13 +414,20 @@ export async function redirectRoutes(fastify: FastifyInstance) {
         // Build URI scheme URL: myapp://product/123
         redirectUrl = `${link.app_scheme}://${link.deep_link_path.replace(/^\//, '')}`;
         useSchemeUrl = true;
-      } else if (link.android_app_store_url) {
-        redirectUrl = link.android_app_store_url;
+      } else if (androidUrl) {
+        redirectUrl = androidUrl;
+      } else if (webFallbackUrl) {
+        redirectUrl = webFallbackUrl;
       }
 
     } else if (device === 'web') {
       // Web fallback
-      redirectUrl = link.web_fallback_url || link.original_url;
+      redirectUrl = webFallbackUrl || link.original_url;
+    }
+
+    // If no URL found at all, return a user-friendly error
+    if (!redirectUrl) {
+      return reply.status(404).send({ error: 'No destination URL configured for this link' });
     }
 
     // Build final URL with parameters
@@ -392,7 +435,7 @@ export async function redirectRoutes(fastify: FastifyInstance) {
 
     if (!useSchemeUrl) {
       // For HTTP(S) URLs, add UTM parameters
-      finalUrl = buildRedirectUrl(redirectUrl, link.utm_parameters);
+      finalUrl = buildRedirectUrl(redirectUrl, link.utm_parameters) || redirectUrl;
 
       // Add deep link parameters as query params
       if (link.deep_link_parameters && Object.keys(link.deep_link_parameters).length > 0) {
@@ -435,7 +478,7 @@ export async function redirectRoutes(fastify: FastifyInstance) {
           fullSchemeUrl += (fullSchemeUrl.includes('?') ? '&' : '?') + params.toString();
         }
 
-        const storeFallback = link.ios_app_store_url || link.web_fallback_url || link.original_url;
+        const storeFallback = iosUrl || webFallbackUrl || link.original_url;
         return reply
           .header('Content-Type', 'text/html; charset=utf-8')
           .send(generateInterstitialHTML(fullSchemeUrl, storeFallback, link.title || link.og_title));
