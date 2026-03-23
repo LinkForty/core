@@ -1,3 +1,7 @@
+## 1.14.0 (2026-03-23)
+
+* feat: extend interstitial page to all mobile requests and preserve URL fragments ([9b20190](https://github.com/LinkForty/core/commit/9b20190))
+
 ## <small>1.13.7 (2026-03-16)</small>
 
 * fix: implement URL fallback chain in redirect handler to prevent 500 errors (#17) ([3e3ee12](https://github.com/LinkForty/core/commit/3e3ee12)), closes [#17](https://github.com/LinkForty/core/issues/17)
