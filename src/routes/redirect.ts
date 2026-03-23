@@ -25,8 +25,12 @@ function isIOSInAppBrowser(userAgent: string): boolean {
 }
 
 /**
- * Generate an interstitial HTML page for iOS in-app browsers.
- * Tries to open the app via custom scheme URL, falls back to the App Store.
+ * Generate an interstitial HTML page that tries to open the app via custom scheme,
+ * then falls back to the App Store / Play Store.
+ *
+ * The JavaScript reads the URL fragment (window.location.hash) and appends it
+ * to the scheme URL. This preserves the E2E encryption key, which lives only
+ * in the fragment and is never sent to the server.
  */
 function generateInterstitialHTML(schemeUrl: string, fallbackUrl: string, title?: string): string {
   const safeSchemeUrl = schemeUrl.replace(/"/g, '&quot;').replace(/</g, '&lt;');
@@ -54,11 +58,15 @@ function generateInterstitialHTML(schemeUrl: string, fallbackUrl: string, title?
   <div class="spinner"></div>
   <h1>Opening ${safeTitle}...</h1>
   <p>If the app doesn't open automatically:</p>
-  <a class="btn btn-primary" href="${safeSchemeUrl}">Open App</a>
-  <a class="btn btn-secondary" href="${safeFallbackUrl}">Download App</a>
+  <a class="btn btn-primary" id="open-btn" href="${safeSchemeUrl}">Open App</a>
+  <a class="btn btn-secondary" id="store-btn" href="${safeFallbackUrl}">Download App</a>
 </div>
 <script>
-  window.location = "${safeSchemeUrl}";
+  // Preserve URL fragment (E2E encryption key) through the scheme redirect
+  var hash = window.location.hash || '';
+  var schemeUrl = "${safeSchemeUrl}" + hash;
+  document.getElementById('open-btn').href = schemeUrl;
+  window.location = schemeUrl;
   setTimeout(function() { window.location.replace("${safeFallbackUrl}"); }, 1500);
 </script>
 </body></html>`;
@@ -460,16 +468,21 @@ export async function redirectRoutes(fastify: FastifyInstance) {
       }
     }
 
-    // For iOS in-app browsers (Gmail, Facebook, etc.), serve an interstitial page
-    // that tries to open the app via custom scheme, then falls back to the App Store.
-    // Universal Links don't fire from WKWebView, so a direct 302 would skip the app entirely.
-    if (device === 'ios' && isIOSInAppBrowser(userAgent)) {
+    // Serve an interstitial page for mobile requests when a custom scheme is available.
+    // The interstitial tries to open the app via URI scheme, then falls back to the store.
+    // This works for both in-app browsers (where Universal Links don't fire) and regular
+    // browsers (where a 302 to a custom scheme fails silently if the app isn't installed).
+    // The interstitial JavaScript preserves the URL fragment (E2E encryption key).
+    if ((device === 'ios' || device === 'android') && link.app_scheme) {
+      const deepPath = link.deep_link_path ? link.deep_link_path.replace(/^\//, '') : '';
       const schemeUrl = link.custom_scheme_url
-        || (link.app_scheme && link.deep_link_path
-            ? `${link.app_scheme}://${link.deep_link_path.replace(/^\//, '')}`
-            : null);
+        || `${link.app_scheme}://${deepPath}`;
 
-      if (schemeUrl) {
+      const storeFallback = device === 'ios'
+        ? (iosUrl || webFallbackUrl || link.original_url)
+        : (androidUrl || webFallbackUrl || link.original_url);
+
+      if (storeFallback) {
         let fullSchemeUrl = schemeUrl;
         if (link.deep_link_parameters && Object.keys(link.deep_link_parameters).length > 0) {
           const params = new URLSearchParams(
@@ -478,7 +491,6 @@ export async function redirectRoutes(fastify: FastifyInstance) {
           fullSchemeUrl += (fullSchemeUrl.includes('?') ? '&' : '?') + params.toString();
         }
 
-        const storeFallback = iosUrl || webFallbackUrl || link.original_url;
         return reply
           .header('Content-Type', 'text/html; charset=utf-8')
           .send(generateInterstitialHTML(fullSchemeUrl, storeFallback, link.title || link.og_title));
