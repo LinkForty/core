@@ -12,10 +12,10 @@ describe('getClientIp', () => {
     expect(getClientIp(request)).toBe('192.168.1.1');
   });
 
-  it('returns socket.remoteAddress when request.ip is undefined', () => {
+  it('returns raw.socket.remoteAddress when request.ip is undefined', () => {
     const request = {
       ip: undefined,
-      socket: { remoteAddress: '10.0.0.2' },
+      raw: { socket: { remoteAddress: '10.0.0.2' } },
     } as unknown as FastifyRequest;
     expect(getClientIp(request)).toBe('10.0.0.2');
   });
@@ -25,14 +25,14 @@ describe('getClientIp', () => {
     expect(getClientIp(request)).toBe('192.168.1.1');
   });
 
-  it('returns "unknown" when neither ip nor socket.remoteAddress is available', () => {
-    const request = { ip: undefined, socket: {} } as unknown as FastifyRequest;
-    expect(getClientIp(request)).toBe('unknown');
+  it('returns empty string when neither ip nor socket.remoteAddress is available', () => {
+    const request = { ip: undefined, raw: { socket: {} } } as unknown as FastifyRequest;
+    expect(getClientIp(request)).toBe('');
   });
 
-  it('returns "unknown" when request has no socket', () => {
-    const request = { ip: undefined } as unknown as FastifyRequest;
-    expect(getClientIp(request)).toBe('unknown');
+  it('returns empty string when request.raw has no socket', () => {
+    const request = { ip: undefined, raw: {} } as unknown as FastifyRequest;
+    expect(getClientIp(request)).toBe('');
   });
 });
 
