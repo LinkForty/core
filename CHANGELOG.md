@@ -1,3 +1,7 @@
+## <small>1.14.2 (2026-03-26)</small>
+
+* fix(ci): remove dist asset uploads from GitHub releases ([99b669b](https://github.com/LinkForty/core/commit/99b669b))
+
 ## <small>1.14.1 (2026-03-26)</small>
 
 * Clean up features from README ([02141a0](https://github.com/LinkForty/core/commit/02141a0))
