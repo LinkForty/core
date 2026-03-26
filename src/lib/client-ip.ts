@@ -8,11 +8,11 @@ import type { FastifyRequest } from 'fastify';
  * returns that trusted value.
  */
 export function getClientIp(request: FastifyRequest): string {
-  const ip = request.ip ?? (request as any).socket?.remoteAddress;
+  const ip = request.ip ?? request.raw.socket?.remoteAddress;
   if (ip && typeof ip === 'string') {
     // IPv6-mapped IPv4: ::ffff:192.168.1.1 -> 192.168.1.1
     if (ip.startsWith('::ffff:')) return ip.slice(7);
     return ip;
   }
-  return 'unknown';
+  return '';
 }
