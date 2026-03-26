@@ -2,6 +2,16 @@ import { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from '../lib/database.js';
 import { generateShortCode } from '../lib/utils.js';
+import { invalidateLinkResolutionCache } from '../lib/link-resolution-cache.js';
+
+async function getTemplateSlug(templateId: string | null): Promise<string | null> {
+  if (!templateId) return null;
+  const result = await db.query(
+    'SELECT slug FROM link_templates WHERE id = $1',
+    [templateId]
+  );
+  return result.rows[0]?.slug ?? null;
+}
 
 const createLinkSchema = z.object({
   userId: z.string().uuid().optional(),
@@ -227,6 +237,12 @@ export async function linkRoutes(fastify: FastifyInstance) {
 
     const data = updateLinkSchema.parse(request.body);
 
+    // Capture current identifiers for cache invalidation after the update
+    const oldLinkResult = await db.query(
+      'SELECT short_code, template_id FROM links WHERE id = $1',
+      [id]
+    );
+
     // Build update query dynamically
     const updates: string[] = [];
     const values: any[] = [];
@@ -271,6 +287,16 @@ export async function linkRoutes(fastify: FastifyInstance) {
     }
 
     const link = result.rows[0];
+
+    // Invalidate cached link JSON for both old and new template associations
+    const oldRow = oldLinkResult.rows[0];
+    const oldTemplateSlug = await getTemplateSlug(oldRow?.template_id);
+    const newTemplateSlug = await getTemplateSlug(link.template_id);
+    await invalidateLinkResolutionCache(fastify.redis, link.short_code, oldTemplateSlug);
+    if (newTemplateSlug !== oldTemplateSlug) {
+      await invalidateLinkResolutionCache(fastify.redis, link.short_code, newTemplateSlug);
+    }
+
     return {
       ...link,
       utmParameters: link.utm_parameters,
@@ -388,12 +414,12 @@ export async function linkRoutes(fastify: FastifyInstance) {
     let result;
     if (userId) {
       result = await db.query(
-        'DELETE FROM links WHERE id = $1 AND user_id = $2 RETURNING id',
+        'DELETE FROM links WHERE id = $1 AND user_id = $2 RETURNING id, short_code, template_id',
         [id, userId]
       );
     } else {
       result = await db.query(
-        'DELETE FROM links WHERE id = $1 RETURNING id',
+        'DELETE FROM links WHERE id = $1 RETURNING id, short_code, template_id',
         [id]
       );
     }
@@ -401,6 +427,10 @@ export async function linkRoutes(fastify: FastifyInstance) {
     if (result.rows.length === 0) {
       throw new Error('Link not found');
     }
+
+    const deleted = result.rows[0];
+    const templateSlug = await getTemplateSlug(deleted.template_id);
+    await invalidateLinkResolutionCache(fastify.redis, deleted.short_code, templateSlug);
 
     return { success: true };
   });
