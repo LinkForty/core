@@ -1,3 +1,12 @@
+## <small>1.14.1 (2026-03-26)</small>
+
+* Clean up features from README ([02141a0](https://github.com/LinkForty/core/commit/02141a0))
+* Merge pull request #20 from RaoUsama7/fix/link-cache-invalidation ([74febe4](https://github.com/LinkForty/core/commit/74febe4)), closes [#20](https://github.com/LinkForty/core/issues/20)
+* Merge pull request #21 from RaoUsama7/fix/client-ip-followup ([cdea12c](https://github.com/LinkForty/core/commit/cdea12c)), closes [#21](https://github.com/LinkForty/core/issues/21)
+* Update README.md (#19) ([9b7dd91](https://github.com/LinkForty/core/commit/9b7dd91)), closes [#19](https://github.com/LinkForty/core/issues/19)
+* fix(cache): invalidate link resolution cache on update and delete ([151af71](https://github.com/LinkForty/core/commit/151af71))
+* fix(cache): invalidate link resolution cache on update and delete ([7c2510a](https://github.com/LinkForty/core/commit/7c2510a))
+
 ## 1.14.0 (2026-03-23)
 
 * feat: extend interstitial page to all mobile requests and preserve URL fragments ([9b20190](https://github.com/LinkForty/core/commit/9b20190))
