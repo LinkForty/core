@@ -44,21 +44,21 @@
 
 ## Features
 
-- **Smart Link Routing** - Create short links with device-specific URLs for iOS, Android, and web \
-- **Device Detection** - Automatic detection and routing based on user device \
-- **Click Analytics** - Track clicks with geolocation, device type, platform, and more \
-- **UTM Parameters** - Built-in support for UTM campaign tracking \
-- **Targeting Rules** - Filter by country, device, and language before redirecting \
-- **QR Code Generation** - Generate QR codes (PNG/SVG) for any link \
-- **Deferred Deep Linking** - Probabilistic fingerprint matching for install attribution \
-- **Webhooks** - Event-driven integrations with HMAC-signed payloads and retry logic \
-- **Smart App Opening** - Mobile clicks serve an interstitial that tries the app via URI scheme, falls back to the App Store / Play Store. Preserves URL fragments for E2E encryption keys \
-- **OG Preview Pages** - Social media scraper detection with Open Graph meta tags \
-- **iOS Universal Links & Android App Links** - Serve `.well-known` files automatically \
-- **Link Expiration** - Set expiration dates for time-sensitive links \
-- **Redis Caching** - Optional Redis support for high-performance link lookups \
-- **PostgreSQL Storage** - Reliable data persistence with full SQL capabilities \
-- **TypeScript** - Fully typed API for better developer experience \
+- **Smart Link Routing** - Create short links with device-specific URLs for iOS, Android, and web 
+- **Device Detection** - Automatic detection and routing based on user device 
+- **Click Analytics** - Track clicks with geolocation, device type, platform, and more 
+- **UTM Parameters** - Built-in support for UTM campaign tracking 
+- **Targeting Rules** - Filter by country, device, and language before redirecting 
+- **QR Code Generation** - Generate QR codes (PNG/SVG) for any link 
+- **Deferred Deep Linking** - Probabilistic fingerprint matching for install attribution 
+- **Webhooks** - Event-driven integrations with HMAC-signed payloads and retry logic 
+- **Smart App Opening** - Mobile clicks serve an interstitial that tries the app via URI scheme, falls back to the App Store / Play Store. Preserves URL fragments for E2E encryption keys 
+- **OG Preview Pages** - Social media scraper detection with Open Graph meta tags 
+- **iOS Universal Links & Android App Links** - Serve `.well-known` files automatically 
+- **Link Expiration** - Set expiration dates for time-sensitive links 
+- **Redis Caching** - Optional Redis support for high-performance link lookups 
+- **PostgreSQL Storage** - Reliable data persistence with full SQL capabilities 
+- **TypeScript** - Fully typed API for better developer experience 
 - **No Auth Included** - Bring your own authentication; `userId` is optional for multi-tenant scoping
 
 ## Installation
