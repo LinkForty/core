@@ -1,0 +1,2148 @@
+# @linkforty/core — Full Reference
+
+> Open-source deeplink management engine built on Fastify + PostgreSQL + optional Redis. Provides smart link routing with device detection, click analytics, UTM tracking, deferred deep linking, device fingerprinting, webhooks, QR codes, link templates, and mobile SDK endpoints. No auth included — bring your own. Install via npm, connect to PostgreSQL, and you have a full deep linking platform. Licensed AGPL-3.0-only.
+
+This is the full reference. For a concise overview, see `llms.txt`.
+
+---
+
+## Table of Contents
+
+- [Installation & Quick Start](#installation--quick-start)
+- [Docker Quick Start](#docker-quick-start)
+- [Configuration](#configuration)
+- [Environment Variables](#environment-variables)
+- [Module Exports](#module-exports)
+- [TypeScript Types — Full Reference](#typescript-types--full-reference)
+- [API Endpoints — Full Reference](#api-endpoints--full-reference)
+  - [Health Check](#health-check)
+  - [Link Management](#link-management)
+  - [Link Templates](#link-templates)
+  - [Analytics](#analytics)
+  - [Webhooks](#webhooks)
+  - [QR Codes](#qr-codes)
+  - [Mobile SDK Endpoints](#mobile-sdk-endpoints)
+  - [Redirects (Public)](#redirects-public)
+  - [Well-Known (iOS & Android)](#well-known-ios--android)
+- [Database Schema — Full Reference](#database-schema--full-reference)
+- [Redirect Flow — Step by Step](#redirect-flow--step-by-step)
+- [Fingerprint Attribution Algorithm](#fingerprint-attribution-algorithm)
+- [Webhook Delivery](#webhook-delivery)
+- [Real-Time Events](#real-time-events)
+- [Utility Functions](#utility-functions)
+- [Error Responses](#error-responses)
+- [Integration Patterns](#integration-patterns)
+  - [Self-Hosted Server (TypeScript)](#self-hosted-server-typescript)
+  - [Adding Authentication](#adding-authentication)
+  - [Adding Custom Routes](#adding-custom-routes)
+  - [Multi-Tenant Setup](#multi-tenant-setup)
+- [Mobile SDK Integration](#mobile-sdk-integration)
+  - [React Native / Expo](#react-native--expo)
+  - [Node.js Backend Client](#nodejs-backend-client)
+- [Performance & Indexing](#performance--indexing)
+- [Deployment](#deployment)
+
+---
+
+## Installation & Quick Start
+
+```bash
+npm install @linkforty/core
+```
+
+Requires:
+- Node.js 20+
+- PostgreSQL 14+
+- Redis (optional, recommended for caching)
+
+```typescript
+import { createServer } from '@linkforty/core';
+
+const server = await createServer({
+  database: {
+    url: 'postgresql://postgres:password@localhost:5432/linkforty',
+    pool: { min: 2, max: 10 },
+  },
+  redis: {
+    url: 'redis://localhost:6379', // optional
+  },
+  cors: {
+    origin: ['https://yourdomain.com'],
+  },
+  logger: true,
+});
+
+await server.listen({ port: 3000, host: '0.0.0.0' });
+```
+
+The server auto-creates all database tables on first startup, registers all API routes, and starts serving.
+
+---
+
+## Docker Quick Start
+
+```yaml
+# docker-compose.yml
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: linkforty
+      POSTGRES_USER: linkforty
+      POSTGRES_PASSWORD: changeme
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  linkforty:
+    image: node:20-alpine
+    working_dir: /app
+    command: node dist/index.js
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://linkforty:changeme@postgres:5432/linkforty
+      REDIS_URL: redis://redis:6379
+      PORT: 3000
+      NODE_ENV: production
+      SHORTLINK_DOMAIN: https://go.yourdomain.com
+    depends_on:
+      - postgres
+      - redis
+
+volumes:
+  pgdata:
+```
+
+```bash
+docker compose up -d
+curl http://localhost:3000/health
+```
+
+---
+
+## Configuration
+
+### createServer(options)
+
+```typescript
+interface ServerOptions {
+  database?: {
+    url?: string;        // PostgreSQL connection string (falls back to DATABASE_URL env var)
+    pool?: {
+      min?: number;      // Default: 2
+      max?: number;      // Default: 10
+    };
+  };
+  redis?: {
+    url: string;         // Redis connection string
+  };
+  cors?: {
+    origin: string | string[];
+  };
+  logger?: boolean;      // Enable Fastify logger (default: false)
+}
+```
+
+**Database connection retry behavior:** On startup, Core attempts to connect to PostgreSQL up to 10 times with exponential backoff (starting at 1s, doubling each attempt). This means it tolerates PostgreSQL starting up slower than the Node.js process in Docker environments.
+
+**SSL behavior:** In `NODE_ENV=production`, SSL is enabled with `rejectUnauthorized: false` (compatible with self-signed certs). In other environments, SSL is disabled.
+
+---
+
+## Environment Variables
+
+All environment variables with their defaults and descriptions:
+
+```bash
+# ─── Database ────────────────────────────────────────────────────────────────
+DATABASE_URL=postgresql://linkforty:changeme@localhost:5432/linkforty
+# Full PostgreSQL connection string including database name and sslmode.
+# For Fly.io Postgres: postgresql://user:pass@top2.nearest.of.host.flycast:5432/db?sslmode=disable
+
+# ─── Redis (optional) ────────────────────────────────────────────────────────
+REDIS_URL=redis://localhost:6379
+# Omit entirely to disable Redis. Core falls back to PostgreSQL on every request.
+# When Redis is present, link data is cached for 5 minutes (TTL=300s).
+
+# ─── Server ──────────────────────────────────────────────────────────────────
+PORT=3000
+HOST=0.0.0.0
+NODE_ENV=production      # Enables SSL and production logging
+CORS_ORIGIN=*            # Comma-separated origins, or * for all
+
+# ─── Short Link Domain ────────────────────────────────────────────────────────
+SHORTLINK_DOMAIN=https://go.yourdomain.com
+# Used in QR code image src attributes and SDK resolve responses.
+# Must NOT have a trailing slash.
+
+# ─── iOS Universal Links ─────────────────────────────────────────────────────
+IOS_TEAM_ID=ABC123XYZ
+# 10-character Apple Developer Team ID (found in developer.apple.com)
+IOS_BUNDLE_ID=com.yourcompany.yourapp
+# iOS app bundle identifier
+
+# ─── Android App Links ───────────────────────────────────────────────────────
+ANDROID_PACKAGE_NAME=com.yourcompany.yourapp
+# Android application package name
+ANDROID_SHA256_FINGERPRINTS=AA:BB:CC:DD:EE:FF:...
+# SHA-256 certificate fingerprint(s) from your keystore.
+# Multiple fingerprints: comma-separated (for debug + release)
+# Get it: keytool -list -v -keystore your.keystore -alias yourkey
+
+# ─── Production monitoring (optional) ────────────────────────────────────────
+SENTRY_DSN=https://...@sentry.io/...
+NEW_RELIC_LICENSE_KEY=...
+DATADOG_API_KEY=...
+```
+
+---
+
+## Module Exports
+
+```typescript
+// Main export — server factory
+import { createServer } from '@linkforty/core';
+
+// Utility functions (device detection, geolocation, URL building)
+import {
+  generateShortCode,
+  parseUserAgent,
+  getLocationFromIP,
+  buildRedirectUrl,
+  detectDevice,
+} from '@linkforty/core/utils';
+
+// PostgreSQL connection pool (pg.Pool) — already initialized after createServer()
+import { db } from '@linkforty/core/database';
+
+// Fastify route plugins — register them on any Fastify instance
+import {
+  linkRoutes,
+  templateRoutes,
+  analyticsRoutes,
+  webhookRoutes,
+  sdkRoutes,
+  redirectRoutes,
+  qrRoutes,
+  wellKnownRoutes,
+  previewRoutes,
+} from '@linkforty/core/routes';
+
+// TypeScript interfaces and types
+import type {
+  Link,
+  LinkTemplate,
+  ClickEvent,
+  InstallEvent,
+  Webhook,
+  WebhookEvent,
+  AnalyticsData,
+  CreateLinkRequest,
+  UpdateLinkRequest,
+} from '@linkforty/core/types';
+
+// Real-time click event streaming
+import { subscribeToClickEvents } from '@linkforty/core';
+```
+
+---
+
+## TypeScript Types — Full Reference
+
+### Link
+
+```typescript
+interface Link {
+  id: string;                          // UUID (gen_random_uuid())
+  user_id?: string;                    // Optional UUID (multi-tenant scoping)
+  template_id?: string;                // UUID reference to link_templates
+  template_slug?: string;              // Resolved template slug (read-only, from JOIN)
+  short_code: string;                  // Unique, max 20 chars, immutable after creation
+  original_url: string;                // Required, must be a valid URL
+
+  title?: string;                      // max 255 chars
+  description?: string;
+
+  // Platform-specific destination URLs
+  ios_app_store_url?: string;          // iOS App Store link
+  android_app_store_url?: string;      // Google Play Store link
+  web_fallback_url?: string;           // Web destination
+
+  // Deep linking configuration
+  app_scheme?: string;                 // URI scheme, e.g. "myapp" (produces myapp://...)
+                                       // Must match /^[a-z][a-z0-9+.-]*$/
+  ios_universal_link?: string;         // HTTPS Universal Link URL
+  android_app_link?: string;           // HTTPS App Link URL
+  deep_link_path?: string;             // In-app path, e.g. "/product/123"
+  deep_link_parameters?: Record<string, any>; // Custom key-value data passed to app
+
+  // Analytics tracking
+  utm_parameters?: UTMParameters;
+  targeting_rules?: TargetingRules;
+
+  // Social preview (Open Graph meta tags)
+  og_title?: string;                   // max 255 chars
+  og_description?: string;
+  og_image_url?: string;
+  og_type?: string;                    // Default: "website"
+
+  // Lifecycle
+  attribution_window_hours?: number;   // Range: 1–2160 (default: 168 = 7 days)
+  is_active: boolean;                  // Default: true
+  expires_at?: string;                 // ISO 8601 datetime; null = never expires
+  created_at: string;                  // ISO 8601
+  updated_at: string;                  // ISO 8601
+  click_count?: number;                // Aggregated from click_events (read-only)
+}
+```
+
+### UTMParameters
+
+```typescript
+interface UTMParameters {
+  source?: string;     // utm_source
+  medium?: string;     // utm_medium
+  campaign?: string;   // utm_campaign
+  term?: string;       // utm_term
+  content?: string;    // utm_content
+}
+```
+
+### TargetingRules
+
+```typescript
+interface TargetingRules {
+  countries?: string[];                // ISO 3166-1 alpha-2 codes, e.g. ["US", "GB", "CA"]
+  devices?: ('ios' | 'android' | 'web')[];
+  languages?: string[];                // BCP 47 language tags, e.g. ["en", "es", "fr"]
+}
+// If targeting_rules is non-empty, visitors who don't match receive a 404.
+// An empty object {} means no targeting (all visitors pass through).
+```
+
+### CreateLinkRequest
+
+```typescript
+interface CreateLinkRequest {
+  userId?: string;                     // UUID — scopes link to a tenant
+  templateId?: string;                 // UUID — inherits template defaults
+  originalUrl: string;                 // Required, must be a valid URL
+
+  title?: string;
+  description?: string;
+
+  iosAppStoreUrl?: string;             // Must be a valid URL
+  androidAppStoreUrl?: string;         // Must be a valid URL
+  webFallbackUrl?: string;             // Must be a valid URL
+
+  appScheme?: string;                  // URI scheme, e.g. "myapp"
+  iosUniversalLink?: string;           // Must be a valid URL
+  androidAppLink?: string;             // Must be a valid URL
+  deepLinkPath?: string;               // e.g. "/product/789"
+  deepLinkParameters?: Record<string, any>;
+
+  utmParameters?: UTMParameters;
+  targetingRules?: TargetingRules;
+
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImageUrl?: string;                 // Must be a valid URL
+  ogType?: string;
+
+  attributionWindowHours?: number;     // Integer, 1–2160
+  customCode?: string;                 // Custom short code; auto-generated (nanoid) if omitted
+  expiresAt?: string;                  // ISO 8601 datetime
+}
+```
+
+### UpdateLinkRequest
+
+```typescript
+// All fields from CreateLinkRequest are optional, plus:
+interface UpdateLinkRequest extends Partial<Omit<CreateLinkRequest, 'userId'>> {
+  isActive?: boolean;
+}
+// Note: userId cannot be changed after creation.
+// short_code cannot be changed after creation.
+```
+
+### LinkTemplate
+
+```typescript
+interface LinkTemplate {
+  id: string;                          // UUID
+  user_id?: string;                    // Optional UUID
+  name: string;                        // max 255 chars, required
+  slug: string;                        // Auto-generated 8-char alphanumeric, unique
+  description?: string;
+  settings: LinkTemplateSettings;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface LinkTemplateSettings {
+  defaultIosUrl?: string;
+  defaultAndroidUrl?: string;
+  defaultWebFallbackUrl?: string;
+  defaultAttributionWindowHours?: number;
+  utmParameters?: UTMParameters;
+  targetingRules?: TargetingRules;
+  expiresAfterDays?: number;           // Sets expires_at on new links using this template
+}
+```
+
+### ClickEvent
+
+```typescript
+interface ClickEvent {
+  id: string;                          // UUID
+  link_id: string;                     // FK → links(id), ON DELETE CASCADE
+  clicked_at: string;                  // ISO 8601
+
+  // Request metadata
+  ip_address?: string;                 // INET (IPv4 or IPv6)
+  user_agent?: string;
+
+  // Device detection (via ua-parser-js)
+  device_type?: 'ios' | 'android' | 'web' | string;
+  platform?: string;                   // e.g. "iOS", "Android", "Windows"
+
+  // Geolocation (via geoip-lite)
+  country_code?: string;               // ISO 3166-1 alpha-2
+  country_name?: string;
+  region?: string;
+  city?: string;
+  latitude?: number;
+  longitude?: number;
+  timezone?: string;                   // IANA timezone
+
+  // UTM parameters (from query string at click time, overrides link defaults)
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+
+  referrer?: string;                   // HTTP Referer header
+}
+```
+
+### InstallEvent
+
+```typescript
+interface InstallEvent {
+  id: string;                          // UUID (returned as installId to SDK)
+  link_id?: string;                    // FK → links(id), null if organic
+  click_id?: string;                   // FK → click_events(id), null if no match
+  fingerprint_hash: string;            // SHA-256 of fingerprint components
+  confidence_score?: number;           // 0.00–100.00
+  installed_at: string;                // ISO 8601
+  first_open_at?: string;              // ISO 8601
+  deep_link_retrieved: boolean;        // Whether SDK fetched deep link data
+  deep_link_data: Record<string, any>; // Cached link data at attribution time
+  attribution_window_hours: number;
+  device_id?: string;                  // IDFA/GAID if provided
+  // + all fingerprint fields: ip_address, user_agent, timezone, language,
+  //   screen_width, screen_height, platform, platform_version
+}
+```
+
+### Webhook
+
+```typescript
+type WebhookEvent = 'click_event' | 'install_event' | 'conversion_event';
+
+interface Webhook {
+  id: string;                          // UUID
+  user_id?: string;
+  name: string;
+  url: string;                         // Delivery endpoint
+  secret: string;                      // Auto-generated HMAC-SHA256 signing key
+  events: WebhookEvent[];              // At least one required
+  is_active: boolean;
+  retry_count: number;                 // 1–10, default 3
+  timeout_ms: number;                  // 1000–60000, default 10000
+  headers: Record<string, string>;     // Extra headers sent with deliveries
+  created_at: string;
+  updated_at: string;
+}
+// Note: secret is excluded from GET /api/webhooks list; included in GET /api/webhooks/:id
+```
+
+### AnalyticsData
+
+```typescript
+interface AnalyticsData {
+  totalClicks: number;
+  uniqueClicks: number;                // Distinct IP addresses
+  clicksByDate: Array<{
+    date: string;                      // "YYYY-MM-DD"
+    clicks: number;
+  }>;
+  clicksByCountry: Array<{
+    countryCode: string;               // ISO 3166-1 alpha-2 or "Unknown"
+    country: string;                   // Full country name or "Unknown"
+    clicks: number;
+  }>;
+  clicksByDevice: Array<{
+    device: string;                    // "ios" | "android" | "web" | "Unknown"
+    clicks: number;
+  }>;
+  clicksByPlatform: Array<{
+    platform: string;                  // e.g. "iOS", "Android", "Windows", "Unknown"
+    clicks: number;
+  }>;
+  topLinks: Array<{
+    id: string;
+    shortCode: string;
+    title: string | null;
+    originalUrl: string;
+    totalClicks: number;
+    uniqueClicks: number;
+  }>;
+}
+// Note: link-specific analytics (GET /api/analytics/links/:id) returns the same
+// shape but without topLinks and scoped to one link.
+```
+
+---
+
+## API Endpoints — Full Reference
+
+All management endpoints accept and return `application/json`. The `userId` query parameter is optional on all management routes — when provided, queries are scoped to that user (multi-tenant mode). When omitted, all records are accessible (single-tenant mode).
+
+### Health Check
+
+#### GET /health
+
+```bash
+curl http://localhost:3000/health
+```
+
+Response (200):
+```json
+{ "status": "ok" }
+```
+
+---
+
+### Link Management
+
+#### POST /api/links — Create Link
+
+```bash
+curl -X POST http://localhost:3000/api/links \
+  -H "Content-Type: application/json" \
+  -d '{
+    "originalUrl": "https://example.com/product/789",
+    "title": "Summer Campaign",
+    "description": "Product page for summer sale",
+    "iosAppStoreUrl": "https://apps.apple.com/app/id123456789",
+    "androidAppStoreUrl": "https://play.google.com/store/apps/details?id=com.example.app",
+    "webFallbackUrl": "https://example.com/product/789",
+    "appScheme": "myapp",
+    "deepLinkPath": "/product/789",
+    "deepLinkParameters": { "route": "product", "productId": "789", "variant": "blue" },
+    "utmParameters": {
+      "source": "instagram",
+      "medium": "social",
+      "campaign": "summer2025",
+      "content": "story_ad"
+    },
+    "targetingRules": {
+      "countries": ["US", "CA", "GB"],
+      "devices": ["ios", "android"]
+    },
+    "ogTitle": "Summer Sale — 40% Off",
+    "ogDescription": "Shop our summer collection",
+    "ogImageUrl": "https://cdn.example.com/summer-og.jpg",
+    "ogType": "product",
+    "attributionWindowHours": 168,
+    "templateId": "550e8400-e29b-41d4-a716-446655440000",
+    "userId": "user-uuid-here",
+    "customCode": "summer25",
+    "expiresAt": "2025-09-01T00:00:00Z"
+  }'
+```
+
+Response (201):
+```json
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "user_id": "user-uuid-here",
+  "template_id": "550e8400-e29b-41d4-a716-446655440000",
+  "short_code": "summer25",
+  "original_url": "https://example.com/product/789",
+  "title": "Summer Campaign",
+  "description": "Product page for summer sale",
+  "ios_app_store_url": "https://apps.apple.com/app/id123456789",
+  "android_app_store_url": "https://play.google.com/store/apps/details?id=com.example.app",
+  "web_fallback_url": "https://example.com/product/789",
+  "app_scheme": "myapp",
+  "deep_link_path": "/product/789",
+  "deep_link_parameters": { "route": "product", "productId": "789", "variant": "blue" },
+  "utm_parameters": { "source": "instagram", "medium": "social", "campaign": "summer2025", "content": "story_ad" },
+  "targeting_rules": { "countries": ["US", "CA", "GB"], "devices": ["ios", "android"] },
+  "og_title": "Summer Sale — 40% Off",
+  "og_description": "Shop our summer collection",
+  "og_image_url": "https://cdn.example.com/summer-og.jpg",
+  "og_type": "product",
+  "attribution_window_hours": 168,
+  "is_active": true,
+  "expires_at": "2025-09-01T00:00:00.000Z",
+  "clickCount": 0,
+  "utmParameters": { "source": "instagram", "medium": "social", "campaign": "summer2025", "content": "story_ad" },
+  "targetingRules": { "countries": ["US", "CA", "GB"], "devices": ["ios", "android"] },
+  "deepLinkParameters": { "route": "product", "productId": "789", "variant": "blue" },
+  "created_at": "2025-06-15T10:30:00.000Z",
+  "updated_at": "2025-06-15T10:30:00.000Z"
+}
+```
+
+Notes:
+- `short_code` is auto-generated using nanoid (8 chars) if `customCode` is not provided
+- If a custom code is already taken, a 500 error is returned
+- `ogType` defaults to `"website"` if omitted
+- `attributionWindowHours` defaults to `168` (7 days) if omitted
+- JSONB fields (`deep_link_parameters`, `utm_parameters`, `targeting_rules`) are returned both in snake_case (raw DB) and camelCase (mapped) in the response — this is a current behavior
+
+#### GET /api/links — List Links
+
+```bash
+# All links (single-tenant)
+curl "http://localhost:3000/api/links"
+
+# Scoped to a user (multi-tenant)
+curl "http://localhost:3000/api/links?userId=user-uuid-here"
+```
+
+Response (200): Array of Link objects, ordered by `created_at DESC`.
+Each object includes a `clickCount` aggregated from `click_events`.
+
+#### GET /api/links/:id — Get Link
+
+```bash
+curl "http://localhost:3000/api/links/a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
+# With user scope
+curl "http://localhost:3000/api/links/a1b2c3d4-e5f6-7890-abcd-ef1234567890?userId=user-uuid-here"
+```
+
+Response (200): Single Link object with `clickCount`.
+Response (500, link not found): `{ "error": "Link not found", "statusCode": 500 }`
+
+#### PUT /api/links/:id — Update Link
+
+Partial update — only provide fields you want to change.
+
+```bash
+curl -X PUT "http://localhost:3000/api/links/a1b2c3d4-e5f6-7890-abcd-ef1234567890" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Updated Title",
+    "isActive": false,
+    "targetingRules": { "countries": ["US"] }
+  }'
+```
+
+Response (200): Updated Link object.
+
+Notes:
+- `userId` cannot be updated
+- `short_code` is not part of `UpdateLinkRequest` (immutable after creation)
+- At least one field must be provided (returns 500 if body is `{}`)
+
+#### DELETE /api/links/:id — Delete Link
+
+```bash
+curl -X DELETE "http://localhost:3000/api/links/a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
+# With user scope
+curl -X DELETE "http://localhost:3000/api/links/a1b2c3d4-e5f6-7890-abcd-ef1234567890?userId=user-uuid-here"
+```
+
+Response (200): `{ "success": true }`
+
+Note: Deleting a link cascades to `click_events` and `device_fingerprints`. `install_events` that reference this link have `link_id` SET NULL (installs are preserved for historical reporting).
+
+#### POST /api/links/:id/duplicate — Clone Link
+
+Creates a copy of the link with a new `short_code` and appends `" (Copy)"` to the title.
+
+```bash
+curl -X POST "http://localhost:3000/api/links/a1b2c3d4-e5f6-7890-abcd-ef1234567890/duplicate"
+
+# With user scope
+curl -X POST "http://localhost:3000/api/links/a1b2c3d4-e5f6-7890-abcd-ef1234567890/duplicate?userId=user-uuid-here"
+```
+
+Response (200): New Link object with `clickCount: 0`.
+
+---
+
+### Link Templates
+
+Templates provide default settings that are inherited by links created with `templateId`.
+
+#### POST /api/templates — Create Template
+
+```bash
+curl -X POST http://localhost:3000/api/templates \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "E-commerce Product Links",
+    "description": "Default settings for product page links",
+    "settings": {
+      "defaultIosUrl": "https://apps.apple.com/app/id123456789",
+      "defaultAndroidUrl": "https://play.google.com/store/apps/details?id=com.example.app",
+      "defaultWebFallbackUrl": "https://example.com",
+      "defaultAttributionWindowHours": 168,
+      "utmParameters": { "source": "app", "medium": "deeplink" },
+      "targetingRules": {},
+      "expiresAfterDays": 365
+    },
+    "isDefault": true,
+    "userId": "user-uuid-here"
+  }'
+```
+
+Response (201): LinkTemplate object. The `slug` is auto-generated (8-char alphanumeric).
+
+#### GET /api/templates — List Templates
+
+```bash
+curl "http://localhost:3000/api/templates"
+curl "http://localhost:3000/api/templates?userId=user-uuid-here"
+```
+
+Response (200): Array of LinkTemplate objects, ordered by `created_at DESC`.
+
+#### GET /api/templates/:id — Get Template
+
+```bash
+curl "http://localhost:3000/api/templates/template-uuid"
+```
+
+Response (200): Single LinkTemplate object.
+
+#### PUT /api/templates/:id — Update Template
+
+```bash
+curl -X PUT "http://localhost:3000/api/templates/template-uuid" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Updated Template Name",
+    "settings": {
+      "defaultAttributionWindowHours": 72
+    }
+  }'
+```
+
+Response (200): Updated LinkTemplate object.
+
+#### DELETE /api/templates/:id — Delete Template
+
+```bash
+curl -X DELETE "http://localhost:3000/api/templates/template-uuid"
+```
+
+Response (200): `{ "success": true }`
+
+Note: Deleting a template sets `template_id = NULL` on associated links (ON DELETE SET NULL).
+
+#### PUT /api/templates/:id/set-default — Set Default Template
+
+```bash
+curl -X PUT "http://localhost:3000/api/templates/template-uuid/set-default"
+curl -X PUT "http://localhost:3000/api/templates/template-uuid/set-default?userId=user-uuid-here"
+```
+
+This clears `is_default` on all other templates for the same `userId`, then sets `is_default = true` on this one.
+
+Response (200): Updated LinkTemplate object.
+
+---
+
+### Analytics
+
+#### GET /api/analytics/overview — Aggregate Analytics
+
+```bash
+# Last 30 days (default)
+curl "http://localhost:3000/api/analytics/overview"
+
+# Last 7 days
+curl "http://localhost:3000/api/analytics/overview?days=7"
+
+# Scoped to a user
+curl "http://localhost:3000/api/analytics/overview?days=30&userId=user-uuid-here"
+```
+
+Response (200):
+```json
+{
+  "totalClicks": 4821,
+  "uniqueClicks": 3104,
+  "clicksByDate": [
+    { "date": "2025-06-01", "clicks": 142 },
+    { "date": "2025-06-02", "clicks": 189 }
+  ],
+  "clicksByCountry": [
+    { "countryCode": "US", "country": "United States", "clicks": 2340 },
+    { "countryCode": "GB", "country": "United Kingdom", "clicks": 412 },
+    { "countryCode": "Unknown", "country": "Unknown", "clicks": 89 }
+  ],
+  "clicksByDevice": [
+    { "device": "ios", "clicks": 2100 },
+    { "device": "android", "clicks": 1800 },
+    { "device": "web", "clicks": 921 }
+  ],
+  "clicksByPlatform": [
+    { "platform": "iOS", "clicks": 2100 },
+    { "platform": "Android", "clicks": 1800 },
+    { "platform": "Windows", "clicks": 500 }
+  ],
+  "topLinks": [
+    {
+      "id": "uuid",
+      "shortCode": "summer25",
+      "title": "Summer Campaign",
+      "originalUrl": "https://example.com/product/789",
+      "totalClicks": 1200,
+      "uniqueClicks": 890
+    }
+  ]
+}
+```
+
+Notes:
+- `uniqueClicks` is counted by distinct `ip_address`, not a proper user-level dedup
+- `days` parameter is an integer (default 30); passed directly into a SQL `INTERVAL` expression
+- `topLinks` returns the top 10 links by total click count
+
+#### GET /api/analytics/links/:linkId — Link-Specific Analytics
+
+```bash
+curl "http://localhost:3000/api/analytics/links/a1b2c3d4-e5f6-7890-abcd-ef1234567890?days=30"
+curl "http://localhost:3000/api/analytics/links/uuid?days=7&userId=user-uuid-here"
+```
+
+Response (200): Same shape as overview but without `topLinks`, and always scoped to the single link.
+
+---
+
+### Webhooks
+
+#### POST /api/webhooks — Create Webhook
+
+```bash
+curl -X POST http://localhost:3000/api/webhooks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Production Webhook",
+    "url": "https://example.com/webhooks/linkforty",
+    "events": ["click_event", "install_event", "conversion_event"],
+    "retryCount": 3,
+    "timeoutMs": 10000,
+    "headers": {
+      "X-Custom-Header": "my-value",
+      "Authorization": "Bearer my-internal-token"
+    },
+    "userId": "user-uuid-here"
+  }'
+```
+
+Response (201): Full Webhook object, **including the auto-generated `secret`**. This is the only time the secret is returned; store it immediately.
+
+```json
+{
+  "id": "webhook-uuid",
+  "user_id": "user-uuid-here",
+  "name": "Production Webhook",
+  "url": "https://example.com/webhooks/linkforty",
+  "secret": "lf_whsec_a1b2c3d4e5f6...",
+  "events": ["click_event", "install_event", "conversion_event"],
+  "is_active": true,
+  "retry_count": 3,
+  "timeout_ms": 10000,
+  "headers": { "X-Custom-Header": "my-value" },
+  "created_at": "2025-06-15T10:30:00.000Z",
+  "updated_at": "2025-06-15T10:30:00.000Z"
+}
+```
+
+Valid `events` values: `"click_event"`, `"install_event"`, `"conversion_event"`
+
+#### GET /api/webhooks — List Webhooks
+
+```bash
+curl "http://localhost:3000/api/webhooks"
+curl "http://localhost:3000/api/webhooks?userId=user-uuid-here"
+```
+
+Response (200): Array of Webhook objects. **Secret is excluded from the list response.**
+
+#### GET /api/webhooks/:id — Get Webhook
+
+```bash
+curl "http://localhost:3000/api/webhooks/webhook-uuid"
+```
+
+Response (200): Full Webhook object **including secret**.
+
+#### PUT /api/webhooks/:id — Update Webhook
+
+```bash
+curl -X PUT "http://localhost:3000/api/webhooks/webhook-uuid" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "isActive": false,
+    "retryCount": 5,
+    "events": ["click_event"]
+  }'
+```
+
+Response (200): Updated Webhook object.
+
+#### DELETE /api/webhooks/:id — Delete Webhook
+
+```bash
+curl -X DELETE "http://localhost:3000/api/webhooks/webhook-uuid"
+```
+
+Response (200): `{ "success": true }`
+
+#### POST /api/webhooks/:id/test — Send Test Payload
+
+Delivers a synthetic `click_event` payload synchronously to the webhook URL. Useful for verifying connectivity and signature verification.
+
+```bash
+curl -X POST "http://localhost:3000/api/webhooks/webhook-uuid/test"
+```
+
+Response (200):
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "responseBody": "OK",
+  "error": null
+}
+```
+
+#### Webhook Payload Format
+
+All webhook deliveries use this envelope:
+
+```json
+{
+  "event": "click_event",
+  "event_id": "click-event-uuid",
+  "timestamp": "2025-06-15T10:30:00.000Z",
+  "data": {
+    "id": "click-event-uuid",
+    "linkId": "link-uuid",
+    "clickedAt": "2025-06-15T10:30:00.000Z",
+    "ipAddress": "1.2.3.4",
+    "userAgent": "Mozilla/5.0 ...",
+    "deviceType": "ios",
+    "platform": "iOS",
+    "countryCode": "US",
+    "countryName": "United States",
+    "region": "California",
+    "city": "San Francisco",
+    "latitude": 37.7749,
+    "longitude": -122.4194,
+    "timezone": "America/Los_Angeles",
+    "utmSource": "instagram",
+    "utmMedium": "social",
+    "utmCampaign": "summer2025",
+    "referrer": "https://instagram.com/"
+  }
+}
+```
+
+#### Webhook Signature Verification
+
+Every delivery includes an `X-LinkForty-Signature` header with an HMAC-SHA256 signature:
+
+```typescript
+import crypto from 'crypto';
+
+// Express/Node.js example
+app.post('/webhooks/linkforty', express.raw({ type: 'application/json' }), (req, res) => {
+  const signature = req.headers['x-linkforty-signature'] as string;
+  const secret = process.env.LINKFORTY_WEBHOOK_SECRET;
+
+  // Compute expected signature
+  const expected = 'sha256=' + crypto
+    .createHmac('sha256', secret)
+    .update(req.body)              // Use raw body Buffer, NOT parsed JSON
+    .digest('hex');
+
+  // Timing-safe comparison
+  const isValid = crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expected)
+  );
+
+  if (!isValid) {
+    return res.status(401).send('Invalid signature');
+  }
+
+  const payload = JSON.parse(req.body.toString());
+  console.log('Received event:', payload.event, payload.data);
+
+  res.status(200).send('OK');
+});
+```
+
+---
+
+### QR Codes
+
+#### GET /api/links/:id/qr — Generate QR Code
+
+```bash
+# PNG (default) — binary response, Content-Type: image/png
+curl "http://localhost:3000/api/links/link-uuid/qr" -o qr.png
+
+# SVG — text response, Content-Type: image/svg+xml
+curl "http://localhost:3000/api/links/link-uuid/qr?format=svg" -o qr.svg
+```
+
+The QR code encodes the full short link URL using `SHORTLINK_DOMAIN`:
+`https://go.yourdomain.com/{shortCode}`
+
+Query parameters:
+- `format`: `"png"` (default) or `"svg"`
+
+---
+
+### Mobile SDK Endpoints
+
+These endpoints are designed to be called by the LinkForty mobile SDKs. They are public (no authentication required).
+
+#### POST /api/sdk/v1/install — Report App Install
+
+Called on first app launch. Sends device fingerprint to server for deferred deep link attribution.
+
+```bash
+curl -X POST http://localhost:3000/api/sdk/v1/install \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userAgent": "MyApp/1.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+    "timezone": "America/New_York",
+    "language": "en-US",
+    "screenWidth": 390,
+    "screenHeight": 844,
+    "platform": "iOS",
+    "platformVersion": "17.0",
+    "deviceId": "optional-idfa-if-consented",
+    "attributionWindowHours": 168
+  }'
+```
+
+- `ipAddress`: Optional — if not provided, the server uses the request IP (`request.ip`)
+- `userAgent`: Required
+- All other fields are optional but improve match confidence
+- `deviceId`: Optional — IDFA (iOS), GAID (Android), only include if user has consented
+
+Response (200):
+```json
+{
+  "installId": "install-event-uuid",
+  "attributed": true,
+  "confidenceScore": 85,
+  "matchedFactors": ["ip", "user_agent", "timezone", "language", "screen"],
+  "deepLinkData": {
+    "shortCode": "summer25",
+    "linkId": "link-uuid",
+    "originalUrl": "https://example.com/product/789",
+    "iosUrl": "https://apps.apple.com/app/id123456789",
+    "androidUrl": "https://play.google.com/store/apps/details?id=com.example.app",
+    "webFallbackUrl": "https://example.com/product/789",
+    "deepLinkPath": "/product/789",
+    "appScheme": "myapp",
+    "utmParameters": { "source": "instagram", "medium": "social" },
+    "deepLinkParameters": { "route": "product", "productId": "789" }
+  }
+}
+```
+
+- `attributed: false` + `deepLinkData: null` means organic install (no matching click found)
+- `confidenceScore`: 0–100 (must be ≥ 70 to count as a match)
+- `matchedFactors`: subset of `["ip", "user_agent", "timezone", "language", "screen"]`
+
+#### GET /api/sdk/v1/resolve/:shortCode — Resolve Deep Link Data
+
+Called when the OS opens the app via Universal Links / App Links, bypassing the redirect server. Also records a click event and stores a fingerprint for attribution.
+
+```bash
+# Basic resolve
+curl "http://localhost:3000/api/sdk/v1/resolve/summer25"
+
+# With fingerprint data for attribution
+curl "http://localhost:3000/api/sdk/v1/resolve/summer25?fp_tz=America/New_York&fp_lang=en-US&fp_sw=390&fp_sh=844&fp_platform=ios&fp_pv=17.0"
+
+# Template-based link
+curl "http://localhost:3000/api/sdk/v1/resolve/ecomm/summer25"
+```
+
+Query parameters for fingerprint (all optional):
+- `fp_tz`: IANA timezone (e.g., `America/New_York`)
+- `fp_lang`: Language (e.g., `en-US`)
+- `fp_sw`: Screen width in pixels
+- `fp_sh`: Screen height in pixels
+- `fp_platform`: Platform (e.g., `ios`, `android`)
+- `fp_pv`: Platform version (e.g., `17.0`)
+
+Response (200):
+```json
+{
+  "shortCode": "summer25",
+  "linkId": "link-uuid",
+  "deepLinkPath": "/product/789",
+  "appScheme": "myapp",
+  "iosUrl": "https://apps.apple.com/app/id123456789",
+  "androidUrl": "https://play.google.com/store/apps/details?id=com.example.app",
+  "webUrl": "https://example.com/product/789",
+  "utmParameters": { "source": "instagram", "medium": "social" },
+  "customParameters": { "route": "product", "productId": "789" },
+  "clickedAt": "2025-06-15T10:30:00.000Z"
+}
+```
+
+Response (404): `{ "error": "Link not found" }` — if link is inactive, expired, or not found.
+
+#### POST /api/sdk/v1/event — Track In-App Event
+
+```bash
+# General event
+curl -X POST http://localhost:3000/api/sdk/v1/event \
+  -H "Content-Type: application/json" \
+  -d '{
+    "installId": "install-event-uuid",
+    "eventName": "purchase",
+    "eventData": { "amount": 29.99, "currency": "USD", "productId": "789" },
+    "timestamp": "2025-06-15T10:45:00.000Z"
+  }'
+
+# Revenue tracking convention (use eventName: "revenue")
+curl -X POST http://localhost:3000/api/sdk/v1/event \
+  -H "Content-Type: application/json" \
+  -d '{
+    "installId": "install-event-uuid",
+    "eventName": "revenue",
+    "eventData": { "revenue": 29.99, "currency": "USD" }
+  }'
+```
+
+- `installId`: Required — must be the UUID returned by `/api/sdk/v1/install`
+- `eventName`: Required — any string (e.g., `"purchase"`, `"signup"`, `"level_complete"`, `"revenue"`)
+- `eventData`: Optional — arbitrary JSON object
+- `timestamp`: Optional ISO 8601 datetime (defaults to server `NOW()`)
+
+Response (200):
+```json
+{
+  "eventId": "in-app-event-uuid",
+  "acknowledged": true
+}
+```
+
+Response (404): `{ "error": "Install event not found" }` — if `installId` doesn't exist.
+
+After recording, if the install was attributed to a link, webhooks are triggered for `conversion_event` and `sdk_event` asynchronously (fire-and-forget).
+
+#### GET /api/sdk/v1/attribution/:fingerprint — Attribution Lookup
+
+Retrieve attribution data by fingerprint hash. Used for debugging or re-attribution lookups.
+
+```bash
+curl "http://localhost:3000/api/sdk/v1/attribution/sha256hashvalue"
+```
+
+Response (200):
+```json
+{
+  "fingerprint": "sha256hashvalue",
+  "attributed": true,
+  "installEvent": {
+    "id": "install-uuid",
+    "installedAt": "2025-06-15T10:30:00.000Z",
+    "firstOpenAt": null,
+    "confidenceScore": 85,
+    "deepLinkRetrieved": true
+  },
+  "clickEvent": {
+    "id": "click-uuid",
+    "clickedAt": "2025-06-14T18:00:00.000Z",
+    "deviceType": "ios",
+    "platform": "iOS",
+    "countryCode": "US",
+    "city": "San Francisco"
+  },
+  "linkData": {
+    "shortCode": "summer25",
+    "originalUrl": "https://example.com/product/789",
+    "iosUrl": "https://apps.apple.com/app/id123456789",
+    "androidUrl": "https://play.google.com/store/apps/details?id=com.example.app",
+    "webFallbackUrl": "https://example.com/product/789",
+    "utmParameters": { "source": "instagram" },
+    "deepLinkParameters": { "route": "product" }
+  }
+}
+```
+
+#### GET /api/sdk/v1/health — SDK Health Check
+
+```bash
+curl "http://localhost:3000/api/sdk/v1/health"
+```
+
+Response (200):
+```json
+{
+  "status": "healthy",
+  "version": "v1",
+  "timestamp": "2025-06-15T10:30:00.000Z"
+}
+```
+
+---
+
+### Redirects (Public)
+
+#### GET /:shortCode — Follow Short Link
+
+```
+GET https://go.yourdomain.com/summer25
+```
+
+Performs a 302 redirect based on the visitor's device. See [Redirect Flow](#redirect-flow--step-by-step) for the full decision tree.
+
+iOS in-app browsers (Gmail, Facebook, Instagram, Twitter, LinkedIn, WeChat, Outlook, Yahoo Mail): Instead of a direct 302, Core serves an interstitial HTML page that attempts to open the app via URI scheme (`window.location = "myapp://..."`) with a 1.5s timeout, then falls back to the App Store URL.
+
+Response: `302 Location: <destination URL>`
+Response (404): `{ "error": "Link not found" }` — link inactive, expired, not found, or targeting mismatch
+
+#### GET /:templateSlug/:shortCode — Template-Based Redirect
+
+```
+GET https://go.yourdomain.com/ecomm/summer25
+```
+
+Same behavior as `/:shortCode` but resolves the link by matching both the template slug and short code. Links created with a template are accessible via this URL pattern.
+
+---
+
+### Well-Known (iOS & Android)
+
+These are served automatically based on environment variables.
+
+#### GET /.well-known/apple-app-site-association
+
+Serves the AASA file required for iOS Universal Links. Configure via `IOS_TEAM_ID` and `IOS_BUNDLE_ID`.
+
+```bash
+curl "https://go.yourdomain.com/.well-known/apple-app-site-association"
+```
+
+Response (200, `Content-Type: application/json`):
+```json
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "ABC123XYZ.com.yourcompany.yourapp",
+        "paths": ["*"]
+      }
+    ]
+  }
+}
+```
+
+If `IOS_TEAM_ID` or `IOS_BUNDLE_ID` are not set, returns an empty `applinks` structure.
+
+#### GET /.well-known/assetlinks.json
+
+Serves Digital Asset Links for Android App Links. Configure via `ANDROID_PACKAGE_NAME` and `ANDROID_SHA256_FINGERPRINTS`.
+
+```bash
+curl "https://go.yourdomain.com/.well-known/assetlinks.json"
+```
+
+Response (200):
+```json
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.yourcompany.yourapp",
+      "sha256_cert_fingerprints": ["AA:BB:CC:DD:..."]
+    }
+  }
+]
+```
+
+---
+
+## Database Schema — Full Reference
+
+Tables are auto-created by `initializeDatabase()` on first startup. No separate migration step needed for fresh installs. For existing installations, `initializeDatabase()` applies additive migrations using `IF NOT EXISTS` and `IF EXISTS` guards — it is safe to run on every startup.
+
+### link_templates
+
+```sql
+CREATE TABLE link_templates (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID,                          -- optional tenant scoping
+  name        VARCHAR(255) NOT NULL,
+  slug        VARCHAR(100) UNIQUE NOT NULL,  -- auto-generated 8-char alphanumeric
+  description TEXT,
+  settings    JSONB DEFAULT '{}',            -- LinkTemplateSettings JSON
+  is_default  BOOLEAN DEFAULT false,
+  created_at  TIMESTAMP DEFAULT NOW(),
+  updated_at  TIMESTAMP DEFAULT NOW()
+);
+
+-- Indexes
+CREATE UNIQUE INDEX idx_link_templates_slug ON link_templates(slug);
+CREATE INDEX idx_link_templates_user_id ON link_templates(user_id);
+```
+
+### links
+
+```sql
+CREATE TABLE links (
+  id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id                  UUID,
+  template_id              UUID REFERENCES link_templates(id) ON DELETE SET NULL,
+  short_code               VARCHAR(20) UNIQUE NOT NULL,
+  original_url             TEXT NOT NULL,
+  title                    VARCHAR(255),
+  description              TEXT,
+
+  -- Platform-specific URLs
+  ios_app_store_url        TEXT,
+  android_app_store_url    TEXT,
+  web_fallback_url         TEXT,
+
+  -- Deep linking
+  app_scheme               VARCHAR(255),   -- URI scheme (e.g., "myapp")
+  ios_universal_link       TEXT,           -- HTTPS Universal Link URL
+  android_app_link         TEXT,           -- HTTPS App Link URL
+  deep_link_path           TEXT,           -- e.g. "/product/123"
+  deep_link_parameters     JSONB DEFAULT '{}',
+
+  -- Analytics & tracking
+  utm_parameters           JSONB DEFAULT '{}',
+  targeting_rules          JSONB DEFAULT '{}',
+
+  -- Social preview
+  og_title                 VARCHAR(255),
+  og_description           TEXT,
+  og_image_url             TEXT,
+  og_type                  VARCHAR(50) DEFAULT 'website',
+
+  -- Lifecycle
+  attribution_window_hours INTEGER DEFAULT 168,
+  is_active                BOOLEAN DEFAULT true,
+  expires_at               TIMESTAMP,
+  created_at               TIMESTAMP DEFAULT NOW(),
+  updated_at               TIMESTAMP DEFAULT NOW()
+);
+
+-- Indexes
+CREATE UNIQUE INDEX idx_links_short_code ON links(short_code);
+CREATE INDEX idx_links_user_id ON links(user_id);
+CREATE INDEX idx_links_created_at ON links(created_at DESC);
+CREATE INDEX idx_links_template_id ON links(template_id);
+```
+
+### click_events
+
+```sql
+CREATE TABLE click_events (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  link_id      UUID NOT NULL REFERENCES links(id) ON DELETE CASCADE,
+  clicked_at   TIMESTAMP DEFAULT NOW(),
+
+  -- Request metadata
+  ip_address   INET,
+  user_agent   TEXT,
+
+  -- Device detection (ua-parser-js)
+  device_type  VARCHAR(20),    -- "ios" | "android" | "web"
+  platform     VARCHAR(20),    -- "iOS" | "Android" | "Windows" | etc.
+
+  -- Geolocation (geoip-lite)
+  country_code CHAR(2),
+  country_name VARCHAR(100),
+  region       VARCHAR(100),
+  city         VARCHAR(100),
+  latitude     DECIMAL(10, 8),
+  longitude    DECIMAL(11, 8),
+  timezone     VARCHAR(100),
+
+  -- UTM (overrides from query string)
+  utm_source   VARCHAR(255),
+  utm_medium   VARCHAR(255),
+  utm_campaign VARCHAR(255),
+
+  referrer     TEXT
+);
+
+-- Indexes
+CREATE INDEX idx_clicks_link_id ON click_events(link_id);
+CREATE INDEX idx_clicks_timestamp ON click_events(clicked_at DESC);
+CREATE INDEX idx_clicks_link_date ON click_events(link_id, clicked_at DESC);
+```
+
+### device_fingerprints
+
+```sql
+CREATE TABLE device_fingerprints (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  click_id         UUID NOT NULL REFERENCES click_events(id) ON DELETE CASCADE,
+  fingerprint_hash VARCHAR(64) NOT NULL,  -- SHA-256 hex of fingerprint components
+  ip_address       INET,
+  user_agent       TEXT,
+  timezone         VARCHAR(100),
+  language         VARCHAR(10),
+  screen_width     INTEGER,
+  screen_height    INTEGER,
+  platform         VARCHAR(50),
+  platform_version VARCHAR(50),
+  created_at       TIMESTAMP DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_fingerprints_hash ON device_fingerprints(fingerprint_hash);
+CREATE INDEX idx_fingerprints_click_id ON device_fingerprints(click_id);
+```
+
+### install_events
+
+```sql
+CREATE TABLE install_events (
+  id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  link_id                  UUID REFERENCES links(id) ON DELETE SET NULL,
+  click_id                 UUID REFERENCES click_events(id) ON DELETE SET NULL,
+  fingerprint_hash         VARCHAR(64) NOT NULL,
+  confidence_score         DECIMAL(5, 2),          -- 0.00–100.00
+  installed_at             TIMESTAMP DEFAULT NOW(),
+  first_open_at            TIMESTAMP,
+  deep_link_retrieved      BOOLEAN DEFAULT false,
+  deep_link_data           JSONB DEFAULT '{}',
+  attribution_window_hours INTEGER DEFAULT 168,
+
+  -- Fingerprint components stored on install
+  ip_address               INET,
+  user_agent               TEXT,
+  timezone                 VARCHAR(100),
+  language                 VARCHAR(10),
+  screen_width             INTEGER,
+  screen_height            INTEGER,
+  platform                 VARCHAR(50),
+  platform_version         VARCHAR(50),
+  device_id                VARCHAR(255),           -- IDFA/GAID if provided
+
+  created_at               TIMESTAMP DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_installs_fingerprint ON install_events(fingerprint_hash);
+CREATE INDEX idx_installs_link_id ON install_events(link_id);
+CREATE INDEX idx_installs_timestamp ON install_events(installed_at DESC);
+CREATE INDEX idx_installs_link_date ON install_events(link_id, installed_at DESC);
+```
+
+### in_app_events
+
+```sql
+CREATE TABLE in_app_events (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  install_id      UUID NOT NULL REFERENCES install_events(id) ON DELETE CASCADE,
+  event_name      VARCHAR(255) NOT NULL,
+  event_data      JSONB DEFAULT '{}',
+  event_timestamp TIMESTAMP NOT NULL,
+  created_at      TIMESTAMP DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_in_app_events_install_id ON in_app_events(install_id);
+CREATE INDEX idx_in_app_events_name ON in_app_events(event_name);
+CREATE INDEX idx_in_app_events_timestamp ON in_app_events(event_timestamp DESC);
+```
+
+### webhooks
+
+```sql
+CREATE TABLE webhooks (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID,
+  name        VARCHAR(255) NOT NULL,
+  url         TEXT NOT NULL,
+  secret      VARCHAR(255) NOT NULL,   -- auto-generated HMAC signing key
+  events      TEXT[] NOT NULL DEFAULT '{}',  -- array of WebhookEvent strings
+  is_active   BOOLEAN DEFAULT true,
+  retry_count INTEGER DEFAULT 3,        -- 1–10
+  timeout_ms  INTEGER DEFAULT 10000,    -- 1000–60000
+  headers     JSONB DEFAULT '{}',
+  created_at  TIMESTAMP DEFAULT NOW(),
+  updated_at  TIMESTAMP DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_webhooks_user_id ON webhooks(user_id);
+CREATE INDEX idx_webhooks_active ON webhooks(is_active) WHERE is_active = true;
+```
+
+---
+
+## Redirect Flow — Step by Step
+
+When a visitor hits `GET /:shortCode` (or `/:templateSlug/:shortCode`):
+
+1. **Cache lookup** — check Redis for `link:{shortCode}` (or `link:{templateSlug}:{shortCode}`) with 5-minute TTL
+2. **Database fallback** — if cache miss or Redis unavailable, query `links` table
+3. **Active + expiry check** — SQL filters: `is_active = true AND (expires_at IS NULL OR expires_at > NOW())`
+4. **404 if not found**
+5. **Targeting evaluation** — if `targeting_rules` is non-empty:
+   - Countries: check visitor's IP-geolocated country against `rules.countries` (ISO codes, case-insensitive)
+   - Devices: check detected device type against `rules.devices`
+   - Languages: check primary `Accept-Language` header against `rules.languages` (BCP 47, primary tag only)
+   - If visitor doesn't match any active rule → 404
+6. **Track click asynchronously** (does not block redirect):
+   - Parse user agent → device type, platform, platform version
+   - Geolocate IP → country, region, city, lat/lon, timezone
+   - Insert `click_events` row
+   - Store `device_fingerprints` row for deferred deep linking
+   - Emit real-time click event (WebSocket subscribers)
+   - Trigger active `click_event` webhooks for the link's owner
+7. **Device routing** — determine destination URL:
+
+   **iOS device:**
+   - If `ios_universal_link` → use it (HTTPS, supports Universal Links)
+   - Else if `app_scheme` + `deep_link_path` → build `myapp://product/789` URI (custom scheme)
+   - Else if `ios_app_store_url` → use it
+   - Else → `original_url`
+
+   **Android device:**
+   - If `android_app_link` → use it (HTTPS, supports App Links)
+   - Else if `app_scheme` + `deep_link_path` → build `myapp://product/789` URI (custom scheme)
+   - Else if `android_app_store_url` → use it
+   - Else → `original_url`
+
+   **Web/Desktop:**
+   - `web_fallback_url` if set, else `original_url`
+
+8. **iOS in-app browser detection** — if iOS + one of: GSA, Gmail, Facebook, Instagram, Twitter, LinkedIn, WeChat, Outlook, Yahoo Mail:
+   - Serve an HTML interstitial page instead of 302
+   - Page tries `window.location = "myapp://..."` immediately, then after 1.5s redirects to App Store URL
+   - Reason: WKWebView does not fire Universal Links
+9. **UTM parameters** — appended to HTTP(S) destination URLs as `utm_source=`, `utm_medium=`, etc.
+10. **Deep link parameters** — appended to HTTP(S) destination URLs as query params; appended to URI scheme URLs as query params
+11. **302 redirect** to final URL
+
+---
+
+## Fingerprint Attribution Algorithm
+
+When `/api/sdk/v1/install` is called, Core runs probabilistic matching to find the click that led to the install:
+
+### Scoring
+
+| Factor | Points | Matching logic |
+|--------|--------|----------------|
+| IP address | 40 | Exact match |
+| User agent | 30 | Exact match |
+| Timezone | 10 | Exact string match |
+| Language | 10 | Exact string match |
+| Screen resolution | 10 | Both width AND height match |
+
+Maximum score: 100. **Threshold: 70** (required to count as an attributed install).
+
+### Matching query
+
+Core searches `device_fingerprints` for rows whose `click_id` maps to a click that:
+- Occurred within the link's `attribution_window_hours` before the install time
+- Has a `fingerprint_hash` or component match scoring ≥ 70
+
+The highest-scoring match within the attribution window wins.
+
+### Attribution window
+
+Default: 168 hours (7 days). Configurable per link (1–2160 hours = 1 hour to 90 days).
+
+When the install is sent with `attributionWindowHours`, that value overrides the matched link's window setting.
+
+### What is stored
+
+On match, Core:
+1. Creates an `install_events` row with `link_id`, `click_id`, `confidence_score`, `fingerprint_hash`
+2. Stores the link's deep link data in `install_events.deep_link_data` (snapshot)
+3. Returns the `DeepLinkData` in the install response
+
+---
+
+## Webhook Delivery
+
+### Delivery mechanics
+
+- Webhooks are delivered asynchronously (using `setImmediate`) so they don't block the main request
+- Each webhook in the user's active webhooks list receives a separate delivery attempt
+- Delivery uses `fetch` with the configured `timeout_ms`
+- Failed deliveries are retried up to `retry_count` times (basic exponential backoff)
+- Custom `headers` are merged with the standard signature header
+
+### Event triggers
+
+| Event | Triggered by |
+|-------|-------------|
+| `click_event` | Every redirect (GET `/:shortCode`) and every SDK resolve (GET `/api/sdk/v1/resolve/:shortCode`) |
+| `install_event` | POST `/api/sdk/v1/install` when attributed |
+| `conversion_event` | POST `/api/sdk/v1/event` when install is attributed to a link |
+
+---
+
+## Real-Time Events
+
+Core exposes click events via an internal event emitter and optional WebSocket endpoint.
+
+```typescript
+import { subscribeToClickEvents } from '@linkforty/core';
+
+const unsubscribe = subscribeToClickEvents((event) => {
+  console.log({
+    eventId: event.eventId,
+    linkId: event.linkId,
+    shortCode: event.shortCode,
+    deviceType: event.deviceType,  // "ios" | "android" | "web"
+    platform: event.platform,
+    country: event.country,
+    city: event.city,
+    redirectUrl: event.redirectUrl,
+    redirectReason: event.redirectReason,  // e.g. "ios_app_store_url"
+    utmParameters: event.utmParameters,
+    referer: event.referer,
+  });
+});
+
+// Unsubscribe when done
+unsubscribe();
+```
+
+WebSocket live stream (for browser dashboards):
+```
+ws://localhost:3000/api/debug/live
+```
+
+Each message is a JSON-serialized click event object matching the shape above.
+
+---
+
+## Utility Functions
+
+```typescript
+import {
+  generateShortCode,
+  parseUserAgent,
+  getLocationFromIP,
+  buildRedirectUrl,
+  detectDevice,
+} from '@linkforty/core/utils';
+
+// Generate a random short code (nanoid)
+generateShortCode(8);
+// → "aB3kX9mQ"   (default length: 8)
+generateShortCode(12);
+// → "aB3kX9mQpLwR"
+
+// Parse a User-Agent string
+parseUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1');
+// → {
+//     deviceType: "mobile",
+//     platform: "iOS",
+//     platformVersion: "17.0",
+//     browser: "Mobile Safari",
+//     browserVersion: "17.0"
+//   }
+
+// Geolocate an IP address (uses geoip-lite offline database)
+getLocationFromIP('8.8.8.8');
+// → {
+//     countryCode: "US",
+//     countryName: "United States",
+//     region: "California",
+//     city: "Mountain View",
+//     latitude: 37.386,
+//     longitude: -122.0838,
+//     timezone: "America/Los_Angeles"
+//   }
+// Returns all nulls for private IPs and unknown IPs.
+
+// Detect device type from User-Agent
+detectDevice('Mozilla/5.0 (iPhone; ...)');
+// → "ios"
+detectDevice('Mozilla/5.0 (Linux; Android 13; ...)');
+// → "android"
+detectDevice('Mozilla/5.0 (Windows NT 10.0; Win64; x64) ...');
+// → "web"
+
+// Build a redirect URL with UTM parameters appended
+buildRedirectUrl('https://example.com/product', { source: 'email', medium: 'campaign' });
+// → "https://example.com/product?utm_source=email&utm_medium=campaign"
+// Existing query params in the base URL are preserved.
+```
+
+---
+
+## Error Responses
+
+All API errors follow this format:
+
+```json
+{
+  "error": "Human-readable error message",
+  "statusCode": 400
+}
+```
+
+| Status | When it occurs |
+|--------|---------------|
+| 400 | Zod validation error (missing required field, wrong type, invalid URL, etc.) |
+| 404 | Resource not found, link inactive/expired, or targeting rules excluded visitor |
+| 500 | All other errors (including "Link not found" thrown by route handlers — this is a known rough edge) |
+
+Validation errors from Zod include a detailed `message` field:
+
+```json
+{
+  "statusCode": 400,
+  "error": "Bad Request",
+  "message": "body/originalUrl must be a valid URL"
+}
+```
+
+---
+
+## Integration Patterns
+
+### Self-Hosted Server (TypeScript)
+
+```typescript
+// server.ts
+import 'dotenv/config';
+import { createServer } from '@linkforty/core';
+
+async function start() {
+  const server = await createServer({
+    database: {
+      url: process.env.DATABASE_URL,
+      pool: { min: 2, max: 10 },
+    },
+    redis: process.env.REDIS_URL
+      ? { url: process.env.REDIS_URL }
+      : undefined,
+    cors: {
+      origin: process.env.CORS_ORIGIN?.split(',') ?? ['*'],
+    },
+    logger: process.env.NODE_ENV !== 'test',
+  });
+
+  const port = parseInt(process.env.PORT ?? '3000', 10);
+  const host = process.env.HOST ?? '0.0.0.0';
+
+  await server.listen({ port, host });
+  console.log(`LinkForty running at http://${host}:${port}`);
+}
+
+start().catch((err) => {
+  console.error('Failed to start:', err);
+  process.exit(1);
+});
+```
+
+```json
+// package.json
+{
+  "type": "module",
+  "scripts": {
+    "start": "node dist/server.js",
+    "dev": "tsx watch server.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@linkforty/core": "^1.13.0",
+    "dotenv": "^16.3.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.2.0"
+  }
+}
+```
+
+### Adding Authentication
+
+`createServer()` returns a standard Fastify instance. Add authentication via a `preHandler` hook:
+
+```typescript
+import { createServer } from '@linkforty/core';
+
+const server = await createServer({ database: { url: process.env.DATABASE_URL } });
+
+// API key auth on all /api/* routes
+server.addHook('preHandler', async (request, reply) => {
+  // Skip auth for public routes
+  const publicPaths = ['/.well-known/', '/health'];
+  const isPublic =
+    publicPaths.some(p => request.url.startsWith(p)) ||
+    request.url.match(/^\/[a-zA-Z0-9_-]{1,20}(\/[a-zA-Z0-9_-]{1,20})?$/); // short link redirect
+
+  if (isPublic) return;
+
+  const apiKey = request.headers['x-api-key'];
+  if (!apiKey || apiKey !== process.env.API_KEY) {
+    return reply.code(401).send({ error: 'Unauthorized' });
+  }
+});
+
+// JWT auth example using @fastify/jwt
+import jwt from '@fastify/jwt';
+server.register(jwt, { secret: process.env.JWT_SECRET });
+server.addHook('preHandler', async (request, reply) => {
+  if (request.url.startsWith('/api/')) {
+    await request.jwtVerify();
+  }
+});
+
+await server.listen({ port: 3000, host: '0.0.0.0' });
+```
+
+### Adding Custom Routes
+
+```typescript
+import { createServer } from '@linkforty/core';
+import { db } from '@linkforty/core/database';
+
+const server = await createServer({ database: { url: process.env.DATABASE_URL } });
+
+// Custom stats endpoint
+server.get('/api/custom/stats', async (request, reply) => {
+  const result = await db.query(`
+    SELECT
+      (SELECT COUNT(*) FROM links WHERE is_active = true) as active_links,
+      (SELECT COUNT(*) FROM click_events WHERE clicked_at > NOW() - INTERVAL '24 hours') as clicks_24h,
+      (SELECT COUNT(*) FROM install_events WHERE installed_at > NOW() - INTERVAL '24 hours') as installs_24h
+  `);
+  return result.rows[0];
+});
+
+// Bulk deactivate links by userId
+server.post('/api/custom/deactivate-user-links', async (request, reply) => {
+  const { userId } = request.body as { userId: string };
+  const result = await db.query(
+    'UPDATE links SET is_active = false WHERE user_id = $1 RETURNING id',
+    [userId]
+  );
+  return { deactivated: result.rowCount };
+});
+
+await server.listen({ port: 3000, host: '0.0.0.0' });
+```
+
+### Multi-Tenant Setup
+
+LinkForty is single-tenant by default. Pass `userId` on every request to scope data per tenant:
+
+```typescript
+// Create a link for a specific user
+const response = await fetch('http://localhost:3000/api/links', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    userId: 'tenant-uuid-123',         // scope to this tenant
+    originalUrl: 'https://example.com',
+    title: 'My Link',
+  }),
+});
+
+// List only that user's links
+const links = await fetch('http://localhost:3000/api/links?userId=tenant-uuid-123');
+
+// Get analytics for that user
+const analytics = await fetch('http://localhost:3000/api/analytics/overview?userId=tenant-uuid-123&days=30');
+```
+
+Webhooks are automatically scoped: `triggerWebhooks` queries for webhooks where `user_id = link.user_id`, so each tenant only receives events for their own links.
+
+---
+
+## Mobile SDK Integration
+
+### React Native / Expo
+
+The official SDKs are `@linkforty/mobile-sdk-react-native` and `@linkforty/mobile-sdk-expo`. Below is the raw API for custom integrations or platforms without an official SDK.
+
+```typescript
+// React Native — manual integration using the Core API
+
+const LINKFORTY_URL = 'https://go.yourdomain.com';
+
+// 1. Report install on first launch
+async function reportInstall() {
+  const { width, height } = Dimensions.get('screen');
+
+  const response = await fetch(`${LINKFORTY_URL}/api/sdk/v1/install`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      userAgent: `MyApp/1.0 (React Native; ${Platform.OS} ${Platform.Version})`,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      language: NativeModules.SettingsManager?.settings?.AppleLocale
+        ?? NativeModules.I18nManager?.localeIdentifier
+        ?? 'en-US',
+      screenWidth: width * PixelRatio.get(),
+      screenHeight: height * PixelRatio.get(),
+      platform: Platform.OS === 'ios' ? 'iOS' : 'Android',
+      platformVersion: String(Platform.Version),
+      attributionWindowHours: 168,
+    }),
+  });
+
+  const data = await response.json();
+
+  if (data.attributed && data.deepLinkData) {
+    // Navigate to the deep link destination
+    const { deepLinkPath, customParameters } = data.deepLinkData;
+    navigation.navigate(deepLinkPath, customParameters);
+  }
+
+  // Store installId for event tracking
+  await AsyncStorage.setItem('linkforty_install_id', data.installId);
+  return data;
+}
+
+// 2. Handle Universal Link / App Link (already installed)
+async function handleIncomingLink(url: string) {
+  const parsed = new URL(url);
+  const pathParts = parsed.pathname.replace(/^\//, '').split('/');
+
+  // Determine resolve path
+  const resolvePath = pathParts.length >= 2
+    ? `/api/sdk/v1/resolve/${pathParts[0]}/${pathParts[1]}`
+    : `/api/sdk/v1/resolve/${pathParts[0]}`;
+
+  const { width, height } = Dimensions.get('screen');
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const params = new URLSearchParams({
+    fp_tz: tz,
+    fp_lang: 'en-US',
+    fp_sw: String(width * PixelRatio.get()),
+    fp_sh: String(height * PixelRatio.get()),
+    fp_platform: Platform.OS === 'ios' ? 'ios' : 'android',
+    fp_pv: String(Platform.Version),
+  });
+
+  const response = await fetch(`${LINKFORTY_URL}${resolvePath}?${params}`);
+  const data = await response.json();
+
+  if (data.deepLinkPath) {
+    navigation.navigate(data.deepLinkPath, data.customParameters);
+  }
+}
+
+// 3. Track in-app events
+async function trackEvent(eventName: string, eventData?: Record<string, any>) {
+  const installId = await AsyncStorage.getItem('linkforty_install_id');
+  if (!installId) return;
+
+  await fetch(`${LINKFORTY_URL}/api/sdk/v1/event`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      installId,
+      eventName,
+      eventData: eventData ?? {},
+    }),
+  });
+}
+
+// 4. Track revenue (convention: eventName = "revenue")
+async function trackRevenue(amount: number, currency: string, properties?: Record<string, any>) {
+  await trackEvent('revenue', { revenue: amount, currency, ...properties });
+}
+```
+
+### Node.js Backend Client
+
+Create links and manage webhooks from a Node.js backend:
+
+```typescript
+// linkforty-client.ts
+const BASE_URL = process.env.LINKFORTY_URL ?? 'http://localhost:3000';
+
+export async function createLink(options: {
+  originalUrl: string;
+  title?: string;
+  userId?: string;
+  templateId?: string;
+  utmParameters?: Record<string, string>;
+  deepLinkParameters?: Record<string, any>;
+  customCode?: string;
+}) {
+  const response = await fetch(`${BASE_URL}/api/links`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      originalUrl: options.originalUrl,
+      title: options.title,
+      userId: options.userId,
+      templateId: options.templateId,
+      utmParameters: options.utmParameters,
+      deepLinkParameters: options.deepLinkParameters,
+      customCode: options.customCode,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(`Failed to create link: ${error.error}`);
+  }
+
+  return response.json();
+}
+
+export async function getAnalytics(userId: string, days = 30) {
+  const response = await fetch(
+    `${BASE_URL}/api/analytics/overview?userId=${userId}&days=${days}`
+  );
+  return response.json();
+}
+
+export async function createWebhook(options: {
+  name: string;
+  url: string;
+  events: string[];
+  userId?: string;
+}) {
+  const response = await fetch(`${BASE_URL}/api/webhooks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(options),
+  });
+  return response.json(); // Contains the secret — store it!
+}
+
+// Usage
+const link = await createLink({
+  originalUrl: 'https://example.com/product/789',
+  title: 'Product Share',
+  userId: 'user-123',
+  utmParameters: { source: 'email', medium: 'newsletter', campaign: 'june-launch' },
+  deepLinkParameters: { productId: '789' },
+});
+
+console.log(`Short URL: ${process.env.SHORTLINK_DOMAIN}/${link.short_code}`);
+```
+
+---
+
+## Performance & Indexing
+
+### Key indexes (auto-created)
+
+| Index | Table | Columns | Purpose |
+|-------|-------|---------|---------|
+| `idx_links_short_code` | `links` | `short_code` (UNIQUE) | Redirect lookups (hot path) |
+| `idx_links_user_id` | `links` | `user_id` | Multi-tenant filtering |
+| `idx_links_created_at` | `links` | `created_at DESC` | List ordering |
+| `idx_clicks_link_id` | `click_events` | `link_id` | Analytics queries |
+| `idx_clicks_link_date` | `click_events` | `(link_id, clicked_at DESC)` | Per-link analytics |
+| `idx_fingerprints_hash` | `device_fingerprints` | `fingerprint_hash` | Attribution matching |
+| `idx_installs_fingerprint` | `install_events` | `fingerprint_hash` | Attribution matching |
+| `idx_webhooks_active` | `webhooks` | `is_active` WHERE `is_active = true` | Webhook fan-out |
+
+### Redis caching
+
+When Redis is configured, link data is cached per short code with a 5-minute TTL (`SETEX link:{shortCode} 300 {json}`). Cache keys:
+
+- `link:{shortCode}` — for direct short links
+- `link:{templateSlug}:{shortCode}` — for template-based links
+
+Cache is populated on miss (read-through) and NOT invalidated on link update. Updates take effect within 5 minutes. For immediate cache invalidation on update, delete the key from Redis manually or implement a cache-invalidating hook.
+
+### Connection pool sizing
+
+Default pool: `min: 2, max: 10`. For high-traffic deployments:
+
+```typescript
+createServer({
+  database: {
+    url: process.env.DATABASE_URL,
+    pool: {
+      min: 5,
+      max: 50,  // tune based on PostgreSQL max_connections
+    },
+  },
+});
+```
+
+---
+
+## Deployment
+
+### Fly.io
+
+```bash
+cd infra/fly.io
+flyctl launch
+flyctl postgres create
+flyctl redis create
+flyctl secrets set DATABASE_URL="..." REDIS_URL="..."
+flyctl deploy
+```
+
+See `infra/fly.io/DEPLOYMENT.md` for the complete guide.
+
+### Environment checklist
+
+For production deployments, ensure:
+
+- [ ] `DATABASE_URL` — set to production PostgreSQL URL
+- [ ] `REDIS_URL` — set for caching (optional but recommended)
+- [ ] `NODE_ENV=production` — enables SSL and production logging
+- [ ] `SHORTLINK_DOMAIN` — set to your public domain (no trailing slash)
+- [ ] `CORS_ORIGIN` — locked down to your dashboard domain(s)
+- [ ] `IOS_TEAM_ID` + `IOS_BUNDLE_ID` — set for iOS Universal Links
+- [ ] `ANDROID_PACKAGE_NAME` + `ANDROID_SHA256_FINGERPRINTS` — set for Android App Links
+- [ ] API key middleware added (Core ships with no auth — bring your own)
+- [ ] HTTPS enabled on your load balancer / reverse proxy
+- [ ] Database connection pool sized appropriately for your traffic
+
+### Database initialization
+
+Tables are created automatically on `createServer()`. For explicit migration (e.g., CI/CD pipelines):
+
+```bash
+npx tsx src/scripts/migrate.ts
+```
+
+Or via the exported function:
+
+```typescript
+import { initializeDatabase } from '@linkforty/core/database';
+await initializeDatabase({ url: process.env.DATABASE_URL });
+```
