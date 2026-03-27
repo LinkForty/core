@@ -1,3 +1,8 @@
+## <small>1.14.3 (2026-03-27)</small>
+
+* Merge pull request #11 from fantaJinMode/jsdoc_comments_for_exported_func ([c75ac54](https://github.com/LinkForty/core/commit/c75ac54)), closes [#11](https://github.com/LinkForty/core/issues/11)
+* FIX: JSDoc comments for exported function ([ab76241](https://github.com/LinkForty/core/commit/ab76241))
+
 ## <small>1.14.2 (2026-03-26)</small>
 
 * fix(ci): remove dist asset uploads from GitHub releases ([99b669b](https://github.com/LinkForty/core/commit/99b669b))
