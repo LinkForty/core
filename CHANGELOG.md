@@ -1,3 +1,8 @@
+## <small>1.14.4 (2026-03-30)</small>
+
+* Merge pull request #13 from fantaJinMode/qrcode_types_to_dev_dependencies ([c6e803f](https://github.com/LinkForty/core/commit/c6e803f)), closes [#13](https://github.com/LinkForty/core/issues/13)
+* FIX: Adding @types/qqrcode to dev dependencies ([8c15a05](https://github.com/LinkForty/core/commit/8c15a05))
+
 ## <small>1.14.3 (2026-03-27)</small>
 
 * Merge pull request #11 from fantaJinMode/jsdoc_comments_for_exported_func ([c75ac54](https://github.com/LinkForty/core/commit/c75ac54)), closes [#11](https://github.com/LinkForty/core/issues/11)
