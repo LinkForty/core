@@ -28,7 +28,6 @@
 
 | Feature | LinkForty Core | Branch | AppsFlyer | Firebase Dynamic Links |
 |---------|---------------|--------|-----------|----------------------|
-| **Pricing** | Free (self-hosted) | Starts at $299/mo | Starts at $500/mo | Shut down (Aug 2025) |
 | **Open Source** | Yes (AGPL-3.0) | No | No | No |
 | **Self-Hosted** | Yes | No | No | No |
 | **Data Ownership** | Complete | Vendor-controlled | Vendor-controlled | Was Google-controlled |
