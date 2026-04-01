@@ -1,3 +1,7 @@
+## <small>1.14.6 (2026-04-01)</small>
+
+* fix: remove competitor pricing ([1c2351b](https://github.com/LinkForty/core/commit/1c2351b))
+
 ## <small>1.14.5 (2026-04-01)</small>
 
 * fix: prioritize web fallback over app store URL in redirect handler ([6345b99](https://github.com/LinkForty/core/commit/6345b99))
