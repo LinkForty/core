@@ -273,12 +273,15 @@ export async function redirectRoutes(fastify: FastifyInstance) {
           } else if (link.app_scheme && link.deep_link_path) {
             redirectUrl = `${link.app_scheme}://${link.deep_link_path.replace(/^\//, '')}`;
             redirectReason = 'app_scheme';
+          } else if (webFallback) {
+            // Web fallback takes priority over store URL — if the fallback is on
+            // the app's Universal Link domain, iOS will open the app directly.
+            // If the app isn't installed, the fallback page shows store links.
+            redirectUrl = webFallback;
+            redirectReason = 'web_fallback_url';
           } else if (iosStoreUrl) {
             redirectUrl = iosStoreUrl;
             redirectReason = 'ios_app_store_url';
-          } else if (webFallback) {
-            redirectUrl = webFallback;
-            redirectReason = 'web_fallback_url';
           }
         } else if (deviceType === 'android') {
           if (link.android_app_link) {
@@ -287,12 +290,12 @@ export async function redirectRoutes(fastify: FastifyInstance) {
           } else if (link.app_scheme && link.deep_link_path) {
             redirectUrl = `${link.app_scheme}://${link.deep_link_path.replace(/^\//, '')}`;
             redirectReason = 'app_scheme';
-          } else if (androidStoreUrl) {
-            redirectUrl = androidStoreUrl;
-            redirectReason = 'android_app_store_url';
           } else if (webFallback) {
             redirectUrl = webFallback;
             redirectReason = 'web_fallback_url';
+          } else if (androidStoreUrl) {
+            redirectUrl = androidStoreUrl;
+            redirectReason = 'android_app_store_url';
           }
         } else if (deviceType === 'web' && webFallback) {
           redirectUrl = webFallback;
@@ -392,8 +395,9 @@ export async function redirectRoutes(fastify: FastifyInstance) {
       // iOS Priority:
       // 1. Universal Link (HTTPS URL with AASA file) - if app installed, opens app
       // 2. URI scheme (myapp://path) - fallback when Universal Links fail
-      // 3. App Store URL (link → template → workspace) - for users who don't have the app
-      // 4. Web fallback URL - browser-based fallback
+      // 3. Web fallback URL - if on the app's Universal Link domain, iOS opens the app;
+      //    if app isn't installed, the page shows store download links
+      // 4. App Store URL (link → template → workspace) - direct store redirect
       // 5. Original URL - ultimate fallback
 
       if (link.ios_universal_link) {
@@ -402,18 +406,19 @@ export async function redirectRoutes(fastify: FastifyInstance) {
         // Build URI scheme URL: myapp://product/123
         redirectUrl = `${link.app_scheme}://${link.deep_link_path.replace(/^\//, '')}`;
         useSchemeUrl = true;
-      } else if (iosUrl) {
-        redirectUrl = iosUrl;
       } else if (webFallbackUrl) {
         redirectUrl = webFallbackUrl;
+      } else if (iosUrl) {
+        redirectUrl = iosUrl;
       }
 
     } else if (device === 'android') {
       // Android Priority:
       // 1. App Link (HTTPS URL with Digital Asset Links) - if app installed, opens app
       // 2. URI scheme (myapp://path) - fallback when App Links fail
-      // 3. Play Store URL (link → template → workspace) - for users who don't have the app
-      // 4. Web fallback URL - browser-based fallback
+      // 3. Web fallback URL - if on the app's App Link domain, Android opens the app;
+      //    if app isn't installed, the page shows store download links
+      // 4. Play Store URL (link → template → workspace) - direct store redirect
       // 5. Original URL - ultimate fallback
 
       if (link.android_app_link) {
@@ -422,10 +427,10 @@ export async function redirectRoutes(fastify: FastifyInstance) {
         // Build URI scheme URL: myapp://product/123
         redirectUrl = `${link.app_scheme}://${link.deep_link_path.replace(/^\//, '')}`;
         useSchemeUrl = true;
-      } else if (androidUrl) {
-        redirectUrl = androidUrl;
       } else if (webFallbackUrl) {
         redirectUrl = webFallbackUrl;
+      } else if (androidUrl) {
+        redirectUrl = androidUrl;
       }
 
     } else if (device === 'web') {
