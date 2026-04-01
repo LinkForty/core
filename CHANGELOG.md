@@ -1,3 +1,7 @@
+## <small>1.14.5 (2026-04-01)</small>
+
+* fix: prioritize web fallback over app store URL in redirect handler ([6345b99](https://github.com/LinkForty/core/commit/6345b99))
+
 ## <small>1.14.4 (2026-03-30)</small>
 
 * Merge pull request #13 from fantaJinMode/qrcode_types_to_dev_dependencies ([c6e803f](https://github.com/LinkForty/core/commit/c6e803f)), closes [#13](https://github.com/LinkForty/core/issues/13)
