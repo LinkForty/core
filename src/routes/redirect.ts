@@ -9,7 +9,7 @@ import { emitClickEvent } from '../lib/event-emitter.js';
  * Detect iOS in-app browsers where Universal Links don't fire.
  * These browsers use WKWebView which bypasses the Universal Links mechanism.
  */
-function isIOSInAppBrowser(userAgent: string): boolean {
+export function isIOSInAppBrowser(userAgent: string): boolean {
   const inAppPatterns = [
     /GSA\//i,              // Google Search App (Gmail in-app browser)
     /Gmail\//i,            // Gmail
@@ -22,6 +22,68 @@ function isIOSInAppBrowser(userAgent: string): boolean {
     /YahooMobile/i,        // Yahoo Mail
   ];
   return inAppPatterns.some(pattern => pattern.test(userAgent));
+}
+
+/**
+ * Detect Android in-app browsers where App Links don't fire.
+ * These browsers use Android WebView (or app-specific webviews) that bypass
+ * the App Link / Digital Asset Link mechanism.
+ */
+export function isAndroidInAppBrowser(userAgent: string): boolean {
+  const inAppPatterns = [
+    /FB_IAB|FBAN|FBAV/i,   // Facebook in-app browser
+    /Instagram/i,
+    /Line\//i,
+    /KAKAOTALK/i,
+    /Twitter/i,
+    /LinkedIn/i,
+    /MicroMessenger/i,     // WeChat
+    /Outlook-Android/i,
+    /WhatsApp/i,
+    /Pinterest/i,
+    /Telegram/i,
+    /Snapchat/i,
+    /\swv\)/,              // Generic Android WebView marker (e.g. "Mobile Safari/537.36; wv)")
+  ];
+  return inAppPatterns.some(pattern => pattern.test(userAgent));
+}
+
+/**
+ * Pick the destination URL for a mobile click that has fallen through the
+ * Universal Link / App Link / app_scheme priority steps. The choice depends on
+ * whether the click is from an in-app browser:
+ *
+ * - Regular browser (Safari, Chrome): the OS-level UL/App Link check ran and
+ *   didn't fire, so the app must not be installed → prefer the App/Play Store URL.
+ *
+ * - In-app browser (Gmail, GSA, FB, Instagram, Outlook, etc.): UL is bypassed
+ *   regardless of install state, so we don't know if the app is installed →
+ *   prefer the web fallback URL, which gives the OS another chance to fire UL
+ *   if the fallback is on the app's UL/App-Link domain.
+ *
+ * Returns null if no URL is available (caller should fall back to original_url).
+ */
+export function pickMobileFallbackUrl(
+  device: 'ios' | 'android',
+  userAgent: string,
+  iosUrl: string | null,
+  androidUrl: string | null,
+  webFallbackUrl: string | null,
+): { url: string; reason: string } | null {
+  const inApp = device === 'ios'
+    ? isIOSInAppBrowser(userAgent)
+    : isAndroidInAppBrowser(userAgent);
+  const storeUrl = device === 'ios' ? iosUrl : androidUrl;
+  const storeReason = device === 'ios' ? 'ios_app_store_url' : 'android_app_store_url';
+
+  if (inApp) {
+    if (webFallbackUrl) return { url: webFallbackUrl, reason: 'web_fallback_url' };
+    if (storeUrl)       return { url: storeUrl,       reason: storeReason };
+  } else {
+    if (storeUrl)       return { url: storeUrl,       reason: storeReason };
+    if (webFallbackUrl) return { url: webFallbackUrl, reason: 'web_fallback_url' };
+  }
+  return null;
 }
 
 /**
@@ -273,15 +335,12 @@ export async function redirectRoutes(fastify: FastifyInstance) {
           } else if (link.app_scheme && link.deep_link_path) {
             redirectUrl = `${link.app_scheme}://${link.deep_link_path.replace(/^\//, '')}`;
             redirectReason = 'app_scheme';
-          } else if (webFallback) {
-            // Web fallback takes priority over store URL — if the fallback is on
-            // the app's Universal Link domain, iOS will open the app directly.
-            // If the app isn't installed, the fallback page shows store links.
-            redirectUrl = webFallback;
-            redirectReason = 'web_fallback_url';
-          } else if (iosStoreUrl) {
-            redirectUrl = iosStoreUrl;
-            redirectReason = 'ios_app_store_url';
+          } else {
+            const fb = pickMobileFallbackUrl('ios', userAgent, iosStoreUrl, androidStoreUrl, webFallback);
+            if (fb) {
+              redirectUrl = fb.url;
+              redirectReason = fb.reason;
+            }
           }
         } else if (deviceType === 'android') {
           if (link.android_app_link) {
@@ -290,12 +349,12 @@ export async function redirectRoutes(fastify: FastifyInstance) {
           } else if (link.app_scheme && link.deep_link_path) {
             redirectUrl = `${link.app_scheme}://${link.deep_link_path.replace(/^\//, '')}`;
             redirectReason = 'app_scheme';
-          } else if (webFallback) {
-            redirectUrl = webFallback;
-            redirectReason = 'web_fallback_url';
-          } else if (androidStoreUrl) {
-            redirectUrl = androidStoreUrl;
-            redirectReason = 'android_app_store_url';
+          } else {
+            const fb = pickMobileFallbackUrl('android', userAgent, iosStoreUrl, androidStoreUrl, webFallback);
+            if (fb) {
+              redirectUrl = fb.url;
+              redirectReason = fb.reason;
+            }
           }
         } else if (deviceType === 'web' && webFallback) {
           redirectUrl = webFallback;
@@ -393,44 +452,37 @@ export async function redirectRoutes(fastify: FastifyInstance) {
 
     if (device === 'ios') {
       // iOS Priority:
-      // 1. Universal Link (HTTPS URL with AASA file) - if app installed, opens app
-      // 2. URI scheme (myapp://path) - fallback when Universal Links fail
-      // 3. Web fallback URL - if on the app's Universal Link domain, iOS opens the app;
-      //    if app isn't installed, the page shows store download links
-      // 4. App Store URL (link → template → workspace) - direct store redirect
-      // 5. Original URL - ultimate fallback
-
+      // 1. Universal Link (HTTPS URL with AASA file) — if app installed, OS opens app
+      //    (this branch only runs when UL didn't fire upstream, e.g. in-app browser)
+      // 2. URI scheme (myapp://path) — explicit deep link
+      // 3. Mobile fallback (browser-aware):
+      //    - regular browser: App Store URL > web fallback URL
+      //      (UL would have fired if app installed, so app is not installed)
+      //    - in-app browser: web fallback URL > App Store URL
+      //      (UL was bypassed; web fallback gives UL a second chance to fire)
+      // 4. Original URL — ultimate fallback
       if (link.ios_universal_link) {
         redirectUrl = link.ios_universal_link;
       } else if (link.app_scheme && link.deep_link_path) {
         // Build URI scheme URL: myapp://product/123
         redirectUrl = `${link.app_scheme}://${link.deep_link_path.replace(/^\//, '')}`;
         useSchemeUrl = true;
-      } else if (webFallbackUrl) {
-        redirectUrl = webFallbackUrl;
-      } else if (iosUrl) {
-        redirectUrl = iosUrl;
+      } else {
+        const fb = pickMobileFallbackUrl('ios', userAgent, iosUrl, androidUrl, webFallbackUrl);
+        if (fb) redirectUrl = fb.url;
       }
 
     } else if (device === 'android') {
-      // Android Priority:
-      // 1. App Link (HTTPS URL with Digital Asset Links) - if app installed, opens app
-      // 2. URI scheme (myapp://path) - fallback when App Links fail
-      // 3. Web fallback URL - if on the app's App Link domain, Android opens the app;
-      //    if app isn't installed, the page shows store download links
-      // 4. Play Store URL (link → template → workspace) - direct store redirect
-      // 5. Original URL - ultimate fallback
-
+      // Android Priority — same logic as iOS, with android_app_link in place of UL
       if (link.android_app_link) {
         redirectUrl = link.android_app_link;
       } else if (link.app_scheme && link.deep_link_path) {
         // Build URI scheme URL: myapp://product/123
         redirectUrl = `${link.app_scheme}://${link.deep_link_path.replace(/^\//, '')}`;
         useSchemeUrl = true;
-      } else if (webFallbackUrl) {
-        redirectUrl = webFallbackUrl;
-      } else if (androidUrl) {
-        redirectUrl = androidUrl;
+      } else {
+        const fb = pickMobileFallbackUrl('android', userAgent, iosUrl, androidUrl, webFallbackUrl);
+        if (fb) redirectUrl = fb.url;
       }
 
     } else if (device === 'web') {
@@ -483,9 +535,12 @@ export async function redirectRoutes(fastify: FastifyInstance) {
       const schemeUrl = link.custom_scheme_url
         || `${link.app_scheme}://${deepPath}`;
 
-      const storeFallback = device === 'ios'
-        ? (iosUrl || webFallbackUrl || link.original_url)
-        : (androidUrl || webFallbackUrl || link.original_url);
+      // The interstitial JS tries the scheme first; storeFallback is what we
+      // navigate to if the scheme doesn't open the app within ~1.5s. Pick it
+      // browser-aware: regular browsers prefer the store URL, in-app browsers
+      // prefer the web fallback (gives UL a second chance to fire).
+      const fb = pickMobileFallbackUrl(device, userAgent, iosUrl, androidUrl, webFallbackUrl);
+      const storeFallback = fb?.url || link.original_url;
 
       if (storeFallback) {
         let fullSchemeUrl = schemeUrl;
