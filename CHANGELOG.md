@@ -1,3 +1,9 @@
+## <small>1.14.7 (2026-04-27)</small>
+
+* ci: drop unneeded npm@latest update step ([4ccffbe](https://github.com/LinkForty/core/commit/4ccffbe))
+* fix(redirect): browser-aware mobile fallback so regular browsers go to App Store (#23) ([0c84eee](https://github.com/LinkForty/core/commit/0c84eee)), closes [#23](https://github.com/LinkForty/core/issues/23)
+* FIX: Adding engines to prevent installation unsupported nodejs versions (#14) ([e6efcf6](https://github.com/LinkForty/core/commit/e6efcf6)), closes [#14](https://github.com/LinkForty/core/issues/14)
+
 ## <small>1.14.6 (2026-04-01)</small>
 
 * fix: remove competitor pricing ([1c2351b](https://github.com/LinkForty/core/commit/1c2351b))
