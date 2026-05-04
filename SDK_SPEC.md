@@ -72,6 +72,28 @@ Matches a new app install back to the link click that drove it, using probabilis
 
 `POST /api/sdk/v1/install` -- see [endpoints reference](#api-endpoints-reference)
 
+### App token (Cloud only)
+
+The SDK should accept an optional **`appToken`** during initialization and include it in the `/api/sdk/v1/install` request body. The app token is a public, workspace-scoped identifier that lets LinkForty Cloud attribute installs to the right workspace -- including organic (unattributed) installs that wouldn't otherwise be tied to any workspace.
+
+- **Where to find it:** Cloud Dashboard → Workspace Settings → **App Token**
+- **Format:** `at_<32 hex chars>`
+- **Safety:** The token is *public* -- designed to ship inside your app bundle. It only identifies which workspace owns the install; it cannot authenticate API actions or expose private data.
+- **Self-hosted Core:** The endpoint accepts the field but ignores it. Self-hosted single-tenant deployments don't need it.
+- **Without a token:** Attributed installs (deeplink click → app open) still work via the existing fingerprint matcher. Organic installs (App Store discovery, social mentions, etc.) won't be visible in your workspace's analytics until the token is configured.
+
+Example install request body:
+
+```json
+{
+  "userAgent": "...",
+  "platform": "ios",
+  "platformVersion": "17.4",
+  "deviceId": "...",
+  "appToken": "at_a1b2c3d4e5f6...."
+}
+```
+
 ---
 
 ## 3. Direct Deep Linking
@@ -224,6 +246,7 @@ The SDK must provide access to cached attribution data from local storage withou
 | Field | Description | Default |
 |-------|-------------|---------|
 | API key | Required for link creation and Cloud features | None |
+| App token | Public workspace identifier for Cloud install scoping (format: `at_<32 hex>`). See [Section 2 → App token](#app-token-cloud-only). Self-hosted Core ignores this field. | None |
 | Debug mode | Enable verbose logging | Off |
 | Attribution window | How far back to match installs to clicks | 7 days (168 hours) |
 
@@ -278,7 +301,7 @@ All endpoints are relative to the configured base URL.
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| `POST` | `/api/sdk/v1/install` | None | Report install, get deferred deep link |
+| `POST` | `/api/sdk/v1/install` | None | Report install, get deferred deep link. Body accepts optional `appToken` for Cloud workspace scoping. |
 | `GET` | `/api/sdk/v1/resolve/:shortCode` | None | Resolve link without redirect |
 | `GET` | `/api/sdk/v1/resolve/:templateSlug/:shortCode` | None | Resolve template link without redirect |
 | `POST` | `/api/sdk/v1/event` | None | Track in-app events |
