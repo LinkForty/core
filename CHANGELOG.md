@@ -1,3 +1,7 @@
+## 1.15.0 (2026-05-04)
+
+* feat(sdk): accept optional appToken on /api/sdk/v1/install (#24) ([1e68a0b](https://github.com/LinkForty/core/commit/1e68a0b)), closes [#24](https://github.com/LinkForty/core/issues/24) [post-#75](https://github.com/post-/issues/75) [LinkForty/cloud#76](https://github.com/LinkForty/cloud/issues/76)
+
 ## <small>1.14.7 (2026-04-27)</small>
 
 * ci: drop unneeded npm@latest update step ([4ccffbe](https://github.com/LinkForty/core/commit/4ccffbe))
