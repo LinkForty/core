@@ -1,3 +1,7 @@
+## <small>1.15.1 (2026-05-04)</small>
+
+* docs(sdk-spec): document optional appToken for Cloud install scoping (#25) ([9bf399c](https://github.com/LinkForty/core/commit/9bf399c)), closes [#25](https://github.com/LinkForty/core/issues/25) [#24](https://github.com/LinkForty/core/issues/24)
+
 ## 1.15.0 (2026-05-04)
 
 * feat(sdk): accept optional appToken on /api/sdk/v1/install (#24) ([1e68a0b](https://github.com/LinkForty/core/commit/1e68a0b)), closes [#24](https://github.com/LinkForty/core/issues/24) [post-#75](https://github.com/post-/issues/75) [LinkForty/cloud#76](https://github.com/LinkForty/cloud/issues/76)
