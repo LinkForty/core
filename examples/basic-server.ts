@@ -1,4 +1,4 @@
-import { createServer } from '@linkforty/core';
+import { createServer, registerGracefulShutdown } from '@linkforty/core';
 
 function getTrustProxy(): boolean | number | undefined {
   const v = process.env.TRUST_PROXY;
@@ -27,6 +27,8 @@ async function start() {
     port: Number(process.env.PORT) || 3000,
     host: '0.0.0.0',
   });
+
+  registerGracefulShutdown(server);
 
   console.log('LinkForty server running on http://localhost:3000');
   console.log('');
