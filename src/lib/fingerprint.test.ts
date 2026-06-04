@@ -13,7 +13,7 @@ import { db } from './database';
 const mockDbQuery = db.query as Mock;
 
 const baseFingerprint = {
-  ipAddress: '192.168.1.100',
+  ipAddress: '24.5.10.100',
   userAgent:
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36',
   timezone: 'America/Los_Angeles',
@@ -66,7 +66,7 @@ describe('calculateConfidenceScore', () => {
   it('matches IP within the same /24 subnet and normalizes user agent', () => {
     const click = {
       ...baseFingerprint,
-      ipAddress: '192.168.1.250',
+      ipAddress: '24.5.10.250',
       timezone: 'Africa/Cairo',
       language: 'fr-FR',
       screenWidth: 800,
@@ -76,7 +76,7 @@ describe('calculateConfidenceScore', () => {
 
     const install = {
       ...baseFingerprint,
-      ipAddress: '192.168.1.123',
+      ipAddress: '24.5.10.123',
       userAgent: baseFingerprint.userAgent.replace('Chrome/95.0.4638.69', 'Chrome/116.0.0.0'),
       timezone: 'Europe/London',
       language: 'de-DE',
@@ -149,6 +149,66 @@ describe('calculateConfidenceScore', () => {
   });
 });
 
+describe('isAttributableIp', () => {
+  it('treats public IPv4 as attributable', () => {
+    expect(fingerprint.isAttributableIp('24.5.10.100')).toBe(true);
+    expect(fingerprint.isAttributableIp('8.8.8.8')).toBe(true);
+  });
+
+  it('rejects CGNAT (100.64.0.0/10) — the Marriage365 case', () => {
+    expect(fingerprint.isAttributableIp('100.64.0.5')).toBe(false);
+    expect(fingerprint.isAttributableIp('100.127.255.254')).toBe(false);
+  });
+
+  it('rejects RFC1918 private, loopback and link-local', () => {
+    expect(fingerprint.isAttributableIp('10.0.0.1')).toBe(false);
+    expect(fingerprint.isAttributableIp('172.16.0.1')).toBe(false);
+    expect(fingerprint.isAttributableIp('192.168.1.1')).toBe(false);
+    expect(fingerprint.isAttributableIp('127.0.0.1')).toBe(false);
+    expect(fingerprint.isAttributableIp('169.254.1.1')).toBe(false);
+  });
+
+  it('handles IPv6: public attributable, ULA/link-local/loopback not', () => {
+    expect(fingerprint.isAttributableIp('2600:1700:6508:8040::1')).toBe(true);
+    expect(fingerprint.isAttributableIp('fd00::1')).toBe(false); // ULA
+    expect(fingerprint.isAttributableIp('fe80::1')).toBe(false); // link-local
+    expect(fingerprint.isAttributableIp('::1')).toBe(false); // loopback
+  });
+
+  it('unwraps IPv4-mapped IPv6 before classifying', () => {
+    expect(fingerprint.isAttributableIp('::ffff:100.64.0.5')).toBe(false);
+    expect(fingerprint.isAttributableIp('::ffff:24.5.10.100')).toBe(true);
+  });
+
+  it('returns false for empty/garbage input', () => {
+    expect(fingerprint.isAttributableIp('')).toBe(false);
+    expect(fingerprint.isAttributableIp('not-an-ip')).toBe(false);
+  });
+});
+
+describe('calculateConfidenceScore — shared-IP filter', () => {
+  it('does NOT award the IP score for two devices sharing a CGNAT /24', () => {
+    // Exactly the Marriage365 leak: unrelated installs collapsing onto 100.64.0.x.
+    const click = { ...baseFingerprint, ipAddress: '100.64.0.5' };
+    const install = { ...baseFingerprint, ipAddress: '100.64.0.9' };
+
+    const { score, matchedFactors } = fingerprint.calculateConfidenceScore(click, install);
+
+    expect(matchedFactors).not.toContain('ip');
+    // UA(30)+TZ(10)+lang(10)+screen(10) = 60, below the 70 threshold → no match.
+    expect(score).toBe(60);
+    expect(score).toBeLessThan(fingerprint.CONFIDENCE_THRESHOLD);
+  });
+
+  it('still awards the IP score for two devices sharing a public /24', () => {
+    const click = { ...baseFingerprint, ipAddress: '24.5.10.5' };
+    const install = { ...baseFingerprint, ipAddress: '24.5.10.9' };
+
+    const { matchedFactors } = fingerprint.calculateConfidenceScore(click, install);
+    expect(matchedFactors).toContain('ip');
+  });
+});
+
 describe('matchInstallToClick', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -176,7 +236,7 @@ describe('matchInstallToClick', () => {
       link_id: 'link-a',
       clicked_at: clickTime.toISOString(),
       attribution_window_hours: 24,
-      ip_address: '192.168.1.200',
+      ip_address: '24.5.10.200',
       user_agent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/537.36',
       timezone: 'Asia/Tokyo',
       language: 'ja-JP',
@@ -192,7 +252,7 @@ describe('matchInstallToClick', () => {
       link_id: 'link-b',
       clicked_at: clickTime.toISOString(),
       attribution_window_hours: 24,
-      ip_address: '192.168.1.250',
+      ip_address: '24.5.10.250',
       user_agent:
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36',
       timezone: 'America/Los_Angeles',
@@ -207,7 +267,7 @@ describe('matchInstallToClick', () => {
 
     const installFingerprint = {
       ...baseFingerprint,
-      ipAddress: '192.168.1.123',
+      ipAddress: '24.5.10.123',
       userAgent: baseFingerprint.userAgent.replace('Chrome/95.0.4638.69', 'Chrome/116.0.0.0'),
     };
 

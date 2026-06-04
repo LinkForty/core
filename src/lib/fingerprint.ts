@@ -72,6 +72,73 @@ export function generateFingerprintHash(data: FingerprintData): string {
  * Normalize IP address for comparison
  * Handles IPv4 and IPv6, removes subnet variations
  */
+function ipv4ToInt(ip: string): number | null {
+  const parts = ip.split('.');
+  if (parts.length !== 4) return null;
+  let n = 0;
+  for (const p of parts) {
+    const o = Number(p);
+    if (!Number.isInteger(o) || o < 0 || o > 255) return null;
+    n = (n << 8) | o;
+  }
+  return n >>> 0;
+}
+
+function inCidr4(ipInt: number, baseIp: string, prefix: number): boolean {
+  const base = ipv4ToInt(baseIp);
+  if (base === null) return false;
+  const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
+  return (ipInt & mask) === (base & mask);
+}
+
+// Shared / non-routable IPv4 ranges that can't identify a single device:
+// carrier-grade NAT, RFC1918 private, loopback, link-local, etc. Two different
+// users routinely share these (mobile carrier NAT, office Wi-Fi, VPN egress).
+const NON_ATTRIBUTABLE_V4: ReadonlyArray<readonly [string, number]> = [
+  ['0.0.0.0', 8],
+  ['10.0.0.0', 8],
+  ['100.64.0.0', 10], // CGNAT (RFC 6598)
+  ['127.0.0.0', 8], // loopback
+  ['169.254.0.0', 16], // link-local
+  ['172.16.0.0', 12], // private
+  ['192.0.0.0', 24], // IETF protocol assignments
+  ['192.168.0.0', 16], // private
+  ['198.18.0.0', 15], // benchmarking
+];
+
+/**
+ * Whether an IP is specific enough to use as an attribution signal. Returns
+ * false for shared/non-routable ranges (CGNAT, RFC1918, loopback, link-local,
+ * IPv6 ULA/link-local) where the IP does NOT identify a single device, so it
+ * must not contribute to a fingerprint match. Public IPs return true.
+ */
+export function isAttributableIp(ip: string): boolean {
+  if (!ip) return false;
+  let addr = ip.trim();
+  if (addr.startsWith('::ffff:')) addr = addr.slice(7); // IPv4-mapped IPv6
+
+  // IPv4
+  if (addr.includes('.') && !addr.includes(':')) {
+    const n = ipv4ToInt(addr);
+    if (n === null) return false;
+    return !NON_ATTRIBUTABLE_V4.some(([base, prefix]) => inCidr4(n, base, prefix));
+  }
+
+  // IPv6
+  if (addr.includes(':')) {
+    const low = addr.toLowerCase();
+    if (low === '::' || low === '::1') return false; // unspecified / loopback
+    if (low.startsWith('fc') || low.startsWith('fd')) return false; // fc00::/7 ULA
+    if (low.startsWith('fe8') || low.startsWith('fe9') || low.startsWith('fea') || low.startsWith('feb')) {
+      return false; // fe80::/10 link-local
+    }
+    return true;
+  }
+
+  // Not a recognizable IPv4 or IPv6 address.
+  return false;
+}
+
 function normalizeIP(ip: string): string {
   if (!ip) return '';
 
@@ -119,8 +186,15 @@ export function calculateConfidenceScore(
   let score = 0;
   const matchedFactors: string[] = [];
 
-  // Compare IP addresses (normalized to /24 subnet for IPv4)
-  if (fingerprint1.ipAddress && fingerprint2.ipAddress) {
+  // Compare IP addresses (normalized to /24 subnet for IPv4). Only count IPs
+  // that actually identify a device — shared/NAT ranges (CGNAT, RFC1918, etc.)
+  // are skipped so unrelated users behind the same NAT can't match on IP.
+  if (
+    fingerprint1.ipAddress &&
+    fingerprint2.ipAddress &&
+    isAttributableIp(fingerprint1.ipAddress) &&
+    isAttributableIp(fingerprint2.ipAddress)
+  ) {
     const ip1 = normalizeIP(fingerprint1.ipAddress);
     const ip2 = normalizeIP(fingerprint2.ipAddress);
 

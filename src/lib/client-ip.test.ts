@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { FastifyRequest } from 'fastify';
 import { getClientIp } from './client-ip';
 
@@ -33,6 +33,47 @@ describe('getClientIp', () => {
   it('returns empty string when request.raw has no socket', () => {
     const request = { ip: undefined, raw: {} } as unknown as FastifyRequest;
     expect(getClientIp(request)).toBe('');
+  });
+});
+
+describe('getClientIp with TRUSTED_CLIENT_IP_HEADER', () => {
+  const ORIGINAL = process.env.TRUSTED_CLIENT_IP_HEADER;
+  afterEach(() => {
+    if (ORIGINAL === undefined) delete process.env.TRUSTED_CLIENT_IP_HEADER;
+    else process.env.TRUSTED_CLIENT_IP_HEADER = ORIGINAL;
+  });
+
+  it('prefers the configured header over request.ip', () => {
+    process.env.TRUSTED_CLIENT_IP_HEADER = 'cf-connecting-ip';
+    const request = {
+      ip: '162.158.23.75', // a Cloudflare edge IP
+      headers: { 'cf-connecting-ip': '203.0.113.50' },
+    } as unknown as FastifyRequest;
+    expect(getClientIp(request)).toBe('203.0.113.50');
+  });
+
+  it('falls back to request.ip when the configured header is absent', () => {
+    process.env.TRUSTED_CLIENT_IP_HEADER = 'cf-connecting-ip';
+    const request = { ip: '203.0.113.50', headers: {} } as unknown as FastifyRequest;
+    expect(getClientIp(request)).toBe('203.0.113.50');
+  });
+
+  it('takes the first entry of a comma-separated header value', () => {
+    process.env.TRUSTED_CLIENT_IP_HEADER = 'true-client-ip';
+    const request = {
+      ip: '10.0.0.1',
+      headers: { 'true-client-ip': '203.0.113.50, 70.0.0.1' },
+    } as unknown as FastifyRequest;
+    expect(getClientIp(request)).toBe('203.0.113.50');
+  });
+
+  it('ignores the header when the env var is unset (default behavior)', () => {
+    delete process.env.TRUSTED_CLIENT_IP_HEADER;
+    const request = {
+      ip: '203.0.113.50',
+      headers: { 'cf-connecting-ip': '1.2.3.4' },
+    } as unknown as FastifyRequest;
+    expect(getClientIp(request)).toBe('203.0.113.50');
   });
 });
 
