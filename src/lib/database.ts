@@ -370,6 +370,30 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
       END $$;
     `);
 
+    // Last-click attribution columns on in_app_events (SIT-237).
+    // Events (screen views + custom events) are attributed to the deep link that
+    // drove them, not just the original install link. The SDK stamps each event
+    // with the active link, when it opened, and the app-open session; the window
+    // (organic vs attributed) is applied at query time. Nullable + backward
+    // compatible: legacy/organic rows stay null and fall back to the install link.
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='in_app_events' AND column_name='attributed_link_id') THEN
+          ALTER TABLE in_app_events ADD COLUMN attributed_link_id UUID REFERENCES links(id) ON DELETE SET NULL;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='in_app_events' AND column_name='attributed_click_id') THEN
+          ALTER TABLE in_app_events ADD COLUMN attributed_click_id UUID;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='in_app_events' AND column_name='attributed_at') THEN
+          ALTER TABLE in_app_events ADD COLUMN attributed_at TIMESTAMP;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='in_app_events' AND column_name='session_id') THEN
+          ALTER TABLE in_app_events ADD COLUMN session_id UUID;
+        END IF;
+      END $$;
+    `);
+
     // Create indexes for performance
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_links_short_code ON links(short_code)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_links_user_id ON links(user_id)');
@@ -398,6 +422,9 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
     await client.query('CREATE INDEX IF NOT EXISTS idx_in_app_events_install_id ON in_app_events(install_id)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_in_app_events_name ON in_app_events(event_name)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_in_app_events_timestamp ON in_app_events(event_timestamp DESC)');
+    // Attribution lookups: per-link conversion aggregation + per-session screen flow
+    await client.query('CREATE INDEX IF NOT EXISTS idx_in_app_events_attributed_link ON in_app_events(attributed_link_id, event_timestamp DESC)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_in_app_events_session ON in_app_events(session_id)');
 
     // Add deep_link_parameters column for custom deep link parameters
     await client.query(`
