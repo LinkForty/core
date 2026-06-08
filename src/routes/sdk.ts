@@ -53,8 +53,8 @@ export async function sdkRoutes(fastify: FastifyInstance) {
       deviceId: z.string().optional(),
       attributionWindowHours: z.number().optional(),
       // Public app token shipped in SDK app bundles to scope organic
-      // installs to the right org in multi-tenant deployments. Used by
-      // Cloud's onSend hook (see cloud-event-hook.ts). Self-hosted
+      // installs to the right org in multi-tenant deployments. A multi-tenant
+      // host reads it to route the install to the correct tenant; self-hosted
       // single-tenant deployments simply ignore it.
       appToken: z.string().optional(),
     });
