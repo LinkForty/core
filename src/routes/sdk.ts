@@ -273,12 +273,22 @@ export async function sdkRoutes(fastify: FastifyInstance) {
           ]
         );
       } catch (insertError: any) {
-        // A stale/unknown attributed link (FK violation) must not lose the event:
-        // record it without link attribution rather than failing.
-        if (insertError?.code === '23503') {
+        // Only a stale/unknown *attributed link* FK is recoverable here: record
+        // the event without link attribution rather than losing it. Any other
+        // 23503 — e.g. install_id's FK lost to a concurrent install delete — is a
+        // real error that must surface, not be mislabeled as a link problem.
+        const isLinkFk =
+          insertError?.code === '23503' &&
+          String(insertError?.constraint ?? '').includes('attributed_link_id');
+        if (isLinkFk) {
           fastify.log.warn(
             `attributed_link_id ${body.attributedLinkId} not found; storing event without link attribution`
           );
+          // Keep this column list in sync with the primary INSERT above (it just
+          // omits attributed_link_id). attributed_click_id is intentionally kept
+          // without a link: the orphaned-click case is expected, and a null
+          // attributed_link_id is the correct value for link-keyed aggregation
+          // (the SIT-261 consumer must not read it as a data bug).
           eventResult = await db.query(
             `INSERT INTO in_app_events
                (install_id, event_name, event_data, event_timestamp,

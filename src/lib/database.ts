@@ -424,7 +424,9 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
     await client.query('CREATE INDEX IF NOT EXISTS idx_in_app_events_timestamp ON in_app_events(event_timestamp DESC)');
     // Attribution lookups: per-link conversion aggregation + per-session screen flow
     await client.query('CREATE INDEX IF NOT EXISTS idx_in_app_events_attributed_link ON in_app_events(attributed_link_id, event_timestamp DESC)');
-    await client.query('CREATE INDEX IF NOT EXISTS idx_in_app_events_session ON in_app_events(session_id)');
+    // Partial: session_id is null for legacy/organic in-app events (the majority);
+    // per-session screen-flow lookups always filter `session_id IS NOT NULL`.
+    await client.query('CREATE INDEX IF NOT EXISTS idx_in_app_events_session ON in_app_events(session_id) WHERE session_id IS NOT NULL');
 
     // Add deep_link_parameters column for custom deep link parameters
     await client.query(`

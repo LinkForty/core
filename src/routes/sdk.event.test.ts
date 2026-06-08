@@ -95,8 +95,8 @@ describe('POST /api/sdk/v1/event — last-click attribution stamp', () => {
 
   it('never loses an event when the attributed link is stale: falls back to no-link insert on FK violation', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [{ id: INSTALL_ID, link_id: null }] });
-    // first INSERT rejects with a Postgres FK violation
-    mockQuery.mockRejectedValueOnce(Object.assign(new Error('FK violation'), { code: '23503' }));
+    // first INSERT rejects with the attributed_link_id FK violation
+    mockQuery.mockRejectedValueOnce(Object.assign(new Error('FK violation'), { code: '23503', constraint: 'in_app_events_attributed_link_id_fkey' }));
     // fallback INSERT (without attributed_link_id) succeeds
     mockQuery.mockResolvedValueOnce({ rows: [{ id: EVENT_ID }] });
 
@@ -119,6 +119,20 @@ describe('POST /api/sdk/v1/event — last-click attribution stamp', () => {
       SESSION_ID,
     ]);
 
+    await app.close();
+  });
+
+  it('rethrows a non-link FK violation (e.g. install deleted mid-request) instead of mislabeling it as a link problem', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: INSTALL_ID, link_id: null }] });
+    // install_id's FK lost to a concurrent install delete — a 23503 that is NOT the link FK
+    mockQuery.mockRejectedValueOnce(Object.assign(new Error('FK violation'), { code: '23503', constraint: 'in_app_events_install_id_fkey' }));
+
+    const app = await buildApp();
+    const res = await app.inject({ method: 'POST', url: '/api/sdk/v1/event', payload: stampedEvent });
+
+    // Surfaces as a real error; no misleading no-link fallback insert is attempted.
+    expect(res.statusCode).toBe(500);
+    expect(mockQuery.mock.calls.length).toBe(2); // install lookup + the failed insert only
     await app.close();
   });
 
