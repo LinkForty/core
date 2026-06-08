@@ -210,6 +210,12 @@ export async function sdkRoutes(fastify: FastifyInstance) {
    * - eventData: Optional JSON data associated with the event
    * - timestamp: Optional event timestamp (defaults to now)
    *
+   * Last-click attribution stamp (SIT-237, all optional / backward compatible):
+   * - attributedLinkId: UUID of the deep link currently credited (last-click)
+   * - attributedClickId: UUID of the originating click, when known
+   * - linkOpenedAt: ISO timestamp of when that deep link opened the app
+   * - sessionId: UUID identifying the app-open session (for screen-flow grouping)
+   *
    * Response:
    * - eventId: UUID of the tracked event
    * - acknowledged: Boolean confirmation
@@ -220,6 +226,10 @@ export async function sdkRoutes(fastify: FastifyInstance) {
       eventName: z.string(),
       eventData: z.record(z.any()).optional(),
       timestamp: z.string().datetime().optional(),
+      attributedLinkId: z.string().uuid().optional(),
+      attributedClickId: z.string().uuid().optional(),
+      linkOpenedAt: z.string().datetime().optional(),
+      sessionId: z.string().uuid().optional(),
     });
 
     const body = schema.parse(request.body);
@@ -239,19 +249,66 @@ export async function sdkRoutes(fastify: FastifyInstance) {
 
       const install = installCheck.rows[0];
       const eventTimestamp = body.timestamp || new Date().toISOString();
+      const eventDataJson = JSON.stringify(body.eventData || {});
 
-      // Insert event into in_app_events table
-      const eventResult = await db.query(
-        `INSERT INTO in_app_events (install_id, event_name, event_data, event_timestamp)
-         VALUES ($1, $2, $3, $4)
-         RETURNING id`,
-        [
-          body.installId,
-          body.eventName,
-          JSON.stringify(body.eventData || {}),
-          eventTimestamp,
-        ]
-      );
+      // Insert event with the last-click attribution stamp. The attributing link
+      // may differ from the install link (re-engagement) or be absent (organic).
+      let eventResult;
+      try {
+        eventResult = await db.query(
+          `INSERT INTO in_app_events
+             (install_id, event_name, event_data, event_timestamp,
+              attributed_link_id, attributed_click_id, attributed_at, session_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           RETURNING id`,
+          [
+            body.installId,
+            body.eventName,
+            eventDataJson,
+            eventTimestamp,
+            body.attributedLinkId ?? null,
+            body.attributedClickId ?? null,
+            body.linkOpenedAt ?? null,
+            body.sessionId ?? null,
+          ]
+        );
+      } catch (insertError: any) {
+        // Only a stale/unknown *attributed link* FK is recoverable here: record
+        // the event without link attribution rather than losing it. Any other
+        // 23503 — e.g. install_id's FK lost to a concurrent install delete — is a
+        // real error that must surface, not be mislabeled as a link problem.
+        const isLinkFk =
+          insertError?.code === '23503' &&
+          String(insertError?.constraint ?? '').includes('attributed_link_id');
+        if (isLinkFk) {
+          fastify.log.warn(
+            `attributed_link_id ${body.attributedLinkId} not found; storing event without link attribution`
+          );
+          // Keep this column list in sync with the primary INSERT above (it just
+          // omits attributed_link_id). attributed_click_id is intentionally kept
+          // without a link: the orphaned-click case is expected, and a null
+          // attributed_link_id is the correct value for link-keyed aggregation
+          // (the SIT-261 consumer must not read it as a data bug).
+          eventResult = await db.query(
+            `INSERT INTO in_app_events
+               (install_id, event_name, event_data, event_timestamp,
+                attributed_click_id, attributed_at, session_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)
+             RETURNING id`,
+            [
+              body.installId,
+              body.eventName,
+              eventDataJson,
+              eventTimestamp,
+              body.attributedClickId ?? null,
+              body.linkOpenedAt ?? null,
+              body.sessionId ?? null,
+            ]
+          );
+        } else {
+          throw insertError;
+        }
+      }
 
       const eventId = eventResult.rows[0].id;
 
