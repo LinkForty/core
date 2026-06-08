@@ -52,6 +52,11 @@ export async function sdkRoutes(fastify: FastifyInstance) {
       platformVersion: z.string().optional(),
       deviceId: z.string().optional(),
       attributionWindowHours: z.number().optional(),
+      // SDK identity for health/version diagnostics (SIT-235). Free-form by
+      // design: a consumer tolerates/normalizes non-semver versions — we never
+      // reject a request over this metadata. Empty → null.
+      sdkName: z.string().max(50).optional(),
+      sdkVersion: z.string().max(50).optional(),
       // Public app token shipped in SDK app bundles to scope organic
       // installs to the right org in multi-tenant deployments. Used by
       // Cloud's onSend hook (see cloud-event-hook.ts). Self-hosted
@@ -79,7 +84,8 @@ export async function sdkRoutes(fastify: FastifyInstance) {
       const result = await recordInstallEvent(
         fingerprintData,
         body.deviceId,
-        body.attributionWindowHours
+        body.attributionWindowHours,
+        { name: body.sdkName, version: body.sdkVersion }
       );
 
       return reply.status(200).send({
@@ -230,6 +236,11 @@ export async function sdkRoutes(fastify: FastifyInstance) {
       attributedClickId: z.string().uuid().optional(),
       linkOpenedAt: z.string().datetime().optional(),
       sessionId: z.string().uuid().optional(),
+      // SDK identity for version-health diagnostics (SIT-235). Free-form by
+      // design: a consumer tolerates/normalizes non-semver versions — we never
+      // reject a request over this metadata. Empty → null.
+      sdkName: z.string().max(50).optional(),
+      sdkVersion: z.string().max(50).optional(),
     });
 
     const body = schema.parse(request.body);
@@ -258,8 +269,9 @@ export async function sdkRoutes(fastify: FastifyInstance) {
         eventResult = await db.query(
           `INSERT INTO in_app_events
              (install_id, event_name, event_data, event_timestamp,
-              attributed_link_id, attributed_click_id, attributed_at, session_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+              attributed_link_id, attributed_click_id, attributed_at, session_id,
+              sdk_name, sdk_version)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
            RETURNING id`,
           [
             body.installId,
@@ -270,6 +282,8 @@ export async function sdkRoutes(fastify: FastifyInstance) {
             body.attributedClickId ?? null,
             body.linkOpenedAt ?? null,
             body.sessionId ?? null,
+            body.sdkName || null,
+            body.sdkVersion || null,
           ]
         );
       } catch (insertError: any) {
@@ -292,8 +306,9 @@ export async function sdkRoutes(fastify: FastifyInstance) {
           eventResult = await db.query(
             `INSERT INTO in_app_events
                (install_id, event_name, event_data, event_timestamp,
-                attributed_click_id, attributed_at, session_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
+                attributed_click_id, attributed_at, session_id,
+                sdk_name, sdk_version)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
              RETURNING id`,
             [
               body.installId,
@@ -303,6 +318,8 @@ export async function sdkRoutes(fastify: FastifyInstance) {
               body.attributedClickId ?? null,
               body.linkOpenedAt ?? null,
               body.sessionId ?? null,
+              body.sdkName || null,
+              body.sdkVersion || null,
             ]
           );
         } else {

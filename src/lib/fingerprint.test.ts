@@ -329,4 +329,34 @@ describe('recordInstallEvent', () => {
       expect.arrayContaining([null, null, expect.any(String), null, expect.any(String), expect.any(String), null, null, null, null, null, null, null, 'device-1', null])
     );
   });
+
+  it('forwards sdk name + version as the last two positional params of the install insert (guards column misalignment)', async () => {
+    mockDbQuery.mockResolvedValueOnce({ rows: [] }); // matchInstallToClick -> no match
+    mockDbQuery.mockResolvedValueOnce({ rows: [{ id: 'install-456', deep_link_data: {} }] });
+
+    await fingerprint.recordInstallEvent(baseFingerprint, 'device-1', undefined, {
+      name: 'react-native',
+      version: '1.4.0',
+    });
+
+    const [sql, params] = mockDbQuery.mock.calls[1];
+    expect(sql).toMatch(/INSERT INTO install_events/);
+    expect(sql).toMatch(/sdk_name/);
+    expect(sql).toMatch(/sdk_version/);
+    // sdk_name / sdk_version are the LAST two positional values ($16, $17)
+    expect(params).toHaveLength(17);
+    expect(params[params.length - 2]).toBe('react-native');
+    expect(params[params.length - 1]).toBe('1.4.0');
+  });
+
+  it('stores null sdk on the install row when the metadata is absent or empty', async () => {
+    mockDbQuery.mockResolvedValueOnce({ rows: [] });
+    mockDbQuery.mockResolvedValueOnce({ rows: [{ id: 'install-789', deep_link_data: {} }] });
+
+    await fingerprint.recordInstallEvent(baseFingerprint, 'device-1', undefined, { name: '', version: undefined });
+
+    const params = mockDbQuery.mock.calls[1][1];
+    expect(params[params.length - 2]).toBeNull(); // '' -> null
+    expect(params[params.length - 1]).toBeNull(); // undefined -> null
+  });
 });

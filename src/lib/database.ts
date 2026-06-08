@@ -394,6 +394,33 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
       END $$;
     `);
 
+    // SDK identity columns (SIT-235) — name + version of the SDK that sent the
+    // install/event, for SDK version diagnostics. Persisted on BOTH tables:
+    // install_events (version at install time) and in_app_events because an app
+    // that updates keeps its original install row but sends events with the new
+    // version — so version-fragmentation / outdated-version checks must read from
+    // the event stream. Nullable + backward compatible (older SDKs omit them).
+    // NOTE: no index on sdk_name/sdk_version yet — deferred until a consumer
+    // aggregates them (e.g. "installs by version"), so the index can match the
+    // real query shape.
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='install_events' AND column_name='sdk_name') THEN
+          ALTER TABLE install_events ADD COLUMN sdk_name VARCHAR(50);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='install_events' AND column_name='sdk_version') THEN
+          ALTER TABLE install_events ADD COLUMN sdk_version VARCHAR(50);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='in_app_events' AND column_name='sdk_name') THEN
+          ALTER TABLE in_app_events ADD COLUMN sdk_name VARCHAR(50);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='in_app_events' AND column_name='sdk_version') THEN
+          ALTER TABLE in_app_events ADD COLUMN sdk_version VARCHAR(50);
+        END IF;
+      END $$;
+    `);
+
     // Create indexes for performance
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_links_short_code ON links(short_code)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_links_user_id ON links(user_id)');
