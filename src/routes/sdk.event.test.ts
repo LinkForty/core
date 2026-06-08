@@ -36,6 +36,8 @@ const stampedEvent = {
   attributedClickId: CLICK_ID,
   linkOpenedAt: LINK_OPENED_AT,
   sessionId: SESSION_ID,
+  sdkName: 'react-native',
+  sdkVersion: '1.4.0',
 };
 
 describe('POST /api/sdk/v1/event — last-click attribution stamp', () => {
@@ -68,6 +70,8 @@ describe('POST /api/sdk/v1/event — last-click attribution stamp', () => {
       CLICK_ID,
       LINK_OPENED_AT,
       SESSION_ID,
+      'react-native',
+      '1.4.0',
     ]);
 
     await app.close();
@@ -117,6 +121,8 @@ describe('POST /api/sdk/v1/event — last-click attribution stamp', () => {
       CLICK_ID,
       LINK_OPENED_AT,
       SESSION_ID,
+      'react-native',
+      '1.4.0',
     ]);
 
     await app.close();

@@ -388,7 +388,8 @@ export async function storeFingerprintForClick(
 export async function recordInstallEvent(
   fingerprintData: FingerprintData,
   deviceId?: string,
-  attributionWindowHours: number = DEFAULT_ATTRIBUTION_WINDOW_HOURS
+  attributionWindowHours: number = DEFAULT_ATTRIBUTION_WINDOW_HOURS,
+  sdk?: { name?: string | null; version?: string | null }
 ): Promise<{
   installId: string;
   match: FingerprintMatch | null;
@@ -418,8 +419,10 @@ export async function recordInstallEvent(
       platform,
       platform_version,
       device_id,
-      deep_link_data
-    ) VALUES ($1, $2, $3, $4, NOW(), NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      deep_link_data,
+      sdk_name,
+      sdk_version
+    ) VALUES ($1, $2, $3, $4, NOW(), NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
     RETURNING id, deep_link_data`,
     [
       match?.linkId || null,
@@ -437,6 +440,8 @@ export async function recordInstallEvent(
       fingerprintData.platformVersion || null,
       deviceId || null,
       match ? JSON.stringify({}) : JSON.stringify({}), // Will be populated from link data
+      sdk?.name || null,
+      sdk?.version || null,
     ]
   );
 
