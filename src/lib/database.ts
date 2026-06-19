@@ -82,6 +82,7 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
         targeting_rules JSONB DEFAULT '{}',
         is_active BOOLEAN DEFAULT true,
         expires_at TIMESTAMP,
+        append_click_id BOOLEAN DEFAULT false,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       )
@@ -366,6 +367,24 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
           WHERE table_name='links' AND column_name='deep_link_parameters'
         ) THEN
           ALTER TABLE links ADD COLUMN deep_link_parameters JSONB DEFAULT '{}';
+        END IF;
+      END $$;
+    `);
+
+    // Click correlation id passthrough (opt-in, default off). When enabled per
+    // link, the redirect appends ?lf_click=<click id> to web/HTTPS destinations
+    // so a downstream analytics tool on the landing page can tie the landing
+    // visit back to the exact originating click. Off by default so the redirect
+    // never alters a destination's query string unless explicitly opted in.
+    // App-scheme/deep-link destinations are never appended to regardless.
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='append_click_id'
+        ) THEN
+          ALTER TABLE links ADD COLUMN append_click_id BOOLEAN DEFAULT false;
         END IF;
       END $$;
     `);
