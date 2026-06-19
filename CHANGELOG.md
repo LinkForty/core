@@ -1,3 +1,8 @@
+## 1.18.0 (2026-06-19)
+
+* feat(redirect): optional click-id passthrough on web destinations (#30) ([728d9cd](https://github.com/LinkForty/core/commit/728d9cd)), closes [#30](https://github.com/LinkForty/core/issues/30)
+* chore(sdk): genericize appToken comment (no private-product references) (#29) ([af69880](https://github.com/LinkForty/core/commit/af69880)), closes [#29](https://github.com/LinkForty/core/issues/29)
+
 ## 1.17.0 (2026-06-08)
 
 * feat(sdk): capture SDK name + version on install and events (#28) ([c38f10f](https://github.com/LinkForty/core/commit/c38f10f)), closes [#28](https://github.com/LinkForty/core/issues/28)
