@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { FastifyInstance } from 'fastify';
 import { db } from '../lib/database.js';
 import { getClientIp } from '../lib/client-ip.js';
@@ -248,6 +249,11 @@ export async function redirectRoutes(fastify: FastifyInstance) {
       }
     }
 
+    // Generate the click id up front (rather than letting the DB default it on
+    // insert) so the synchronous redirect below can carry it on the destination
+    // URL while the click row is still written asynchronously with the same id.
+    const clickId = randomUUID();
+
     // Track click asynchronously
     setImmediate(async () => {
       try {
@@ -272,15 +278,16 @@ export async function redirectRoutes(fastify: FastifyInstance) {
         const fpScreenWidth = query?.fp_sw ? parseInt(query.fp_sw, 10) : undefined;
         const fpScreenHeight = query?.fp_sh ? parseInt(query.fp_sh, 10) : undefined;
 
-        // Insert click event
-        const clickResult = await db.query(
+        // Insert click event with the pre-generated id (see above) so the row
+        // matches the lf_click value already placed on the redirect URL.
+        await db.query(
           `INSERT INTO click_events (
-            link_id, ip_address, user_agent, device_type, platform,
+            id, link_id, ip_address, user_agent, device_type, platform,
             country_code, country_name, region, city, latitude, longitude, timezone,
             utm_source, utm_medium, utm_campaign, referrer
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-          RETURNING id`,
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
           [
+            clickId,
             link.id,
             ip,
             userAgent,
@@ -299,8 +306,6 @@ export async function redirectRoutes(fastify: FastifyInstance) {
             referrer,
           ]
         );
-
-        const clickId = clickResult.rows[0].id;
 
         // Store device fingerprint for deferred deep linking
         const fingerprintData: FingerprintData = {
@@ -513,6 +518,20 @@ export async function redirectRoutes(fastify: FastifyInstance) {
         } catch (error) {
           // If URL parsing fails, continue without deep link parameters
           console.error('Failed to add deep link parameters:', error);
+        }
+      }
+
+      // When opted in per link (append_click_id), append the originating click id
+      // so a downstream analytics tool on the landing page can correlate the
+      // landing visit to this exact click. Opt-in (default off), web/HTTPS only —
+      // an absent/false flag (incl. stale cache) leaves the destination untouched.
+      if (link.append_click_id === true) {
+        try {
+          const url = new URL(finalUrl);
+          url.searchParams.set('lf_click', clickId);
+          finalUrl = url.toString();
+        } catch {
+          // Non-absolute / unparseable URL — skip the correlation param.
         }
       }
     } else {
