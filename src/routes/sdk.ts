@@ -11,6 +11,7 @@ import {
 import { triggerWebhooks } from '../lib/webhook.js';
 import { parseUserAgent, getLocationFromIP, detectDevice } from '../lib/utils.js';
 import { emitClickEvent } from '../lib/event-emitter.js';
+import { classifyBot, edgeBotSignal } from '../lib/bot-detection.js';
 
 /**
  * SDK Routes - Mobile SDK endpoints for deferred deep linking
@@ -497,6 +498,13 @@ export async function sdkRoutes(fastify: FastifyInstance) {
         const { platform, platformVersion } = parseUserAgent(userAgent);
         const { countryCode, countryName, region, city, latitude, longitude, timezone } = getLocationFromIP(ip);
 
+        // Classify bots at ingestion (SIT-298); persisted for consistent reads.
+        const { isBot, reason: botReason } = classifyBot(
+          userAgent,
+          request.method,
+          edgeBotSignal(request.headers['x-lf-bot'])
+        );
+
         // Extract fingerprint data from query params (sent by SDK)
         const query = request.query as Record<string, string | undefined>;
         const fpTimezone = query?.fp_tz || timezone || undefined;
@@ -509,8 +517,8 @@ export async function sdkRoutes(fastify: FastifyInstance) {
           `INSERT INTO click_events (
             link_id, ip_address, user_agent, device_type, platform,
             country_code, country_name, region, city, latitude, longitude, timezone,
-            utm_source, utm_medium, utm_campaign, referrer
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+            utm_source, utm_medium, utm_campaign, referrer, is_bot, bot_reason
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
           RETURNING id`,
           [
             link.id,
@@ -529,6 +537,8 @@ export async function sdkRoutes(fastify: FastifyInstance) {
             query?.utm_medium || null,
             query?.utm_campaign || null,
             referrer,
+            isBot,
+            botReason,
           ]
         );
 
