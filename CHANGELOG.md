@@ -1,3 +1,7 @@
+## 1.19.0 (2026-07-01)
+
+* feat: classify and exclude bot traffic at click ingestion (#31) ([d9ddefa](https://github.com/LinkForty/core/commit/d9ddefa)), closes [#31](https://github.com/LinkForty/core/issues/31)
+
 ## 1.18.0 (2026-06-19)
 
 * feat(redirect): optional click-id passthrough on web destinations (#30) ([728d9cd](https://github.com/LinkForty/core/commit/728d9cd)), closes [#30](https://github.com/LinkForty/core/issues/30)
