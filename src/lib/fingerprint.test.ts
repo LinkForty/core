@@ -343,10 +343,12 @@ describe('recordInstallEvent', () => {
     expect(sql).toMatch(/INSERT INTO install_events/);
     expect(sql).toMatch(/sdk_name/);
     expect(sql).toMatch(/sdk_version/);
-    // sdk_name / sdk_version are the LAST two positional values ($16, $17)
-    expect(params).toHaveLength(17);
-    expect(params[params.length - 2]).toBe('react-native');
-    expect(params[params.length - 1]).toBe('1.4.0');
+    // sdk_name/$16, sdk_version/$17, then attribution_method/$18, matched_factors/$19
+    expect(params).toHaveLength(19);
+    expect(params[15]).toBe('react-native'); // sdk_name
+    expect(params[16]).toBe('1.4.0');        // sdk_version
+    expect(params[17]).toBe('none');         // attribution_method (no fingerprint match)
+    expect(params[18]).toBeNull();           // matched_factors (no match)
   });
 
   it('stores null sdk on the install row when the metadata is absent or empty', async () => {
@@ -356,7 +358,7 @@ describe('recordInstallEvent', () => {
     await fingerprint.recordInstallEvent(baseFingerprint, 'device-1', undefined, { name: '', version: undefined });
 
     const params = mockDbQuery.mock.calls[1][1];
-    expect(params[params.length - 2]).toBeNull(); // '' -> null
-    expect(params[params.length - 1]).toBeNull(); // undefined -> null
+    expect(params[15]).toBeNull(); // sdk_name '' -> null
+    expect(params[16]).toBeNull(); // sdk_version undefined -> null
   });
 });

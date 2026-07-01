@@ -400,6 +400,12 @@ export async function recordInstallEvent(
   // Attempt to match install to a click
   const match = await matchInstallToClick(fingerprintData, attributionWindowHours);
 
+  // Attribution metadata for measurement (SIT-296): install attribution is
+  // fingerprint-based, so the method is 'fingerprint' on a match and 'none'
+  // (organic) otherwise; matched_factors records which signals matched.
+  const attributionMethod = match ? 'fingerprint' : 'none';
+  const matchedFactors = match?.matchedFactors ?? null;
+
   // Insert install event
   const installResult = await db.query(
     `INSERT INTO install_events (
@@ -421,8 +427,10 @@ export async function recordInstallEvent(
       device_id,
       deep_link_data,
       sdk_name,
-      sdk_version
-    ) VALUES ($1, $2, $3, $4, NOW(), NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      sdk_version,
+      attribution_method,
+      matched_factors
+    ) VALUES ($1, $2, $3, $4, NOW(), NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
     RETURNING id, deep_link_data`,
     [
       match?.linkId || null,
@@ -442,6 +450,8 @@ export async function recordInstallEvent(
       match ? JSON.stringify({}) : JSON.stringify({}), // Will be populated from link data
       sdk?.name || null,
       sdk?.version || null,
+      attributionMethod,
+      matchedFactors,
     ]
   );
 
