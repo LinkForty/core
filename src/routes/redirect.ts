@@ -5,6 +5,7 @@ import { getClientIp } from '../lib/client-ip.js';
 import { parseUserAgent, getLocationFromIP, buildRedirectUrl, detectDevice } from '../lib/utils.js';
 import { storeFingerprintForClick, type FingerprintData } from '../lib/fingerprint.js';
 import { emitClickEvent } from '../lib/event-emitter.js';
+import { classifyBot, edgeBotSignal } from '../lib/bot-detection.js';
 
 /**
  * Detect iOS in-app browsers where Universal Links don't fire.
@@ -266,6 +267,15 @@ export async function redirectRoutes(fastify: FastifyInstance) {
         const { platform, platformVersion } = parseUserAgent(userAgent);
         const { countryCode, countryName, region, city, latitude, longitude, timezone } = getLocationFromIP(ip);
 
+        // Classify bots at ingestion (SIT-298) — persisted on the row so
+        // analytics reads a consistent flag instead of re-detecting from the
+        // stored user-agent.
+        const { isBot, reason: botReason } = classifyBot(
+          userAgent,
+          request.method,
+          edgeBotSignal(request.headers['x-lf-bot'])
+        );
+
         // Extract UTM parameters from query string
         const query = request.query as Record<string, string | undefined>;
         const utmSource = query?.utm_source;
@@ -284,8 +294,8 @@ export async function redirectRoutes(fastify: FastifyInstance) {
           `INSERT INTO click_events (
             id, link_id, ip_address, user_agent, device_type, platform,
             country_code, country_name, region, city, latitude, longitude, timezone,
-            utm_source, utm_medium, utm_campaign, referrer
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+            utm_source, utm_medium, utm_campaign, referrer, is_bot, bot_reason
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
           [
             clickId,
             link.id,
@@ -304,6 +314,8 @@ export async function redirectRoutes(fastify: FastifyInstance) {
             utmMedium,
             utmCampaign,
             referrer,
+            isBot,
+            botReason,
           ]
         );
 

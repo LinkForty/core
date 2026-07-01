@@ -19,7 +19,7 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
          COUNT(DISTINCT ip_address) as unique_clicks
        FROM click_events ce
               JOIN links l ON ce.link_id = l.id
-       WHERE ce.clicked_at >= NOW() - INTERVAL '${days} days' ${userFilter}`,
+       WHERE ce.clicked_at >= NOW() - INTERVAL '${days} days' ${userFilter} AND ce.is_bot = false`,
       params
     );
 
@@ -30,7 +30,7 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
          COUNT(*) as clicks
        FROM click_events ce
          JOIN links l ON ce.link_id = l.id
-       WHERE ce.clicked_at >= NOW() - INTERVAL '${days} days' ${userFilter}
+       WHERE ce.clicked_at >= NOW() - INTERVAL '${days} days' ${userFilter} AND ce.is_bot = false
        GROUP BY DATE(ce.clicked_at)
        ORDER BY date`,
       params
@@ -44,7 +44,7 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
          COUNT(*) as clicks
        FROM click_events ce
               JOIN links l ON ce.link_id = l.id
-       WHERE ce.clicked_at >= NOW() - INTERVAL '${days} days' ${userFilter}
+       WHERE ce.clicked_at >= NOW() - INTERVAL '${days} days' ${userFilter} AND ce.is_bot = false
        GROUP BY ce.country_code, ce.country_name
        ORDER BY clicks DESC`,
       params
@@ -57,7 +57,7 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
          COUNT(*) as clicks
        FROM click_events ce
               JOIN links l ON ce.link_id = l.id
-       WHERE ce.clicked_at >= NOW() - INTERVAL '${days} days' ${userFilter}
+       WHERE ce.clicked_at >= NOW() - INTERVAL '${days} days' ${userFilter} AND ce.is_bot = false
        GROUP BY ce.device_type
        ORDER BY clicks DESC`,
       params
@@ -70,7 +70,7 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
          COUNT(*) as clicks
        FROM click_events ce
               JOIN links l ON ce.link_id = l.id
-       WHERE ce.clicked_at >= NOW() - INTERVAL '${days} days' ${userFilter}
+       WHERE ce.clicked_at >= NOW() - INTERVAL '${days} days' ${userFilter} AND ce.is_bot = false
        GROUP BY ce.platform
        ORDER BY clicks DESC`,
       params
@@ -88,6 +88,7 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
        FROM links l
               LEFT JOIN click_events ce ON l.id = ce.link_id
          AND ce.clicked_at >= NOW() - INTERVAL '${days} days'
+         AND ce.is_bot = false
        ${userFilterWhere}
        GROUP BY l.id
        ORDER BY total_clicks DESC
@@ -158,7 +159,7 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
          COUNT(*) as total_clicks,
          COUNT(DISTINCT ip_address) as unique_clicks
        FROM click_events
-       WHERE link_id = $1 AND clicked_at >= NOW() - INTERVAL '${days} days'`,
+       WHERE link_id = $1 AND clicked_at >= NOW() - INTERVAL '${days} days' AND is_bot = false`,
       [linkId]
     );
 
@@ -167,7 +168,7 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
          DATE(clicked_at) as date,
          COUNT(*) as clicks
        FROM click_events
-       WHERE link_id = $1 AND clicked_at >= NOW() - INTERVAL '${days} days'
+       WHERE link_id = $1 AND clicked_at >= NOW() - INTERVAL '${days} days' AND is_bot = false
        GROUP BY DATE(clicked_at)
        ORDER BY date`,
       [linkId]
@@ -179,7 +180,7 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
          COALESCE(country_name, country_code, 'Unknown') as country,
          COUNT(*) as clicks
        FROM click_events
-       WHERE link_id = $1 AND clicked_at >= NOW() - INTERVAL '${days} days'
+       WHERE link_id = $1 AND clicked_at >= NOW() - INTERVAL '${days} days' AND is_bot = false
        GROUP BY country_code, country_name
        ORDER BY clicks DESC`,
       [linkId]
@@ -190,7 +191,7 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
          COALESCE(device_type, 'Unknown') as device,
          COUNT(*) as clicks
        FROM click_events
-       WHERE link_id = $1 AND clicked_at >= NOW() - INTERVAL '${days} days'
+       WHERE link_id = $1 AND clicked_at >= NOW() - INTERVAL '${days} days' AND is_bot = false
        GROUP BY device_type
        ORDER BY clicks DESC`,
       [linkId]
@@ -201,7 +202,7 @@ export async function analyticsRoutes(fastify: FastifyInstance) {
          COALESCE(platform, 'Unknown') as platform,
          COUNT(*) as clicks
        FROM click_events
-       WHERE link_id = $1 AND clicked_at >= NOW() - INTERVAL '${days} days'
+       WHERE link_id = $1 AND clicked_at >= NOW() - INTERVAL '${days} days' AND is_bot = false
        GROUP BY platform
        ORDER BY clicks DESC`,
       [linkId]

@@ -108,7 +108,9 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
         utm_source VARCHAR(255),
         utm_medium VARCHAR(255),
         utm_campaign VARCHAR(255),
-        referrer TEXT
+        referrer TEXT,
+        is_bot BOOLEAN NOT NULL DEFAULT false,
+        bot_reason VARCHAR(16)
       )
     `);
 
@@ -389,6 +391,22 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
       END $$;
     `);
 
+    // Bot classification columns on click_events (SIT-298). Classified at
+    // ingestion (see lib/bot-detection.ts) and persisted so every consumer reads
+    // one consistent flag; analytics excludes is_bot rows. Backward compatible:
+    // legacy rows default to is_bot=false until the one-time backfill runs.
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='click_events' AND column_name='is_bot') THEN
+          ALTER TABLE click_events ADD COLUMN is_bot BOOLEAN NOT NULL DEFAULT false;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='click_events' AND column_name='bot_reason') THEN
+          ALTER TABLE click_events ADD COLUMN bot_reason VARCHAR(16);
+        END IF;
+      END $$;
+    `);
+
     // Last-click attribution columns on in_app_events (SIT-237).
     // Events (screen views + custom events) are attributed to the deep link that
     // drove them, not just the original install link. The SDK stamps each event
@@ -447,6 +465,8 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
     await client.query('CREATE INDEX IF NOT EXISTS idx_clicks_link_id ON click_events(link_id)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_clicks_timestamp ON click_events(clicked_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_clicks_link_date ON click_events(link_id, clicked_at DESC)');
+    // Partial index for the common analytics filter (human clicks only, is_bot = false).
+    await client.query('CREATE INDEX IF NOT EXISTS idx_clicks_human_link_date ON click_events(link_id, clicked_at DESC) WHERE is_bot = false');
     // Indexes for deferred deep linking
     await client.query('CREATE INDEX IF NOT EXISTS idx_fingerprints_hash ON device_fingerprints(fingerprint_hash)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_fingerprints_click_id ON device_fingerprints(click_id)');
