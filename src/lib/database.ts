@@ -140,6 +140,8 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
         click_id UUID REFERENCES click_events(id) ON DELETE SET NULL,
         fingerprint_hash VARCHAR(64) NOT NULL,
         confidence_score DECIMAL(5, 2),
+        attribution_method VARCHAR(20),
+        matched_factors TEXT[],
         installed_at TIMESTAMP DEFAULT NOW(),
         first_open_at TIMESTAMP,
         deep_link_retrieved BOOLEAN DEFAULT false,
@@ -403,6 +405,21 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
         END IF;
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='click_events' AND column_name='bot_reason') THEN
           ALTER TABLE click_events ADD COLUMN bot_reason VARCHAR(16);
+        END IF;
+      END $$;
+    `);
+
+    // Attribution metadata on install_events (SIT-296): how the install was
+    // attributed ('fingerprint' | 'none') and which fingerprint signals matched.
+    // Makes attribution quality measurable. Backward compatible (NULL until set).
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='install_events' AND column_name='attribution_method') THEN
+          ALTER TABLE install_events ADD COLUMN attribution_method VARCHAR(20);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='install_events' AND column_name='matched_factors') THEN
+          ALTER TABLE install_events ADD COLUMN matched_factors TEXT[];
         END IF;
       END $$;
     `);
