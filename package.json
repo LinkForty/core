@@ -37,8 +37,6 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
-    "backfill:bot-flags": "tsx src/scripts/backfill-bot-flags.ts",
-    "backfill:attribution": "tsx src/scripts/backfill-attribution.ts",
     "migrate": "tsx src/scripts/migrate.ts",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -396,7 +396,7 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
     // Bot classification columns on click_events (SIT-298). Classified at
     // ingestion (see lib/bot-detection.ts) and persisted so every consumer reads
     // one consistent flag; analytics excludes is_bot rows. Backward compatible:
-    // legacy rows default to is_bot=false until the one-time backfill runs.
+    // legacy rows default to is_bot=false and age out of the retention window.
     await client.query(`
       DO $$
       BEGIN
