@@ -1,3 +1,7 @@
+## 1.20.0 (2026-07-01)
+
+* feat: record install attribution method and matched signals (#32) ([b82dce4](https://github.com/LinkForty/core/commit/b82dce4)), closes [#32](https://github.com/LinkForty/core/issues/32)
+
 ## 1.19.0 (2026-07-01)
 
 * feat: classify and exclude bot traffic at click ingestion (#31) ([d9ddefa](https://github.com/LinkForty/core/commit/d9ddefa)), closes [#31](https://github.com/LinkForty/core/issues/31)
