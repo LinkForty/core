@@ -136,6 +136,52 @@ function generateInterstitialHTML(schemeUrl: string, fallbackUrl: string, title?
 </body></html>`;
 }
 
+/**
+ * Whether a link's expiration timestamp has passed. Links without expires_at
+ * never expire. An unparseable timestamp is treated as not expired (fail open)
+ * so a malformed value can't take a live link down.
+ */
+export function isLinkExpired(expiresAt: string | Date | null | undefined, now: Date = new Date()): boolean {
+  if (!expiresAt) return false;
+  const t = new Date(expiresAt).getTime();
+  return Number.isFinite(t) && t <= now.getTime();
+}
+
+/**
+ * Friendly page served (with HTTP 410 Gone) when someone opens a link past its
+ * expiration date. Deliberately unbranded: core is white-label and the page is
+ * served on customers' own short-link domains.
+ */
+export function generateExpiredLinkHTML(): string {
+  return `<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Link expired</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f9fafb; color: #111827; text-align: center; }
+  .container { padding: 2rem; max-width: 26rem; }
+  .clock { width: 48px; height: 48px; margin: 0 auto 1.5rem; color: #9ca3af; }
+  h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 0.5rem; }
+  p { font-size: 0.875rem; color: #6b7280; margin: 0; line-height: 1.5; }
+  .powered { position: fixed; bottom: 1.25rem; left: 0; right: 0; font-size: 0.75rem; color: #9ca3af; }
+  .powered a { color: #6b7280; text-decoration: none; font-weight: 500; }
+  .powered a:hover { text-decoration: underline; }
+</style>
+</head><body>
+<div class="container">
+  <svg class="clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="9"></circle>
+    <path d="M12 7v5l3 2"></path>
+  </svg>
+  <h1>This link has expired</h1>
+  <p>The link you followed is no longer active. If you were expecting to find something here, ask whoever shared it for an up-to-date link.</p>
+</div>
+<div class="powered">Powered by <a href="https://linkforty.com" rel="noopener">LinkForty</a></div>
+</body></html>`;
+}
+
 export async function redirectRoutes(fastify: FastifyInstance) {
   // Helper function to handle the actual redirect logic
   async function handleRedirect(request: any, reply: any, shortCode: string, templateSlug?: string) {
@@ -188,6 +234,22 @@ export async function redirectRoutes(fastify: FastifyInstance) {
       const result = await db.query(query, params);
 
       if (result.rows.length === 0) {
+        // Distinguish "expired" from "never existed": an expired link keeps its
+        // expires_at even after the hourly expiration job flips is_active off,
+        // so this lookup stays accurate long after expiry.
+        const expiredCheck = templateSlug
+          ? await db.query(
+              `SELECT 1 FROM links l JOIN link_templates t ON l.template_id = t.id
+               WHERE l.short_code = $1 AND t.slug = $2 AND l.expires_at IS NOT NULL AND l.expires_at <= NOW()`,
+              [shortCode, templateSlug]
+            )
+          : await db.query(
+              'SELECT 1 FROM links WHERE short_code = $1 AND expires_at IS NOT NULL AND expires_at <= NOW()',
+              [shortCode]
+            );
+        if (expiredCheck.rows.length > 0) {
+          return reply.status(410).type('text/html').send(generateExpiredLinkHTML());
+        }
         return reply.status(404).send({ error: 'Link not found' });
       }
 
@@ -204,6 +266,12 @@ export async function redirectRoutes(fastify: FastifyInstance) {
     }
 
     const link = JSON.parse(linkData);
+
+    // Enforce expiry on cache hits too — a link cached shortly before expiring
+    // would otherwise keep redirecting for up to the cache TTL (5 minutes).
+    if (isLinkExpired(link.expires_at)) {
+      return reply.status(410).type('text/html').send(generateExpiredLinkHTML());
+    }
 
     // Check targeting rules BEFORE redirecting
     if (link.targeting_rules) {
