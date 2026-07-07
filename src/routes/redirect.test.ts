@@ -3,6 +3,8 @@ import {
   isIOSInAppBrowser,
   isAndroidInAppBrowser,
   pickMobileFallbackUrl,
+  isLinkExpired,
+  generateExpiredLinkHTML,
 } from './redirect.js';
 
 // Real-world UA strings (truncated where helpful) for use across test cases.
@@ -182,5 +184,42 @@ describe('pickMobileFallbackUrl — reporter scenario regression test', () => {
   it('Android Facebook in-app → web fallback (preserves UL second-chance)', () => {
     const r = pickMobileFallbackUrl('android', UA.androidFacebook, URLS.iosStore, URLS.androidStore, URLS.webFallback);
     expect(r?.url).toBe(URLS.webFallback);
+  });
+});
+
+describe('isLinkExpired', () => {
+  const now = new Date('2026-07-07T12:00:00Z');
+
+  it('null/undefined expires_at never expires', () => {
+    expect(isLinkExpired(null, now)).toBe(false);
+    expect(isLinkExpired(undefined, now)).toBe(false);
+  });
+
+  it('future timestamp is not expired', () => {
+    expect(isLinkExpired('2026-07-08T12:00:00Z', now)).toBe(false);
+    expect(isLinkExpired(new Date('2027-01-01T00:00:00Z'), now)).toBe(false);
+  });
+
+  it('past timestamp is expired', () => {
+    expect(isLinkExpired('2026-07-07T11:59:59Z', now)).toBe(true);
+    expect(isLinkExpired(new Date('2020-01-01T00:00:00Z'), now)).toBe(true);
+  });
+
+  it('exact expiry moment counts as expired', () => {
+    expect(isLinkExpired('2026-07-07T12:00:00Z', now)).toBe(true);
+  });
+
+  it('unparseable timestamp fails open (not expired)', () => {
+    expect(isLinkExpired('not-a-date', now)).toBe(false);
+  });
+});
+
+describe('generateExpiredLinkHTML', () => {
+  it('is a complete, noindexed HTML page saying the link expired', () => {
+    const html = generateExpiredLinkHTML();
+    expect(html).toContain('<!DOCTYPE html>');
+    expect(html).toContain('This link has expired');
+    expect(html).toContain('noindex');
+    expect(html).toContain('</html>');
   });
 });
