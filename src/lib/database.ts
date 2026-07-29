@@ -524,6 +524,38 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
       END $$;
     `);
 
+    // Invites table — tracks referral invitations with payment-gated reward
+    // issuance. An invite is created when a user shares a link, and is
+    // consumed only when the invitee makes a payment (not on signup). The
+    // three guards (self-invite, already-on-platform, status) are enforced
+    // in the consume endpoint, not at the DB level, because they require
+    // application-level identity comparison.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS invites (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        inviter_id VARCHAR(255) NOT NULL,
+        inviter_name VARCHAR(255),
+        link_id UUID REFERENCES links(id) ON DELETE SET NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'pending',
+        invitee_user_id VARCHAR(255),
+        invitee_email VARCHAR(255),
+        consumed_at TIMESTAMP,
+        payment_amount DECIMAL(10, 2),
+        payment_currency VARCHAR(3),
+        reward_issued BOOLEAN DEFAULT false,
+        reward_amount DECIMAL(10, 2),
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // Indexes for invites
+    await client.query('CREATE INDEX IF NOT EXISTS idx_invites_inviter_id ON invites(inviter_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_invites_status ON invites(status) WHERE status = \'pending\'');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_invites_link_id ON invites(link_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_invites_created_at ON invites(created_at DESC)');
+
     console.log('Database schema initialized successfully');
   } catch (error) {
     console.error('Error initializing database:', error);

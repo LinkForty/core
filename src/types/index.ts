@@ -186,7 +186,7 @@ export interface AnalyticsData {
  * Discriminated event type sent in webhook payloads.
  * Consumers should filter webhooks by subscribing to specific event types.
  */
-export type WebhookEvent = 'click_event' | 'install_event' | 'conversion_event' | 'sdk_event';
+export type WebhookEvent = 'click_event' | 'install_event' | 'conversion_event' | 'sdk_event' | 'invite_consumed_event';
 
 /**
  * A registered webhook endpoint that receives event notifications from LinkForty.
@@ -276,5 +276,78 @@ export interface ConversionEvent {
   revenue?: number;
   currency?: string;
   timestamp: string;
+}
+
+// Invite types
+
+/**
+ * Lifecycle status of a referral invite.
+ * - `pending`: invite created, invitee has not yet paid.
+ * - `consumed`: invitee paid, reward issued to inviter.
+ * - `expired`: manually expired by the inviter or admin (no reward).
+ */
+export type InviteStatus = 'pending' | 'consumed' | 'expired';
+
+/**
+ * A referral invite record. Created when a user shares an invite link,
+ * consumed when the invitee makes a payment. The reward is gated on
+ * payment, not signup, to prevent fake-account farming.
+ */
+export interface Invite {
+  id: string;
+  inviterId: string;
+  inviterName?: string;
+  linkId?: string;
+  status: InviteStatus;
+  inviteeUserId?: string;
+  inviteeEmail?: string;
+  consumedAt?: string;
+  paymentAmount?: number;
+  paymentCurrency?: string;
+  rewardIssued: boolean;
+  rewardAmount?: number;
+  metadata: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Request body for creating a new invite.
+ */
+export interface CreateInviteRequest {
+  inviterId: string;
+  inviterName?: string;
+  linkId?: string;
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Request body for consuming an invite on payment.
+ *
+ * The `inviteeCreatedAt` timestamp is the invitee's account creation time
+ * from the caller's auth system. It is compared against the invite's
+ * `createdAt` to reject users who already existed on the platform before
+ * the invite was created (already-on-platform guard).
+ */
+export interface ConsumeInviteRequest {
+  inviteeUserId: string;
+  inviteeEmail?: string;
+  inviteeCreatedAt: string;
+  paymentAmount: number;
+  paymentCurrency: string;
+  rewardAmount?: number;
+}
+
+/**
+ * Result of a consume attempt, with a machine-readable rejection reason
+ * when guards fail.
+ */
+export interface ConsumeInviteResult {
+  success: boolean;
+  inviteId: string;
+  status: InviteStatus;
+  rewardIssued: boolean;
+  rejectionReason?: 'self_invite' | 'already_on_platform' | 'not_pending' | 'not_found';
+  rejectionDetail?: string;
 }
 
