@@ -8,3 +8,4 @@ export { templateRoutes } from './templates.js';
 export { previewRoutes } from './preview.js';
 export { debugRoutes } from './debug.js';
 export { wellKnownRoutes } from './well-known.js';
+export { inviteRoutes } from './invites.js';
