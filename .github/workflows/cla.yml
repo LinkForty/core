@@ -8,7 +8,9 @@ on:
 
 permissions:
   actions: write
-  contents: read
+  # write, not read: the action commits the signature file to `signatures/cla.json`
+  # on the branch below. With read it can never record a signature.
+  contents: write
   pull-requests: write
   statuses: write
 
@@ -26,5 +28,9 @@ jobs:
           PERSONAL_ACCESS_TOKEN: ${{ secrets.CLA_ASSISTANT_PAT }}
         with:
           path-to-document: 'https://github.com/linkforty/core/blob/main/CLA.md'
-          path-to-cla-assistants: 'https://cla-assistant.io/'
+          # The action defaults this to 'master', which does not exist in this
+          # repo — it read signatures from a missing ref and failed every run with
+          # "Could not retrieve repository contents. Status: 404".
+          branch: 'main'
+          path-to-signatures: 'signatures/cla.json'
           allowlist: 'bot*,dependabot*,github-actions*'
