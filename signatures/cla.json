@@ -1,3 +1,12 @@
 {
-  "signedContributors": []
+  "signedContributors": [
+    {
+      "name": "onamfc",
+      "id": 8187699,
+      "comment_id": 5258218524,
+      "created_at": "2026-08-11T20:03:48Z",
+      "repoId": 1106278185,
+      "pullRequestNo": 37
+    }
+  ]
 }
