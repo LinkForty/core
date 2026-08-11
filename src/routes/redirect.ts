@@ -145,47 +145,51 @@ export interface RedirectRouteOptions {
   abuseReportUrl?: string;
 }
 
-/**
- * Owner-restriction support is detected rather than assumed.
- *
- * This package does not own the `organizations` table (it only LEFT JOINs it for
- * settings), so `organizations.suspended_at` may or may not exist. Probing once
- * and building the SELECT accordingly keeps a deployment that does not model
- * owner restriction working byte-for-byte as before, instead of failing every
- * redirect on a missing column.
- *
- * Probed lazily on first use — at registration time the database may not be
- * reachable yet. Failure is treated as "not supported", so a probe error can
- * never take the redirect path down.
- */
-let ownerSuspensionSelect: string | null = null;
-
-async function resolveOwnerSuspensionSelect(fastify: FastifyInstance): Promise<string> {
-  if (ownerSuspensionSelect !== null) return ownerSuspensionSelect;
-  try {
-    const probe = await db.query(
-      `SELECT 1 FROM information_schema.columns
-       WHERE table_name = 'organizations' AND column_name = 'suspended_at'`
-    );
-    ownerSuspensionSelect = probe.rows.length > 0 ? ', o.suspended_at AS owner_suspended_at' : '';
-    if (ownerSuspensionSelect) {
-      fastify.log.info('Redirect: owner restriction supported (organizations.suspended_at present)');
-    }
-  } catch {
-    ownerSuspensionSelect = '';
-  }
-  return ownerSuspensionSelect;
-}
-
-/** Reset the cached probe result. Exported for tests. */
-export function resetOwnerSuspensionProbe(): void {
-  ownerSuspensionSelect = null;
-}
-
 export async function redirectRoutes(
   fastify: FastifyInstance,
   options: RedirectRouteOptions = {}
 ) {
+  /**
+   * Owner-restriction support is detected rather than assumed.
+   *
+   * This package does not own the `organizations` table, so
+   * `organizations.suspended_at` may or may not exist. Probing once and building
+   * the SELECT accordingly avoids failing every redirect on a missing column.
+   *
+   * Scoped to this registration rather than the module: module-level state would
+   * be shared by every createServer() in the process, so two servers pointed at
+   * different databases would share whichever answer landed first — and it forced
+   * a test-only reset export onto the package's public API.
+   *
+   * The in-flight promise is memoised, not just its result, so N concurrent cold
+   * requests issue one probe rather than N.
+   *
+   * Probed lazily because the database may not be reachable at registration time.
+   * A probe failure is treated as "unsupported", so it can never take the redirect
+   * path down.
+   */
+  let ownerSuspensionProbe: Promise<string> | null = null;
+
+  const resolveOwnerSuspensionSelect = (): Promise<string> => {
+    if (!ownerSuspensionProbe) {
+      ownerSuspensionProbe = db
+        .query(
+          `SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'organizations' AND column_name = 'suspended_at'`
+        )
+        .then((probe) => {
+          const supported = probe.rows.length > 0;
+          if (supported) {
+            fastify.log.info(
+              'Redirect: owner restriction supported (organizations.suspended_at present)'
+            );
+          }
+          return supported ? ', o.suspended_at AS owner_suspended_at' : '';
+        })
+        .catch(() => '');
+    }
+    return ownerSuspensionProbe;
+  };
   // Helper function to handle the actual redirect logic
   async function handleRedirect(request: any, reply: any, shortCode: string, templateSlug?: string) {
     let linkData: string | null = null;
@@ -207,7 +211,7 @@ export async function redirectRoutes(
       let query: string;
       let params: any[];
 
-      const ownerSuspensionColumn = await resolveOwnerSuspensionSelect(fastify);
+      const ownerSuspensionColumn = await resolveOwnerSuspensionSelect();
 
       if (templateSlug) {
         // Template-based URL: verify both template and link match
@@ -219,6 +223,7 @@ export async function redirectRoutes(
           LEFT JOIN link_templates t ON l.template_id = t.id
           LEFT JOIN organizations o ON l.organization_id = o.id
           WHERE l.short_code = $1 AND t.slug = $2
+          AND l.is_active = true
           AND (l.expires_at IS NULL OR l.expires_at > NOW())
         `;
         params = [shortCode, templateSlug];
@@ -231,7 +236,7 @@ export async function redirectRoutes(
           FROM links l
           LEFT JOIN link_templates t ON l.template_id = t.id
           LEFT JOIN organizations o ON l.organization_id = o.id
-          WHERE l.short_code = $1
+          WHERE l.short_code = $1 AND l.is_active = true
           AND (l.expires_at IS NULL OR l.expires_at > NOW())
         `;
         params = [shortCode];
@@ -257,11 +262,18 @@ export async function redirectRoutes(
 
     const link = JSON.parse(linkData);
 
-    // Safety gate. Applied AFTER the cache read on purpose: resolved links are
-    // cached for 5 minutes, so evaluating only on the database path would keep a
-    // just-disabled link redirecting for up to the whole TTL. `is_active` is no
-    // longer filtered in SQL for the same reason — it is now evaluated here so a
-    // cached row cannot outlive a change to it.
+    // Safety gate, applied after the cache read so it covers cached rows too.
+    //
+    // It does NOT close the stale-cache window on its own, and an earlier version
+    // of this comment wrongly claimed it did: a cached row carries the value of
+    // `is_active` as at cache time, so reading it here sees the same stale `true`
+    // the old code did. Staleness is handled by invalidateLinkResolutionCache(),
+    // called when a link is updated or deleted.
+    //
+    // `is_active` therefore stays filtered in SQL — an inactive link never needs
+    // fetching or caching. What genuinely cannot be expressed in the WHERE clause
+    // is `warn_at`, which needs the row in hand to choose between redirecting and
+    // serving an interstitial.
     const safety = evaluateLinkSafety({
       isActive: link.is_active,
       warnAt: link.warn_at,

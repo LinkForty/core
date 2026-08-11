@@ -9,7 +9,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 // vi.mock is hoisted above these imports, so redirect.js still receives the mock.
-import { redirectRoutes, resetOwnerSuspensionProbe } from './redirect.js';
+import { redirectRoutes } from './redirect.js';
 
 const query = vi.fn();
 vi.mock('../lib/database.js', () => ({
@@ -66,7 +66,9 @@ async function clickWasRecorded(): Promise<boolean> {
 let app: FastifyInstance;
 
 beforeEach(async () => {
-  resetOwnerSuspensionProbe();
+  // No probe reset needed: the probe is scoped to each registration, so a fresh
+  // Fastify instance per test gets a fresh probe. That the reset export is gone is
+  // the point — it existed only to work around module-global state.
   app = Fastify();
   await app.register(redirectRoutes, { abuseReportUrl: 'https://example.org/abuse' });
   await app.ready();
@@ -174,7 +176,23 @@ describe('redirect safety gate', () => {
       for (const sql of lookups) expect(sql).not.toMatch(/owner_suspended_at/);
     });
 
-    it('probes only once across requests', async () => {
+    it('probes once even under CONCURRENT cold requests', async () => {
+      // The sequential test below passes trivially because inject() awaits. This one
+      // fires them together, which is what the memoised promise actually buys.
+      mockDb(linkRow(), false);
+      await Promise.all([
+        app.inject({ method: 'GET', url: '/abc123' }),
+        app.inject({ method: 'GET', url: '/abc123' }),
+        app.inject({ method: 'GET', url: '/abc123' }),
+        app.inject({ method: 'GET', url: '/abc123' }),
+      ]);
+      const probes = query.mock.calls.filter(([sql]) =>
+        /information_schema\.columns/i.test(String(sql))
+      );
+      expect(probes).toHaveLength(1);
+    });
+
+    it('probes only once across sequential requests', async () => {
       mockDb(linkRow(), false);
       await app.inject({ method: 'GET', url: '/abc123' });
       await app.inject({ method: 'GET', url: '/abc123' });

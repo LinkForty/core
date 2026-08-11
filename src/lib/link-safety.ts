@@ -43,6 +43,34 @@ export function evaluateLinkSafety(input: LinkSafetyInput): LinkSafetyOutcome {
   return 'allow';
 }
 
+/**
+ * A destination is only safe to put in an `href` if it is http(s).
+ *
+ * `escapeHtml` is not sufficient on its own: a URL scheme contains none of the
+ * characters it neutralises, so `javascript:alert(1)` passes through untouched and
+ * becomes executable on click. That matters here more than almost anywhere else —
+ * this page is shown *only* for links already flagged as suspicious, so the
+ * destinations reaching it are the most likely in the system to be hostile.
+ *
+ * Reachable in practice, not just in theory: zod's `.url()` accepts `javascript:`
+ * and `data:` URLs, so a stored destination can already hold one. Tightening
+ * validation at write time is worth doing separately, but this page must not
+ * depend on that having happened.
+ *
+ * Returns null when there is nothing safe to link to — including a bare deep-link
+ * path, which would otherwise render as a relative link to the redirect host
+ * rather than the real destination. Callers render that as inert text.
+ */
+export function safeHref(destination: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(destination);
+  } catch {
+    return null;
+  }
+  return url.protocol === 'http:' || url.protocol === 'https:' ? destination : null;
+}
+
 /** Minimal HTML escaping for interpolating a URL into markup and an href. */
 export function escapeHtml(value: string): string {
   return String(value)
@@ -67,7 +95,13 @@ export function generateWarningLinkHTML(
   destination: string,
   options: { reportUrl?: string } = {}
 ): string {
-  const safeDestination = escapeHtml(destination);
+  const shown = destination && destination.trim() ? escapeHtml(destination) : '(no destination recorded)';
+  const href = destination ? safeHref(destination) : null;
+  // No anchor at all when there is nothing safe to link to. An href="" would
+  // re-request the warning page, so "Continue anyway" would just reload it.
+  const continueButton = href
+    ? `<a class="go" href="${escapeHtml(href)}" rel="nofollow noopener noreferrer">Continue anyway</a>`
+    : `<p class="inert">This link has no usable web destination, so there is nothing to continue to.</p>`;
   const reportLink = options.reportUrl
     ? `<p class="report"><a href="${escapeHtml(options.reportUrl)}" rel="nofollow noopener">Report this link</a></p>`
     : '';
@@ -93,6 +127,7 @@ export function generateWarningLinkHTML(
           font-size:.9rem; margin-bottom:18px; }
   a.go { display:inline-block; text-decoration:none; border:1px solid #c9ced4; color:#16191d;
          border-radius:6px; padding:9px 15px; font-size:.95rem; font-weight:600; }
+  .inert { margin:0; font-size:.9rem; color:#5b636d; }
   .report { margin:16px 0 0; font-size:.85rem; }
   .report a { color:#5b636d; }
   @media (prefers-color-scheme: dark) {
@@ -101,6 +136,7 @@ export function generateWarningLinkHTML(
     .dest { background:#14171a; }
     a.go { border-color:#3a4149; color:#e8eaed; }
     .report a { color:#98a1ab; }
+    .inert { color:#98a1ab; }
   }
 </style>
 </head>
@@ -109,11 +145,11 @@ export function generateWarningLinkHTML(
     <h1>Check this link before continuing</h1>
     <p>This short link has been flagged as possibly unsafe, so we have not sent you
        straight there. It leads to:</p>
-    <span class="dest">${safeDestination}</span>
+    <span class="dest">${shown}</span>
     <p>If you were not expecting this link, or it claims to be from a bank, a government
        service, or a company you do business with, close this page. Do not enter any
        password or personal details.</p>
-    <a class="go" href="${safeDestination}" rel="nofollow noopener noreferrer">Continue anyway</a>
+    ${continueButton}
     ${reportLink}
   </main>
 </body>

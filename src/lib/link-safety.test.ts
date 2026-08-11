@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateLinkSafety, generateWarningLinkHTML, escapeHtml } from './link-safety.js';
+import { evaluateLinkSafety, generateWarningLinkHTML, escapeHtml, safeHref } from './link-safety.js';
 
 describe('evaluateLinkSafety', () => {
   it('allows a plain healthy link', () => {
@@ -64,11 +64,49 @@ describe('generateWarningLinkHTML', () => {
     expect(generateWarningLinkHTML('https://example.com')).toContain('noindex');
   });
 
-  it('carries no JavaScript, so it survives a strict CSP', () => {
+  it('carries no JavaScript of its own, so it survives a strict CSP', () => {
     const html = generateWarningLinkHTML('https://example.com');
     expect(html).not.toContain('<script');
-    expect(html).not.toContain('javascript:');
     expect(html).not.toMatch(/\son[a-z]+=/i);
+  });
+
+  // The CSP case above used a benign destination, so it could never have failed for
+  // the reason it appeared to cover. These pass the hostile input instead.
+  describe('hostile destinations', () => {
+    it('never emits a javascript: href', () => {
+      const html = generateWarningLinkHTML('javascript:alert(document.domain)');
+      expect(html).not.toMatch(/href="javascript:/i);
+    });
+
+    it('never emits a data: href', () => {
+      const html = generateWarningLinkHTML('data:text/html,<script>alert(1)</script>');
+      expect(html).not.toMatch(/href="data:/i);
+    });
+
+    it('offers no continue button when the scheme is not http(s)', () => {
+      const html = generateWarningLinkHTML('javascript:alert(1)');
+      expect(html).not.toContain('class="go"');
+      expect(html).toContain('nothing to continue to');
+    });
+
+    it('still shows the destination as inert text so the visitor can see it', () => {
+      const html = generateWarningLinkHTML('javascript:alert(1)');
+      expect(html).toContain('javascript:alert(1)');
+    });
+
+    it('emits no empty href for a bare path or an absent destination', () => {
+      for (const d of ['/deep/link/path', '']) {
+        const html = generateWarningLinkHTML(d);
+        expect(html).not.toContain('href=""');
+        expect(html).not.toContain('class="go"');
+      }
+    });
+
+    it('still links a legitimate http(s) destination', () => {
+      const html = generateWarningLinkHTML('https://example.com/x');
+      expect(html).toContain('class="go"');
+      expect(html).toContain('href="https://example.com/x"');
+    });
   });
 
   it('marks the outbound link nofollow/noopener so we pass no reputation to it', () => {
@@ -83,5 +121,24 @@ describe('generateWarningLinkHTML', () => {
     });
     expect(withReport).toContain('Report this link');
     expect(withReport).toContain('https://example.org/abuse');
+  });
+});
+
+
+describe('safeHref', () => {
+  it('allows http and https', () => {
+    expect(safeHref('http://example.com')).toBe('http://example.com');
+    expect(safeHref('https://example.com/a?b=c')).toBe('https://example.com/a?b=c');
+  });
+
+  it('rejects every other scheme', () => {
+    for (const d of ['javascript:alert(1)', 'data:text/html,x', 'file:///etc/passwd', 'vbscript:x']) {
+      expect(safeHref(d), d).toBeNull();
+    }
+  });
+
+  it('rejects a relative path, which would point at the redirect host', () => {
+    expect(safeHref('/deep/link/path')).toBeNull();
+    expect(safeHref('')).toBeNull();
   });
 });
