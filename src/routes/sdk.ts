@@ -433,12 +433,22 @@ export async function sdkRoutes(fastify: FastifyInstance) {
   /**
    * Same probe the redirect uses, from the same factory.
    *
-   * This endpoint writes the SAME Redis key as the redirect, so it MUST select the
-   * same columns. Selecting fewer meant the row it cached carried no
-   * `owner_suspended_at`; the redirect then read `undefined`, its gate treated that
-   * as "not restricted", and a restricted owner's links resolved for the rest of the
-   * TTL. Since this endpoint is public and unauthenticated, that was triggerable on
-   * demand as well as by accident.
+   * This endpoint writes the SAME Redis key as the redirect, so it must select the
+   * same columns — `owner_suspended_at`, `template_settings` and `org_settings`.
+   *
+   * Selecting fewer is not a cosmetic difference, because whichever path populates
+   * the key decides what the OTHER path can see:
+   *
+   *   - omitting `owner_suspended_at` meant the redirect read `undefined`, its gate
+   *     treated that as "not restricted", and a restricted owner's links resolved
+   *     for the rest of the TTL. Public and unauthenticated, so that was triggerable
+   *     on demand as well as by accident;
+   *   - omitting the two `settings` columns silently breaks the redirect's URL
+   *     fallback chain (link, then template, then workspace), so a link relying on a
+   *     template-level `web_fallback_url` falls through to `original_url` instead.
+   *
+   * Neither is visible from this file alone, which is why the SELECT fragment comes
+   * from one shared factory and this list is kept deliberately in step.
    */
   const resolveOwnerSuspensionSelect = createOwnerSuspensionSelect({
     query: (sql) => db.query(sql),
@@ -468,7 +478,9 @@ export async function sdkRoutes(fastify: FastifyInstance) {
 
       if (templateSlug) {
         query = `
-          SELECT l.* ${ownerSuspensionColumn} FROM links l
+          SELECT l.*, t.settings AS template_settings, o.settings AS org_settings
+                 ${ownerSuspensionColumn}
+          FROM links l
           LEFT JOIN link_templates t ON l.template_id = t.id
           LEFT JOIN organizations o ON l.organization_id = o.id
           WHERE l.short_code = $1 AND t.slug = $2
@@ -478,10 +490,13 @@ export async function sdkRoutes(fastify: FastifyInstance) {
         params = [shortCode, templateSlug];
       } else {
         query = `
-          SELECT l.* ${ownerSuspensionColumn} FROM links l
+          SELECT l.*, t.settings AS template_settings, o.settings AS org_settings
+                 ${ownerSuspensionColumn}
+          FROM links l
+          LEFT JOIN link_templates t ON l.template_id = t.id
           LEFT JOIN organizations o ON l.organization_id = o.id
           WHERE l.short_code = $1 AND l.is_active = true
-          AND (expires_at IS NULL OR expires_at > NOW())
+          AND (l.expires_at IS NULL OR l.expires_at > NOW())
         `;
         params = [shortCode];
       }

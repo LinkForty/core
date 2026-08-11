@@ -62,9 +62,13 @@ function mockDb() {
   query.mockImplementation(async (sql: string) => {
     if (/information_schema\.columns/i.test(sql)) return { rows: [{ x: 1 }], rowCount: 1 };
     if (/FROM links/i.test(sql)) {
-      const selectsOwner = /owner_suspended_at/i.test(sql);
+      // The row's shape follows the SELECT, exactly as Postgres would: a column is
+      // present only if the query asked for it. That is what makes these real
+      // reproductions rather than restatements of the fix.
       const r: Record<string, unknown> = row();
-      if (!selectsOwner) delete r.owner_suspended_at;
+      if (!/owner_suspended_at/i.test(sql)) delete r.owner_suspended_at;
+      if (!/template_settings/i.test(sql)) delete r.template_settings;
+      if (!/org_settings/i.test(sql)) delete r.org_settings;
       return { rows: [r], rowCount: 1 };
     }
     return { rows: [], rowCount: 0 };
@@ -124,5 +128,49 @@ describe('owner restriction cannot be bypassed through the SDK cache', () => {
     const res = await sdkApp.inject({ method: 'GET', url: '/api/sdk/v1/resolve/abc123' });
     expect(res.statusCode).toBe(404);
     expect(res.body).not.toContain('example.com/landing');
+  });
+});
+
+
+/**
+ * The same cache-shape divergence, one field over.
+ *
+ * The redirect reads `template_settings` and `org_settings` from this shared key for
+ * its URL fallback chain (link, then template, then workspace). While the SDK query
+ * omitted them, an SDK resolve left the next redirect unable to see a template-level
+ * fallback, so a link relying on one silently fell through to `original_url`.
+ */
+describe('the URL fallback chain survives an SDK resolve', () => {
+  /** No link-level web fallback; the destination lives on the template. */
+  function templateFallbackRow() {
+    return {
+      ...row({ owner_suspended_at: null }),
+      original_url: 'https://example.com/ORIGINAL',
+      web_fallback_url: null,
+      template_settings: { defaultWebFallbackUrl: 'https://cdn.example.com/template-default' },
+      org_settings: null,
+    };
+  }
+
+  beforeEach(() => {
+    query.mockReset();
+    query.mockImplementation(async (sql: string) => {
+      if (/information_schema\.columns/i.test(sql)) return { rows: [{ x: 1 }], rowCount: 1 };
+      if (/FROM links/i.test(sql)) {
+        const r: Record<string, unknown> = templateFallbackRow();
+        if (!/owner_suspended_at/i.test(sql)) delete r.owner_suspended_at;
+        if (!/template_settings/i.test(sql)) delete r.template_settings;
+        if (!/org_settings/i.test(sql)) delete r.org_settings;
+        return { rows: [r], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+  });
+
+  it('caches template_settings whichever path writes the key', async () => {
+    await sdkApp.inject({ method: 'GET', url: '/api/sdk/v1/resolve/abc123' });
+    const cached = JSON.parse(redis.store.get('link:abc123')!);
+    expect(Object.prototype.hasOwnProperty.call(cached, 'template_settings')).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(cached, 'org_settings')).toBe(true);
   });
 });

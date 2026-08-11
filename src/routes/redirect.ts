@@ -178,7 +178,7 @@ export async function redirectRoutes(
    * A probe failure is treated as "unsupported", so it can never take the redirect
    * path down.
    */
-const resolveOwnerSuspensionSelect = createOwnerSuspensionSelect({
+  const resolveOwnerSuspensionSelect = createOwnerSuspensionSelect({
     query: (sql) => db.query(sql),
     onSupported: () =>
       fastify.log.info('Redirect: owner restriction supported (organizations.suspended_at present)'),
