@@ -244,6 +244,45 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
       END $$;
     `);
 
+    // Link safety states.
+    //
+    // `is_active = false` already removes a link from resolution entirely. These
+    // add a softer state and an explanation:
+    //
+    //   warn_at         — resolve to an interstitial warning instead of a 302, so a
+    //                     visitor sees the destination and chooses. Useful when a
+    //                     link is suspected rather than confirmed unsafe, since a
+    //                     hard block on a false positive takes a legitimate link
+    //                     offline with no recourse for the visitor.
+    //   disabled_at     — when the link was taken out of resolution.
+    //   disabled_reason — why, so the decision can be explained or reversed later.
+    //
+    // All nullable and additive: an existing deployment that sets none of them
+    // behaves exactly as before.
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='warn_at'
+        ) THEN
+          ALTER TABLE links ADD COLUMN warn_at TIMESTAMPTZ;
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='disabled_at'
+        ) THEN
+          ALTER TABLE links ADD COLUMN disabled_at TIMESTAMPTZ;
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='disabled_reason'
+        ) THEN
+          ALTER TABLE links ADD COLUMN disabled_reason TEXT;
+        END IF;
+      END $$;
+    `);
+
     // Add description column to existing links table if it doesn't exist
     await client.query(`
       DO $$

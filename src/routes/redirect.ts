@@ -6,6 +6,7 @@ import { parseUserAgent, getLocationFromIP, buildRedirectUrl, detectDevice } fro
 import { storeFingerprintForClick, type FingerprintData } from '../lib/fingerprint.js';
 import { emitClickEvent } from '../lib/event-emitter.js';
 import { classifyBot, edgeBotSignal } from '../lib/bot-detection.js';
+import { evaluateLinkSafety, generateWarningLinkHTML } from '../lib/link-safety.js';
 
 /**
  * Detect iOS in-app browsers where Universal Links don't fire.
@@ -136,7 +137,55 @@ function generateInterstitialHTML(schemeUrl: string, fallbackUrl: string, title?
 </body></html>`;
 }
 
-export async function redirectRoutes(fastify: FastifyInstance) {
+export interface RedirectRouteOptions {
+  /**
+   * Absolute URL of an abuse-reporting page. When set, the interstitial warning
+   * page links to it. Optional — deployments without one simply omit the link.
+   */
+  abuseReportUrl?: string;
+}
+
+/**
+ * Owner-restriction support is detected rather than assumed.
+ *
+ * This package does not own the `organizations` table (it only LEFT JOINs it for
+ * settings), so `organizations.suspended_at` may or may not exist. Probing once
+ * and building the SELECT accordingly keeps a deployment that does not model
+ * owner restriction working byte-for-byte as before, instead of failing every
+ * redirect on a missing column.
+ *
+ * Probed lazily on first use — at registration time the database may not be
+ * reachable yet. Failure is treated as "not supported", so a probe error can
+ * never take the redirect path down.
+ */
+let ownerSuspensionSelect: string | null = null;
+
+async function resolveOwnerSuspensionSelect(fastify: FastifyInstance): Promise<string> {
+  if (ownerSuspensionSelect !== null) return ownerSuspensionSelect;
+  try {
+    const probe = await db.query(
+      `SELECT 1 FROM information_schema.columns
+       WHERE table_name = 'organizations' AND column_name = 'suspended_at'`
+    );
+    ownerSuspensionSelect = probe.rows.length > 0 ? ', o.suspended_at AS owner_suspended_at' : '';
+    if (ownerSuspensionSelect) {
+      fastify.log.info('Redirect: owner restriction supported (organizations.suspended_at present)');
+    }
+  } catch {
+    ownerSuspensionSelect = '';
+  }
+  return ownerSuspensionSelect;
+}
+
+/** Reset the cached probe result. Exported for tests. */
+export function resetOwnerSuspensionProbe(): void {
+  ownerSuspensionSelect = null;
+}
+
+export async function redirectRoutes(
+  fastify: FastifyInstance,
+  options: RedirectRouteOptions = {}
+) {
   // Helper function to handle the actual redirect logic
   async function handleRedirect(request: any, reply: any, shortCode: string, templateSlug?: string) {
     let linkData: string | null = null;
@@ -158,16 +207,18 @@ export async function redirectRoutes(fastify: FastifyInstance) {
       let query: string;
       let params: any[];
 
+      const ownerSuspensionColumn = await resolveOwnerSuspensionSelect(fastify);
+
       if (templateSlug) {
         // Template-based URL: verify both template and link match
         // Also fetch template settings and org settings for URL fallback chain
         query = `
           SELECT l.*, t.settings AS template_settings, o.settings AS org_settings
+                 ${ownerSuspensionColumn}
           FROM links l
           LEFT JOIN link_templates t ON l.template_id = t.id
           LEFT JOIN organizations o ON l.organization_id = o.id
           WHERE l.short_code = $1 AND t.slug = $2
-          AND l.is_active = true
           AND (l.expires_at IS NULL OR l.expires_at > NOW())
         `;
         params = [shortCode, templateSlug];
@@ -176,10 +227,11 @@ export async function redirectRoutes(fastify: FastifyInstance) {
         // Also fetch template settings and org settings for URL fallback chain
         query = `
           SELECT l.*, t.settings AS template_settings, o.settings AS org_settings
+                 ${ownerSuspensionColumn}
           FROM links l
           LEFT JOIN link_templates t ON l.template_id = t.id
           LEFT JOIN organizations o ON l.organization_id = o.id
-          WHERE l.short_code = $1 AND l.is_active = true
+          WHERE l.short_code = $1
           AND (l.expires_at IS NULL OR l.expires_at > NOW())
         `;
         params = [shortCode];
@@ -204,6 +256,35 @@ export async function redirectRoutes(fastify: FastifyInstance) {
     }
 
     const link = JSON.parse(linkData);
+
+    // Safety gate. Applied AFTER the cache read on purpose: resolved links are
+    // cached for 5 minutes, so evaluating only on the database path would keep a
+    // just-disabled link redirecting for up to the whole TTL. `is_active` is no
+    // longer filtered in SQL for the same reason — it is now evaluated here so a
+    // cached row cannot outlive a change to it.
+    const safety = evaluateLinkSafety({
+      isActive: link.is_active,
+      warnAt: link.warn_at,
+      ownerSuspendedAt: link.owner_suspended_at,
+    });
+
+    if (safety === 'block') {
+      // Same response as an unknown code — see evaluateLinkSafety for why.
+      return reply.status(404).send({ error: 'Link not found' });
+    }
+
+    if (safety === 'warn') {
+      // No click is recorded here. A warning view is not a click on the link, and
+      // counting it would silently inflate the owner's analytics.
+      const destination =
+        link.original_url || link.web_fallback_url || link.deep_link_path || '';
+      return reply
+        .status(200)
+        .header('X-Robots-Tag', 'noindex, nofollow')
+        .header('Cache-Control', 'no-store')
+        .type('text/html')
+        .send(generateWarningLinkHTML(destination, { reportUrl: options?.abuseReportUrl }));
+    }
 
     // Check targeting rules BEFORE redirecting
     if (link.targeting_rules) {

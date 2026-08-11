@@ -78,6 +78,7 @@ export * from './lib/client-ip.js';
 export * from './lib/database.js';
 export * from './lib/fingerprint.js';
 export * from './lib/webhook.js';
+export * from './lib/link-safety.js';
 export * from './lib/event-emitter.js';
 export * from './types/index.js';
 export { redirectRoutes, linkRoutes, analyticsRoutes, sdkRoutes, webhookRoutes, templateRoutes, qrRoutes, previewRoutes, debugRoutes, wellKnownRoutes, healthRoutes } from './routes/index.js';
