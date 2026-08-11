@@ -152,9 +152,15 @@ export async function redirectRoutes(
   /**
    * Owner-restriction support is detected rather than assumed.
    *
-   * This package does not own the `organizations` table, so
-   * `organizations.suspended_at` may or may not exist. Probing once and building
-   * the SELECT accordingly avoids failing every redirect on a missing column.
+   * The redirect query joins `organizations` for settings, and that table is now
+   * created by this package (#35) — before that fix a stock self-hosted install
+   * 500'd on every redirect with 42P01, which made this probe's guarantee hollow:
+   * it guarded the column while the table itself was missing.
+   *
+   * The column still needs probing separately, because `suspended_at` is added by
+   * downstream consumers that model owner restriction rather than by this package.
+   * Probing once and building the SELECT accordingly avoids failing every redirect
+   * on a missing column.
    *
    * Scoped to this registration rather than the module: module-level state would
    * be shared by every createServer() in the process, so two servers pointed at
