@@ -1,3 +1,9 @@
+## <small>1.20.1 (2026-08-11)</small>
+
+* fix(docker): create the organizations table core's redirect depends on (#38) ([d7410fb](https://github.com/LinkForty/core/commit/d7410fb)), closes [#38](https://github.com/LinkForty/core/issues/38) [#35](https://github.com/LinkForty/core/issues/35)
+* ci: point the CLA action at a branch that exists (#39) ([a3b2415](https://github.com/LinkForty/core/commit/a3b2415)), closes [#39](https://github.com/LinkForty/core/issues/39) [#34](https://github.com/LinkForty/core/issues/34) [#36](https://github.com/LinkForty/core/issues/36) [#37](https://github.com/LinkForty/core/issues/37) [#38](https://github.com/LinkForty/core/issues/38)
+* chore: remove unused backfill scripts (bot-flags, attribution) (#33) ([5b8b047](https://github.com/LinkForty/core/commit/5b8b047)), closes [#33](https://github.com/LinkForty/core/issues/33)
+
 ## 1.20.0 (2026-07-01)
 
 * feat: record install attribution method and matched signals (#32) ([b82dce4](https://github.com/LinkForty/core/commit/b82dce4)), closes [#32](https://github.com/LinkForty/core/issues/32)
