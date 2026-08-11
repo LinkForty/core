@@ -155,3 +155,43 @@ export function generateWarningLinkHTML(
 </body>
 </html>`;
 }
+
+/**
+ * Build a memoised probe for owner-restriction support.
+ *
+ * A factory rather than module state: each registration gets its own, so two servers
+ * in one process pointed at different databases cannot share an answer, and no
+ * test-only reset has to be exported.
+ *
+ * Shared by every path that resolves a link and caches the result, and that sharing
+ * is the whole point. The redirect and the SDK resolve endpoint write the SAME Redis
+ * key, so if one selects `owner_suspended_at` and the other does not, the second
+ * silently caches a row that makes the first one's gate pass. Keeping the SELECT
+ * fragment in one place is what stops them drifting apart again.
+ *
+ * The in-flight promise is memoised, not just the result, so concurrent cold requests
+ * issue one probe. A failure resolves to "unsupported", so a probe error can never
+ * take a resolution path down.
+ */
+export function createOwnerSuspensionSelect(deps: {
+  query: (sql: string) => Promise<{ rows: unknown[] }>;
+  onSupported?: () => void;
+}): () => Promise<string> {
+  let probe: Promise<string> | null = null;
+  return () => {
+    if (!probe) {
+      probe = deps
+        .query(
+          `SELECT 1 FROM information_schema.columns
+           WHERE table_name = 'organizations' AND column_name = 'suspended_at'`
+        )
+        .then((r) => {
+          const supported = r.rows.length > 0;
+          if (supported) deps.onSupported?.();
+          return supported ? ', o.suspended_at AS owner_suspended_at' : '';
+        })
+        .catch(() => '');
+    }
+    return probe;
+  };
+}

@@ -6,7 +6,11 @@ import { parseUserAgent, getLocationFromIP, buildRedirectUrl, detectDevice } fro
 import { storeFingerprintForClick, type FingerprintData } from '../lib/fingerprint.js';
 import { emitClickEvent } from '../lib/event-emitter.js';
 import { classifyBot, edgeBotSignal } from '../lib/bot-detection.js';
-import { evaluateLinkSafety, generateWarningLinkHTML } from '../lib/link-safety.js';
+import {
+  evaluateLinkSafety,
+  generateWarningLinkHTML,
+  createOwnerSuspensionSelect,
+} from '../lib/link-safety.js';
 
 /**
  * Detect iOS in-app browsers where Universal Links don't fire.
@@ -174,28 +178,11 @@ export async function redirectRoutes(
    * A probe failure is treated as "unsupported", so it can never take the redirect
    * path down.
    */
-  let ownerSuspensionProbe: Promise<string> | null = null;
-
-  const resolveOwnerSuspensionSelect = (): Promise<string> => {
-    if (!ownerSuspensionProbe) {
-      ownerSuspensionProbe = db
-        .query(
-          `SELECT 1 FROM information_schema.columns
-           WHERE table_name = 'organizations' AND column_name = 'suspended_at'`
-        )
-        .then((probe) => {
-          const supported = probe.rows.length > 0;
-          if (supported) {
-            fastify.log.info(
-              'Redirect: owner restriction supported (organizations.suspended_at present)'
-            );
-          }
-          return supported ? ', o.suspended_at AS owner_suspended_at' : '';
-        })
-        .catch(() => '');
-    }
-    return ownerSuspensionProbe;
-  };
+const resolveOwnerSuspensionSelect = createOwnerSuspensionSelect({
+    query: (sql) => db.query(sql),
+    onSupported: () =>
+      fastify.log.info('Redirect: owner restriction supported (organizations.suspended_at present)'),
+  });
   // Helper function to handle the actual redirect logic
   async function handleRedirect(request: any, reply: any, shortCode: string, templateSlug?: string) {
     let linkData: string | null = null;
