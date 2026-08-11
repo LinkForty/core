@@ -6,6 +6,11 @@ import { parseUserAgent, getLocationFromIP, buildRedirectUrl, detectDevice } fro
 import { storeFingerprintForClick, type FingerprintData } from '../lib/fingerprint.js';
 import { emitClickEvent } from '../lib/event-emitter.js';
 import { classifyBot, edgeBotSignal } from '../lib/bot-detection.js';
+import {
+  evaluateLinkSafety,
+  generateWarningLinkHTML,
+  createOwnerSuspensionSelect,
+} from '../lib/link-safety.js';
 
 /**
  * Detect iOS in-app browsers where Universal Links don't fire.
@@ -136,7 +141,48 @@ function generateInterstitialHTML(schemeUrl: string, fallbackUrl: string, title?
 </body></html>`;
 }
 
-export async function redirectRoutes(fastify: FastifyInstance) {
+export interface RedirectRouteOptions {
+  /**
+   * Absolute URL of an abuse-reporting page. When set, the interstitial warning
+   * page links to it. Optional — deployments without one simply omit the link.
+   */
+  abuseReportUrl?: string;
+}
+
+export async function redirectRoutes(
+  fastify: FastifyInstance,
+  options: RedirectRouteOptions = {}
+) {
+  /**
+   * Owner-restriction support is detected rather than assumed.
+   *
+   * The redirect query joins `organizations` for settings, and that table is now
+   * created by this package (#35) — before that fix a stock self-hosted install
+   * 500'd on every redirect with 42P01, which made this probe's guarantee hollow:
+   * it guarded the column while the table itself was missing.
+   *
+   * The column still needs probing separately, because `suspended_at` is added by
+   * downstream consumers that model owner restriction rather than by this package.
+   * Probing once and building the SELECT accordingly avoids failing every redirect
+   * on a missing column.
+   *
+   * Scoped to this registration rather than the module: module-level state would
+   * be shared by every createServer() in the process, so two servers pointed at
+   * different databases would share whichever answer landed first — and it forced
+   * a test-only reset export onto the package's public API.
+   *
+   * The in-flight promise is memoised, not just its result, so N concurrent cold
+   * requests issue one probe rather than N.
+   *
+   * Probed lazily because the database may not be reachable at registration time.
+   * A probe failure is treated as "unsupported", so it can never take the redirect
+   * path down.
+   */
+  const resolveOwnerSuspensionSelect = createOwnerSuspensionSelect({
+    query: (sql) => db.query(sql),
+    onSupported: () =>
+      fastify.log.info('Redirect: owner restriction supported (organizations.suspended_at present)'),
+  });
   // Helper function to handle the actual redirect logic
   async function handleRedirect(request: any, reply: any, shortCode: string, templateSlug?: string) {
     let linkData: string | null = null;
@@ -158,11 +204,14 @@ export async function redirectRoutes(fastify: FastifyInstance) {
       let query: string;
       let params: any[];
 
+      const ownerSuspensionColumn = await resolveOwnerSuspensionSelect();
+
       if (templateSlug) {
         // Template-based URL: verify both template and link match
         // Also fetch template settings and org settings for URL fallback chain
         query = `
           SELECT l.*, t.settings AS template_settings, o.settings AS org_settings
+                 ${ownerSuspensionColumn}
           FROM links l
           LEFT JOIN link_templates t ON l.template_id = t.id
           LEFT JOIN organizations o ON l.organization_id = o.id
@@ -176,6 +225,7 @@ export async function redirectRoutes(fastify: FastifyInstance) {
         // Also fetch template settings and org settings for URL fallback chain
         query = `
           SELECT l.*, t.settings AS template_settings, o.settings AS org_settings
+                 ${ownerSuspensionColumn}
           FROM links l
           LEFT JOIN link_templates t ON l.template_id = t.id
           LEFT JOIN organizations o ON l.organization_id = o.id
@@ -204,6 +254,42 @@ export async function redirectRoutes(fastify: FastifyInstance) {
     }
 
     const link = JSON.parse(linkData);
+
+    // Safety gate, applied after the cache read so it covers cached rows too.
+    //
+    // It does NOT close the stale-cache window on its own, and an earlier version
+    // of this comment wrongly claimed it did: a cached row carries the value of
+    // `is_active` as at cache time, so reading it here sees the same stale `true`
+    // the old code did. Staleness is handled by invalidateLinkResolutionCache(),
+    // called when a link is updated or deleted.
+    //
+    // `is_active` therefore stays filtered in SQL — an inactive link never needs
+    // fetching or caching. What genuinely cannot be expressed in the WHERE clause
+    // is `warn_at`, which needs the row in hand to choose between redirecting and
+    // serving an interstitial.
+    const safety = evaluateLinkSafety({
+      isActive: link.is_active,
+      warnAt: link.warn_at,
+      ownerSuspendedAt: link.owner_suspended_at,
+    });
+
+    if (safety === 'block') {
+      // Same response as an unknown code — see evaluateLinkSafety for why.
+      return reply.status(404).send({ error: 'Link not found' });
+    }
+
+    if (safety === 'warn') {
+      // No click is recorded here. A warning view is not a click on the link, and
+      // counting it would silently inflate the owner's analytics.
+      const destination =
+        link.original_url || link.web_fallback_url || link.deep_link_path || '';
+      return reply
+        .status(200)
+        .header('X-Robots-Tag', 'noindex, nofollow')
+        .header('Cache-Control', 'no-store')
+        .type('text/html')
+        .send(generateWarningLinkHTML(destination, { reportUrl: options?.abuseReportUrl }));
+    }
 
     // Check targeting rules BEFORE redirecting
     if (link.targeting_rules) {

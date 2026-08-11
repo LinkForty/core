@@ -9,6 +9,7 @@ import {
   type FingerprintData,
 } from '../lib/fingerprint.js';
 import { triggerWebhooks } from '../lib/webhook.js';
+import { evaluateLinkSafety, createOwnerSuspensionSelect } from '../lib/link-safety.js';
 import { parseUserAgent, getLocationFromIP, detectDevice } from '../lib/utils.js';
 import { emitClickEvent } from '../lib/event-emitter.js';
 import { classifyBot, edgeBotSignal } from '../lib/bot-detection.js';
@@ -429,6 +430,32 @@ export async function sdkRoutes(fastify: FastifyInstance) {
    * - customParameters: Custom deep link parameters (key-value pairs)
    * - clickedAt: Timestamp of this resolution
    */
+  /**
+   * Same probe the redirect uses, from the same factory.
+   *
+   * This endpoint writes the SAME Redis key as the redirect, so it must select the
+   * same columns — `owner_suspended_at`, `template_settings` and `org_settings`.
+   *
+   * Selecting fewer is not a cosmetic difference, because whichever path populates
+   * the key decides what the OTHER path can see:
+   *
+   *   - omitting `owner_suspended_at` meant the redirect read `undefined`, its gate
+   *     treated that as "not restricted", and a restricted owner's links resolved
+   *     for the rest of the TTL. Public and unauthenticated, so that was triggerable
+   *     on demand as well as by accident;
+   *   - omitting the two `settings` columns silently breaks the redirect's URL
+   *     fallback chain (link, then template, then workspace), so a link relying on a
+   *     template-level `web_fallback_url` falls through to `original_url` instead.
+   *
+   * Neither is visible from this file alone, which is why the SELECT fragment comes
+   * from one shared factory and this list is kept deliberately in step.
+   */
+  const resolveOwnerSuspensionSelect = createOwnerSuspensionSelect({
+    query: (sql) => db.query(sql),
+    onSupported: () =>
+      fastify.log.info('SDK resolve: owner restriction supported (organizations.suspended_at present)'),
+  });
+
   async function handleResolve(request: any, reply: any, shortCode: string, templateSlug?: string) {
     let linkData: string | null = null;
 
@@ -445,13 +472,17 @@ export async function sdkRoutes(fastify: FastifyInstance) {
     }
 
     if (!linkData) {
+      const ownerSuspensionColumn = await resolveOwnerSuspensionSelect();
       let query: string;
       let params: any[];
 
       if (templateSlug) {
         query = `
-          SELECT l.* FROM links l
+          SELECT l.*, t.settings AS template_settings, o.settings AS org_settings
+                 ${ownerSuspensionColumn}
+          FROM links l
           LEFT JOIN link_templates t ON l.template_id = t.id
+          LEFT JOIN organizations o ON l.organization_id = o.id
           WHERE l.short_code = $1 AND t.slug = $2
           AND l.is_active = true
           AND (l.expires_at IS NULL OR l.expires_at > NOW())
@@ -459,9 +490,13 @@ export async function sdkRoutes(fastify: FastifyInstance) {
         params = [shortCode, templateSlug];
       } else {
         query = `
-          SELECT * FROM links
-          WHERE short_code = $1 AND is_active = true
-          AND (expires_at IS NULL OR expires_at > NOW())
+          SELECT l.*, t.settings AS template_settings, o.settings AS org_settings
+                 ${ownerSuspensionColumn}
+          FROM links l
+          LEFT JOIN link_templates t ON l.template_id = t.id
+          LEFT JOIN organizations o ON l.organization_id = o.id
+          WHERE l.short_code = $1 AND l.is_active = true
+          AND (l.expires_at IS NULL OR l.expires_at > NOW())
         `;
         params = [shortCode];
       }
@@ -485,6 +520,30 @@ export async function sdkRoutes(fastify: FastifyInstance) {
     }
 
     const link = JSON.parse(linkData);
+
+    /**
+     * Same safety gate the redirect applies, evaluated after the cache read so it
+     * covers cached rows too.
+     *
+     * Without this, a link whose owner is restricted still resolved here — and this
+     * endpoint hands back the destination and deep-link data directly, which is
+     * precisely the information the redirect refuses to disclose. The redirect's
+     * guarantee is only as strong as the weakest path that resolves a short code.
+     *
+     * A `warn` outcome deliberately still resolves. The interstitial is a browser
+     * affordance an app cannot render, and refusing to resolve on mere suspicion
+     * would break legitimate apps for a signal that is not a confirmation. `block`
+     * is the outcome that means unreachable, and it is enforced here.
+     */
+    const safety = evaluateLinkSafety({
+      isActive: link.is_active,
+      warnAt: link.warn_at,
+      ownerSuspendedAt: link.owner_suspended_at,
+    });
+    if (safety === 'block') {
+      // Same response as an unknown short code, and no click recorded.
+      return reply.status(404).send({ error: 'Link not found' });
+    }
 
     // Record click event + fingerprint asynchronously (mirrors redirect.ts pattern)
     setImmediate(async () => {
