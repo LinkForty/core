@@ -51,6 +51,29 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
   const client = await connectWithRetry();
 
   try {
+    // Organizations table (must be created before links, which references it).
+    //
+    // The redirect path LEFT JOINs this table to read `settings.appConfig`, which
+    // is the last link in the iOS/Android/web URL fallback chain (link → template
+    // → organization). Core therefore *depends* on the table existing even though
+    // richer deployments own the real one: without it every redirect fails with
+    // `relation "organizations" does not exist` (issue #35).
+    //
+    // Deliberately minimal — id and settings are all the redirect reads, plus
+    // suspended_at for the owner-restriction gate. CREATE TABLE IF NOT EXISTS is a
+    // no-op against a deployment that already ships a fuller organizations table,
+    // so this cannot clobber one.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS organizations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR(255),
+        settings JSONB DEFAULT '{}',
+        suspended_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
     // Link templates table (must be created before links, which references it)
     await client.query(`
       CREATE TABLE IF NOT EXISTS link_templates (
@@ -188,6 +211,24 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       )
+    `);
+
+    // Add organization_id column to links table.
+    //
+    // The redirect join is `ON l.organization_id = o.id`, so the column is as
+    // load-bearing as the table itself. Nullable and unset by default: a core
+    // deployment that never populates it simply gets NULL org_settings and the
+    // fallback chain stops at the template level, exactly as before.
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='organization_id'
+        ) THEN
+          ALTER TABLE links ADD COLUMN organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL;
+        END IF;
+      END $$;
     `);
 
     // Add template_id column to links table
@@ -496,6 +537,7 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_link_templates_slug ON link_templates(slug)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_link_templates_user_id ON link_templates(user_id)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_links_template_id ON links(template_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_links_organization_id ON links(organization_id)');
 
     // Indexes for webhooks
     await client.query('CREATE INDEX IF NOT EXISTS idx_webhooks_user_id ON webhooks(user_id)');

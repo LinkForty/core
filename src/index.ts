@@ -10,6 +10,7 @@ import { webhookRoutes } from './routes/webhooks.js';
 import { templateRoutes } from './routes/templates.js';
 import { qrRoutes } from './routes/qr.js';
 import { wellKnownRoutes } from './routes/well-known.js';
+import { healthRoutes } from './routes/health.js';
 
 /**
  * Configuration options for creating a LinkForty server instance.
@@ -58,6 +59,7 @@ export async function createServer(options: ServerOptions = {}) {
   await initializeDatabase(options.database);
 
   // Routes
+  await fastify.register(healthRoutes);
   await fastify.register(wellKnownRoutes);
   await fastify.register(redirectRoutes);
   await fastify.register(linkRoutes);
@@ -78,4 +80,4 @@ export * from './lib/fingerprint.js';
 export * from './lib/webhook.js';
 export * from './lib/event-emitter.js';
 export * from './types/index.js';
-export { redirectRoutes, linkRoutes, analyticsRoutes, sdkRoutes, webhookRoutes, templateRoutes, qrRoutes, previewRoutes, debugRoutes, wellKnownRoutes } from './routes/index.js';
+export { redirectRoutes, linkRoutes, analyticsRoutes, sdkRoutes, webhookRoutes, templateRoutes, qrRoutes, previewRoutes, debugRoutes, wellKnownRoutes, healthRoutes } from './routes/index.js';
