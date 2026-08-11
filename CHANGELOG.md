@@ -1,3 +1,9 @@
+## 1.21.0 (2026-08-11)
+
+* feat(redirect): link safety states and owner-restriction gate (#37) ([d6fb21d](https://github.com/LinkForty/core/commit/d6fb21d)), closes [#37](https://github.com/LinkForty/core/issues/37)
+* @onamfc has signed the CLA in LinkForty/core#37 ([b25ffa1](https://github.com/LinkForty/core/commit/b25ffa1)), closes [LinkForty/core#37](https://github.com/LinkForty/core/issues/37)
+* ci: seed the CLA signature file so the action can read it (#40) ([a84d1bb](https://github.com/LinkForty/core/commit/a84d1bb)), closes [#40](https://github.com/LinkForty/core/issues/40) [#39](https://github.com/LinkForty/core/issues/39)
+
 ## <small>1.20.1 (2026-08-11)</small>
 
 * fix(docker): create the organizations table core's redirect depends on (#38) ([d7410fb](https://github.com/LinkForty/core/commit/d7410fb)), closes [#38](https://github.com/LinkForty/core/issues/38) [#35](https://github.com/LinkForty/core/issues/35)
