@@ -271,6 +271,13 @@ GET  /api/sdk/v1/resolve/:shortCode    # Resolve link to deep link data (no redi
 GET  /api/sdk/v1/health                # Health check
 ```
 
+### Health
+
+```bash
+GET  /health                           # Liveness — process is up (no DB access)
+GET  /health/ready                     # Readiness — 503 if the database is unreachable
+```
+
 ### Debug & Testing
 
 ```bash

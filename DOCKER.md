@@ -149,7 +149,24 @@ docker run --rm -v linkforty_postgres_data:/data -v $(pwd):/backup alpine \
 
 ### Health Checks
 
-The LinkForty container includes a built-in health check:
+The server exposes two endpoints:
+
+| Endpoint        | Checks                              | Use for                                    |
+|-----------------|-------------------------------------|--------------------------------------------|
+| `/health`       | Process is up. Never touches the DB | Liveness probes — a DB blip won't restart you |
+| `/health/ready` | Database reachable (+ Redis status) | Readiness probes, load balancer draining   |
+
+`/health/ready` returns `503` when the database is unreachable:
+
+```bash
+curl -s localhost:3000/health/ready
+# {"status":"ok","checks":{"database":"ok","redis":"ok"}}
+```
+
+Redis is an optional cache with database fallback, so a Redis failure is reported
+in `checks` but does not make the instance unready.
+
+The container's built-in `HEALTHCHECK` targets `/health/ready`:
 
 ```bash
 # Check container health
