@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { db } from './database.js';
+import { toDeepLinkPayload, type DeepLinkPayload } from './deep-link-payload.js';
 
 /**
  * Device fingerprint data structure
@@ -393,7 +394,7 @@ export async function recordInstallEvent(
 ): Promise<{
   installId: string;
   match: FingerprintMatch | null;
-  deepLinkData: any;
+  deepLinkData: DeepLinkPayload | null;
 }> {
   const fingerprintHash = generateFingerprintHash(fingerprintData);
 
@@ -456,14 +457,22 @@ export async function recordInstallEvent(
   );
 
   const installId = installResult.rows[0].id;
-  let deepLinkData = {};
+
+  // Organic installs carry no deep link. This is null rather than `{}` because
+  // an empty object is not a deep link: SDKs decode this field into a model with
+  // a required short code, so `{}` fails to decode and takes the whole install
+  // response — and with it SDK initialization — down with it.
+  let deepLinkData: DeepLinkPayload | null = null;
 
   // If we have a match, retrieve the deep link data from the original link
   if (match) {
     const linkResult = await db.query(
       `SELECT
+         id,
          short_code,
          original_url,
+         deep_link_path,
+         app_scheme,
          ios_app_store_url,
          android_app_store_url,
          web_fallback_url,
@@ -477,19 +486,13 @@ export async function recordInstallEvent(
 
     if (linkResult.rows.length > 0) {
       const link = linkResult.rows[0];
-      deepLinkData = {
-        shortCode: link.short_code,
-        originalUrl: link.original_url,
-        iosUrl: link.ios_app_store_url,
-        androidUrl: link.android_app_store_url,
-        webFallbackUrl: link.web_fallback_url,
-        utmParameters: link.utm_parameters,
-        targetingRules: link.targeting_rules,
-        deepLinkParameters: link.deep_link_parameters,
+      deepLinkData = toDeepLinkPayload(link, {
         clickedAt: match.clickedAt,
+        isDeferred: true,
         confidenceScore: match.confidenceScore,
         matchedFactors: match.matchedFactors,
-      };
+        legacyInstallKeys: true,
+      });
 
       // Update the install event with deep link data
       await db.query(
