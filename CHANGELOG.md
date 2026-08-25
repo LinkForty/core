@@ -1,3 +1,7 @@
+## 1.22.0 (2026-08-25)
+
+* feat(sdk): project install and resolve deep links through one shape (SIT-349) (#41) ([b7b00ad](https://github.com/LinkForty/core/commit/b7b00ad)), closes [#41](https://github.com/LinkForty/core/issues/41)
+
 ## 1.21.0 (2026-08-11)
 
 * feat(redirect): link safety states and owner-restriction gate (#37) ([d6fb21d](https://github.com/LinkForty/core/commit/d6fb21d)), closes [#37](https://github.com/LinkForty/core/issues/37)
