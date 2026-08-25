@@ -321,7 +321,9 @@ describe('recordInstallEvent', () => {
 
     expect(result.installId).toBe('install-123');
     expect(result.match).toBeNull();
-    expect(result.deepLinkData).toEqual({});
+    // Null, not `{}` — an SDK decodes this field into a model with a required
+    // short code, so an empty object fails to decode the whole response.
+    expect(result.deepLinkData).toBeNull();
 
     expect(mockDbQuery).toHaveBeenCalledTimes(2);
     expect(mockDbQuery).toHaveBeenLastCalledWith(

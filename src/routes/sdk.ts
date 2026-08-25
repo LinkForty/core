@@ -8,6 +8,7 @@ import {
   storeFingerprintForClick,
   type FingerprintData,
 } from '../lib/fingerprint.js';
+import { toDeepLinkPayload } from '../lib/deep-link-payload.js';
 import { triggerWebhooks } from '../lib/webhook.js';
 import { evaluateLinkSafety, createOwnerSuspensionSelect } from '../lib/link-safety.js';
 import { parseUserAgent, getLocationFromIP, detectDevice } from '../lib/utils.js';
@@ -679,19 +680,15 @@ export async function sdkRoutes(fastify: FastifyInstance) {
       }
     });
 
-    // Return JSON response with deep link data
-    return reply.status(200).send({
-      shortCode: link.short_code,
-      linkId: link.id,
-      deepLinkPath: link.deep_link_path || undefined,
-      appScheme: link.app_scheme || undefined,
-      iosUrl: link.ios_app_store_url || undefined,
-      androidUrl: link.android_app_store_url || undefined,
-      webUrl: link.web_fallback_url || undefined,
-      utmParameters: link.utm_parameters || undefined,
-      customParameters: link.deep_link_parameters || undefined,
-      clickedAt: new Date().toISOString(),
-    });
+    // Return JSON response with deep link data. Same projection the install
+    // endpoint uses, so a direct open and a deferred one describe a link to the
+    // SDK identically.
+    return reply.status(200).send(
+      toDeepLinkPayload(link, {
+        clickedAt: new Date().toISOString(),
+        isDeferred: false,
+      })
+    );
   }
 
   fastify.get('/api/sdk/v1/resolve/:shortCode', async (request, reply) => {
