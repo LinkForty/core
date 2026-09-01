@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { FastifyInstance } from 'fastify';
 import { db } from '../lib/database.js';
 import { getClientIp } from '../lib/client-ip.js';
-import { parseUserAgent, getLocationFromIP, buildRedirectUrl, detectDevice } from '../lib/utils.js';
+import { parseUserAgent, getLocationFromIP, buildRedirectUrl, detectDevice, resolveClickUtms } from '../lib/utils.js';
 import { storeFingerprintForClick, type FingerprintData } from '../lib/fingerprint.js';
 import { emitClickEvent } from '../lib/event-emitter.js';
 import { classifyBot, edgeBotSignal } from '../lib/bot-detection.js';
@@ -362,11 +362,12 @@ export async function redirectRoutes(
           edgeBotSignal(request.headers['x-lf-bot'])
         );
 
-        // Extract UTM parameters from query string
+        // Resolve the UTMs recorded on the click row. Inbound query-string
+        // values win per key; the link's configured UTMs (the same ones
+        // buildRedirectUrl puts on the destination) fill anything left blank,
+        // so link-tagged campaigns show up in analytics instead of NULLs.
         const query = request.query as Record<string, string | undefined>;
-        const utmSource = query?.utm_source;
-        const utmMedium = query?.utm_medium;
-        const utmCampaign = query?.utm_campaign;
+        const { utmSource, utmMedium, utmCampaign } = resolveClickUtms(query, link.utm_parameters);
 
         // Extract fingerprint data from query params (sent by SDK/client)
         const fpTimezone = query?.fp_tz || timezone || undefined;

@@ -5,6 +5,7 @@ import {
   buildRedirectUrl,
   detectDevice,
   getLocationFromIP,
+  resolveClickUtms,
 } from './utils';
 
 describe('generateShortCode', () => {
@@ -183,5 +184,81 @@ describe('getLocationFromIP', () => {
       // Has a mapped name
       expect(typeof result.countryName).toBe('string');
     }
+  });
+});
+
+describe('resolveClickUtms', () => {
+  const CONFIG = { source: 'youtube', medium: 'social', campaign: 'time_video' };
+
+  it('uses inbound query-string values when the link has no configured UTMs', () => {
+    expect(resolveClickUtms({ utm_source: 'fb', utm_medium: 'cpc', utm_campaign: 'launch' }, undefined))
+      .toEqual({ utmSource: 'fb', utmMedium: 'cpc', utmCampaign: 'launch' });
+  });
+
+  it('falls back to the link configuration when nothing is inbound', () => {
+    expect(resolveClickUtms({}, CONFIG))
+      .toEqual({ utmSource: 'youtube', utmMedium: 'social', utmCampaign: 'time_video' });
+  });
+
+  it('lets inbound win over configuration on conflict', () => {
+    // An ad platform appending a per-ad campaign id must not be overwritten by
+    // the link's static label.
+    expect(resolveClickUtms({ utm_source: 'an', utm_campaign: '120252316702960562' }, { source: 'test', campaign: 'test' }))
+      .toMatchObject({ utmSource: 'an', utmCampaign: '120252316702960562' });
+  });
+
+  it('mixes the two sources per key rather than all-or-nothing', () => {
+    expect(resolveClickUtms({ utm_source: 'fb' }, CONFIG))
+      .toEqual({ utmSource: 'fb', utmMedium: 'social', utmCampaign: 'time_video' });
+  });
+
+  it('treats an empty inbound value as absent and falls through to configuration', () => {
+    expect(resolveClickUtms({ utm_source: '' }, CONFIG).utmSource).toBe('youtube');
+  });
+
+  it('treats a whitespace-only inbound value as absent', () => {
+    expect(resolveClickUtms({ utm_source: '   ' }, CONFIG).utmSource).toBe('youtube');
+  });
+
+  it('never returns an empty string when configuration holds a blank', () => {
+    // Real production shape: a link saved with campaign set to ''.
+    const result = resolveClickUtms({}, { source: 'clevertap', medium: 'email', campaign: '' });
+    expect(result.utmCampaign).toBeUndefined();
+    expect(result.utmSource).toBe('clevertap');
+  });
+
+  it('trims values so " ig" and "ig" do not split into two library entries', () => {
+    expect(resolveClickUtms({ utm_source: '  ig  ' }, undefined).utmSource).toBe('ig');
+    expect(resolveClickUtms({}, { source: ' youtube ' }).utmSource).toBe('youtube');
+  });
+
+  it.each([
+    ['null', null],
+    ['an array', [] as unknown as Record<string, string>],
+    ['a JSON string', '{"source":"x"}' as unknown as Record<string, string>],
+    ['undefined', undefined],
+  ])('treats %s utm_parameters as absent', (_label, configured) => {
+    expect(resolveClickUtms({ utm_source: 'fb' }, configured))
+      .toEqual({ utmSource: 'fb', utmMedium: undefined, utmCampaign: undefined });
+  });
+
+  it('ignores a repeated query parameter arriving as an array', () => {
+    const query = { utm_source: ['a', 'b'] } as unknown as Record<string, string | undefined>;
+    expect(resolveClickUtms(query, CONFIG).utmSource).toBe('youtube');
+  });
+
+  it('returns all-undefined when neither source supplies anything', () => {
+    expect(resolveClickUtms({}, {}))
+      .toEqual({ utmSource: undefined, utmMedium: undefined, utmCampaign: undefined });
+    expect(resolveClickUtms(undefined, undefined))
+      .toEqual({ utmSource: undefined, utmMedium: undefined, utmCampaign: undefined });
+  });
+
+  it('ignores content and term, which have no click_events columns', () => {
+    const result = resolveClickUtms({ utm_content: 'cta', utm_term: 'kw' } as Record<string, string | undefined>, {
+      source: 'frontend', content: 'aasa_footer_cta', term: 'kw',
+    });
+    expect(Object.keys(result).sort()).toEqual(['utmCampaign', 'utmMedium', 'utmSource']);
+    expect(result.utmSource).toBe('frontend');
   });
 });

@@ -149,6 +149,63 @@ export function buildRedirectUrl(
   }
 }
 
+/** UTM keys that have a matching column on `click_events`. */
+const CLICK_UTM_KEYS = ['source', 'medium', 'campaign'] as const;
+
+type ClickUtmKey = (typeof CLICK_UTM_KEYS)[number];
+
+/** Trimmed string, or undefined for blanks and non-strings (e.g. a repeated query param arriving as an array). */
+function nonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed === '' ? undefined : trimmed;
+}
+
+/**
+ * Resolve the UTM values to persist on a click row.
+ *
+ * Two sources can supply a UTM: the inbound query string on the short-link
+ * request, and the UTMs configured on the link itself (`links.utm_parameters`,
+ * which `buildRedirectUrl` appends to the *destination* URL). Historically only
+ * the inbound query string was recorded, so a link whose UTMs live in link
+ * settings wrote NULLs and never appeared in campaign analytics — the value
+ * reached the landing page but never the click row.
+ *
+ * Inbound wins, per key. A value a sharer put on the short URL is more specific
+ * than the link's static configuration — an ad platform appending a per-ad
+ * campaign id, say — and letting configuration overwrite it would destroy the
+ * finer signal. Keys resolve independently, so a link that configures only
+ * `source` still records an inbound `campaign`.
+ *
+ * Blank and whitespace-only values on either side are treated as absent and
+ * resolve to `undefined`, never `''`: campaign analytics filters on
+ * `IS NOT NULL AND <> ''` but groups on the raw value, so an empty string would
+ * surface as a blank-labelled row. Values are stored trimmed so that ` ig` and
+ * `ig` don't split into two entries in the UTM library.
+ *
+ * `content` and `term` are ignored — `click_events` has no column for them.
+ */
+export function resolveClickUtms(
+  query: Record<string, string | undefined> | undefined,
+  linkUtmParameters: Record<string, string> | null | undefined
+): { utmSource?: string; utmMedium?: string; utmCampaign?: string } {
+  // `utm_parameters` is raw JSONB — guard against null, arrays and scalars
+  // before indexing into it.
+  const configured =
+    linkUtmParameters && typeof linkUtmParameters === 'object' && !Array.isArray(linkUtmParameters)
+      ? linkUtmParameters
+      : undefined;
+
+  const pick = (key: ClickUtmKey): string | undefined =>
+    nonEmptyString(query?.[`utm_${key}`]) ?? nonEmptyString(configured?.[key]);
+
+  return {
+    utmSource: pick('source'),
+    utmMedium: pick('medium'),
+    utmCampaign: pick('campaign'),
+  };
+}
+
 /**
  * Detect the device platform from a User-Agent string.
  *
