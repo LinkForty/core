@@ -1,3 +1,7 @@
+## <small>1.22.1 (2026-09-01)</small>
+
+* fix(analytics): record link-configured UTMs on click events (SIT-382) (#43) ([7386c8e](https://github.com/LinkForty/core/commit/7386c8e)), closes [#43](https://github.com/LinkForty/core/issues/43)
+
 ## 1.22.0 (2026-08-25)
 
 * feat(sdk): project install and resolve deep links through one shape (SIT-349) (#41) ([b7b00ad](https://github.com/LinkForty/core/commit/b7b00ad)), closes [#41](https://github.com/LinkForty/core/issues/41)
