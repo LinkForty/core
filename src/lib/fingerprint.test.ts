@@ -209,6 +209,115 @@ describe('calculateConfidenceScore — shared-IP filter', () => {
   });
 });
 
+describe('calculateConfidenceScore - deferred install (SDK vs browser)', () => {
+  // A real deferred install: the click carries a Safari user agent, the install
+  // carries the string FingerprintCollector builds. Same device, same wifi.
+  const safariClick = {
+    ipAddress: '103.28.14.77',
+    userAgent:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+    timezone: 'Asia/Jakarta',
+    language: 'en-US',
+    screenWidth: 393, // CSS pixels
+    screenHeight: 852,
+    platform: 'ios', // detectDevice()
+    platformVersion: '17.5',
+  };
+
+  const sdkInstall = {
+    ipAddress: '103.28.14.77',
+    userAgent: 'MNC Play/1.0.0 iOS/17.5', // generateUserAgent()
+    timezone: 'Asia/Jakarta',
+    language: 'en_US', // Locale.current.identifier
+    screenWidth: 1179, // native pixels (bounds * scale)
+    screenHeight: 2556,
+    platform: 'iOS',
+    platformVersion: '17.5',
+  };
+
+  it('attributes an iOS install that matches its click', () => {
+    const { score, matchedFactors } = fingerprint.calculateConfidenceScore(
+      sdkInstall,
+      safariClick
+    );
+
+    expect(score).toBeGreaterThanOrEqual(fingerprint.CONFIDENCE_THRESHOLD);
+    expect(matchedFactors).toEqual(
+      expect.arrayContaining(['ip', 'platform', 'platform_version', 'timezone', 'language'])
+    );
+  });
+
+  it('matches native-pixel screens against CSS-pixel screens', () => {
+    const { matchedFactors } = fingerprint.calculateConfidenceScore(sdkInstall, safariClick);
+    expect(matchedFactors).toContain('screen');
+  });
+
+  it('attributes an Android install that matches its click', () => {
+    const chromeClick = {
+      ...safariClick,
+      userAgent:
+        'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+      platform: 'android',
+      platformVersion: '14',
+      screenWidth: 412,
+      screenHeight: 915,
+    };
+    const androidInstall = {
+      ...sdkInstall,
+      userAgent: 'MNC Play/1.0.0 Android/14',
+      platform: 'Android',
+      platformVersion: '14',
+      screenWidth: 1080,
+      screenHeight: 2400,
+    };
+
+    const { score } = fingerprint.calculateConfidenceScore(androidInstall, chromeClick);
+    expect(score).toBeGreaterThanOrEqual(fingerprint.CONFIDENCE_THRESHOLD);
+  });
+
+  it('still attributes when the click carries no screen dimensions', () => {
+    const noScreen = { ...safariClick, screenWidth: undefined, screenHeight: undefined };
+
+    const { score } = fingerprint.calculateConfidenceScore(sdkInstall, noScreen);
+    expect(score).toBeGreaterThanOrEqual(fingerprint.CONFIDENCE_THRESHOLD);
+  });
+
+  it('disqualifies a click from a different platform', () => {
+    const androidClick = {
+      ...safariClick,
+      userAgent:
+        'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+      platform: 'android',
+      platformVersion: '14',
+    };
+
+    const { score, matchedFactors } = fingerprint.calculateConfidenceScore(
+      sdkInstall,
+      androidClick
+    );
+
+    expect(score).toBe(0);
+    expect(matchedFactors).toEqual([]);
+  });
+
+  it('does not attribute an install seen on a different network', () => {
+    const { score } = fingerprint.calculateConfidenceScore(
+      { ...sdkInstall, ipAddress: '114.10.9.3' },
+      safariClick
+    );
+
+    expect(score).toBeLessThan(fingerprint.CONFIDENCE_THRESHOLD);
+  });
+
+  it('still requires exact screen equality between two browsers', () => {
+    const a = { ...safariClick, screenWidth: 800, screenHeight: 600 };
+    const b = { ...safariClick, screenWidth: 1200, screenHeight: 900 };
+
+    const { matchedFactors } = fingerprint.calculateConfidenceScore(a, b);
+    expect(matchedFactors).not.toContain('screen');
+  });
+});
+
 describe('matchInstallToClick', () => {
   beforeEach(() => {
     vi.useFakeTimers();
