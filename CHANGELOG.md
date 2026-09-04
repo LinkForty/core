@@ -1,3 +1,7 @@
+## <small>1.22.3 (2026-09-04)</small>
+
+* fix(attribution): match deferred installs against their click (#44) ([7fb0c45](https://github.com/LinkForty/core/commit/7fb0c45)), closes [#44](https://github.com/LinkForty/core/issues/44)
+
 ## <small>1.22.2 (2026-09-04)</small>
 
 * fix(preview): serve Open Graph to iMessage, Reddit and Bluesky scrapers (SIT-359) (#42) ([0897627](https://github.com/LinkForty/core/commit/0897627)), closes [#42](https://github.com/LinkForty/core/issues/42)
