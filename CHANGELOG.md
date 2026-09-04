@@ -1,3 +1,7 @@
+## <small>1.22.2 (2026-09-04)</small>
+
+* fix(preview): serve Open Graph to iMessage, Reddit and Bluesky scrapers (SIT-359) (#42) ([0897627](https://github.com/LinkForty/core/commit/0897627)), closes [#42](https://github.com/LinkForty/core/issues/42)
+
 ## <small>1.22.1 (2026-09-01)</small>
 
 * fix(analytics): record link-configured UTMs on click events (SIT-382) (#43) ([7386c8e](https://github.com/LinkForty/core/commit/7386c8e)), closes [#43](https://github.com/LinkForty/core/issues/43)
