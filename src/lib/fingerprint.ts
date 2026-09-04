@@ -40,6 +40,16 @@ const FINGERPRINT_WEIGHTS = {
 };
 
 /**
+ * How the USER_AGENT weight is split when an SDK fingerprint is compared against
+ * a browser fingerprint. The two never produce comparable user agent strings, so
+ * platform and OS version stand in for them. Sums to USER_AGENT.
+ */
+const CROSS_CONTEXT_WEIGHTS = {
+  PLATFORM: 20,
+  PLATFORM_VERSION: 10,
+};
+
+/**
  * Default attribution window in hours (7 days)
  */
 export const DEFAULT_ATTRIBUTION_WINDOW_HOURS = 168;
@@ -177,6 +187,95 @@ function normalizeUserAgent(ua: string): string {
 }
 
 /**
+ * Matches the user agent the mobile SDKs generate, e.g. "MyApp/1.2.0 iOS/17.5"
+ * or "MyApp/1.2.0 Android/14". Browser user agents never end this way.
+ */
+const SDK_USER_AGENT = /\s(iOS|Android)\/([0-9][0-9._]*)\s*$/i;
+
+/**
+ * Parse an SDK-generated user agent. Returns null for browser user agents.
+ */
+function parseSdkUserAgent(ua: string): { platform: string; version: string } | null {
+  const match = ua.match(SDK_USER_AGENT);
+  if (!match) return null;
+
+  return { platform: match[1].toLowerCase(), version: match[2] };
+}
+
+/**
+ * Reduce the spellings of a platform used by the SDKs, the redirect handler and
+ * the UA parser to a single token.
+ */
+function normalizePlatform(value: string): string {
+  const platform = value.toLowerCase();
+
+  if (/iphone|ipad|ipod|^ios$/.test(platform)) return 'ios';
+  if (platform.includes('android')) return 'android';
+  if (platform.includes('macintosh') || platform.includes('mac os')) return 'macos';
+  if (platform.includes('windows')) return 'windows';
+
+  return platform;
+}
+
+/**
+ * Best-effort platform for a fingerprint: the stored platform if it names one,
+ * otherwise whatever the user agent reveals.
+ */
+function platformOf(fingerprint: FingerprintData): string {
+  const stored = normalizePlatform(fingerprint.platform || '');
+  if (stored && stored !== 'web' && stored !== 'unknown') {
+    return stored;
+  }
+
+  const match = (fingerprint.userAgent || '').match(
+    /(iPhone|iPad|iPod|Android|Windows|Macintosh|Linux)/i
+  );
+
+  return match ? normalizePlatform(match[1]) : '';
+}
+
+/**
+ * Major version only. Safari reports the OS version less precisely than
+ * UIDevice.systemVersion does, so comparing point releases produces false misses.
+ */
+function majorVersion(value?: string): string {
+  return (value || '').split(/[._]/)[0] || '';
+}
+
+/**
+ * Whether two screen sizes describe the same display.
+ *
+ * Browsers report CSS pixels while the SDKs report native pixels, so across
+ * those two contexts the dimensions differ by the device pixel ratio. The ratio
+ * applies equally to both axes, which is what distinguishes a scaled match from
+ * two genuinely different screens.
+ */
+function screensMatch(
+  fingerprint1: FingerprintData,
+  fingerprint2: FingerprintData,
+  crossContext: boolean
+): boolean {
+  const width1 = fingerprint1.screenWidth!;
+  const height1 = fingerprint1.screenHeight!;
+  const width2 = fingerprint2.screenWidth!;
+  const height2 = fingerprint2.screenHeight!;
+
+  if (width1 === width2 && height1 === height2) {
+    return true;
+  }
+
+  if (!crossContext) {
+    return false;
+  }
+
+  const widthRatio = width1 > width2 ? width1 / width2 : width2 / width1;
+  const heightRatio = height1 > height2 ? height1 / height2 : height2 / height1;
+
+  // Device pixel ratios run from 1x to 4x.
+  return widthRatio <= 4 && Math.abs(widthRatio - heightRatio) < 0.02;
+}
+
+/**
  * Calculate confidence score by comparing two fingerprints
  * Returns a score from 0-100 based on matched components
  */
@@ -205,8 +304,39 @@ export function calculateConfidenceScore(
     }
   }
 
-  // Compare user agents (normalized to platform + browser)
-  if (fingerprint1.userAgent && fingerprint2.userAgent) {
+  // Compare user agents. A deferred install pairs an SDK user agent with the
+  // browser user agent captured at click time, and those two can never be equal
+  // — the SDK string carries neither a browser nor a platform token. Whenever
+  // one side comes from an SDK, compare platform and OS version instead, which
+  // both sides do report.
+  const sdk1 = parseSdkUserAgent(fingerprint1.userAgent || '');
+  const sdk2 = parseSdkUserAgent(fingerprint2.userAgent || '');
+  const crossContext = Boolean(sdk1) !== Boolean(sdk2);
+
+  if (sdk1 || sdk2) {
+    const platform1 = sdk1 ? sdk1.platform : platformOf(fingerprint1);
+    const platform2 = sdk2 ? sdk2.platform : platformOf(fingerprint2);
+
+    // A device cannot have clicked the link from a different operating system,
+    // so a known mismatch disqualifies the candidate outright rather than just
+    // scoring zero — the remaining signals are all shared-network coincidences.
+    if (platform1 && platform2 && platform1 !== platform2) {
+      return { score: 0, matchedFactors: [] };
+    }
+
+    if (platform1 && platform1 === platform2) {
+      score += CROSS_CONTEXT_WEIGHTS.PLATFORM;
+      matchedFactors.push('platform');
+
+      const version1 = majorVersion(sdk1 ? sdk1.version : fingerprint1.platformVersion);
+      const version2 = majorVersion(sdk2 ? sdk2.version : fingerprint2.platformVersion);
+
+      if (version1 && version1 === version2) {
+        score += CROSS_CONTEXT_WEIGHTS.PLATFORM_VERSION;
+        matchedFactors.push('platform_version');
+      }
+    }
+  } else if (fingerprint1.userAgent && fingerprint2.userAgent) {
     const ua1 = normalizeUserAgent(fingerprint1.userAgent);
     const ua2 = normalizeUserAgent(fingerprint2.userAgent);
 
@@ -243,10 +373,7 @@ export function calculateConfidenceScore(
     fingerprint2.screenWidth &&
     fingerprint2.screenHeight
   ) {
-    if (
-      fingerprint1.screenWidth === fingerprint2.screenWidth &&
-      fingerprint1.screenHeight === fingerprint2.screenHeight
-    ) {
+    if (screensMatch(fingerprint1, fingerprint2, crossContext)) {
       score += FINGERPRINT_WEIGHTS.SCREEN_RESOLUTION;
       matchedFactors.push('screen');
     }
