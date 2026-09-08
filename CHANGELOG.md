@@ -4,15 +4,15 @@
 
 ## <small>1.22.2 (2026-09-04)</small>
 
-* fix(preview): serve Open Graph to iMessage, Reddit and Bluesky scrapers (SIT-359) (#42) ([0897627](https://github.com/LinkForty/core/commit/0897627)), closes [#42](https://github.com/LinkForty/core/issues/42)
+* fix(preview): serve Open Graph to iMessage, Reddit and Bluesky scrapers (#42) ([0897627](https://github.com/LinkForty/core/commit/0897627)), closes [#42](https://github.com/LinkForty/core/issues/42)
 
 ## <small>1.22.1 (2026-09-01)</small>
 
-* fix(analytics): record link-configured UTMs on click events (SIT-382) (#43) ([7386c8e](https://github.com/LinkForty/core/commit/7386c8e)), closes [#43](https://github.com/LinkForty/core/issues/43)
+* fix(analytics): record link-configured UTMs on click events (#43) ([7386c8e](https://github.com/LinkForty/core/commit/7386c8e)), closes [#43](https://github.com/LinkForty/core/issues/43)
 
 ## 1.22.0 (2026-08-25)
 
-* feat(sdk): project install and resolve deep links through one shape (SIT-349) (#41) ([b7b00ad](https://github.com/LinkForty/core/commit/b7b00ad)), closes [#41](https://github.com/LinkForty/core/issues/41)
+* feat(sdk): project install and resolve deep links through one shape (#41) ([b7b00ad](https://github.com/LinkForty/core/commit/b7b00ad)), closes [#41](https://github.com/LinkForty/core/issues/41)
 
 ## 1.21.0 (2026-08-11)
 
@@ -45,7 +45,7 @@
 
 ## 1.16.0 (2026-06-08)
 
-* feat(sdk): persist last-click attribution on in-app events (SIT-237) (#27) ([24dff3e](https://github.com/LinkForty/core/commit/24dff3e)), closes [#27](https://github.com/LinkForty/core/issues/27)
+* feat(sdk): persist last-click attribution on in-app events (#27) ([24dff3e](https://github.com/LinkForty/core/commit/24dff3e)), closes [#27](https://github.com/LinkForty/core/issues/27)
 
 ## <small>1.15.2 (2026-06-04)</small>
 

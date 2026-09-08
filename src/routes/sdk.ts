@@ -55,7 +55,7 @@ export async function sdkRoutes(fastify: FastifyInstance) {
       platformVersion: z.string().optional(),
       deviceId: z.string().optional(),
       attributionWindowHours: z.number().optional(),
-      // SDK identity for health/version diagnostics (SIT-235). Free-form by
+      // SDK identity for health/version diagnostics. Free-form by
       // design: a consumer tolerates/normalizes non-semver versions — we never
       // reject a request over this metadata. Empty → null.
       sdkName: z.string().max(50).optional(),
@@ -219,7 +219,7 @@ export async function sdkRoutes(fastify: FastifyInstance) {
    * - eventData: Optional JSON data associated with the event
    * - timestamp: Optional event timestamp (defaults to now)
    *
-   * Last-click attribution stamp (SIT-237, all optional / backward compatible):
+   * Last-click attribution stamp (all optional / backward compatible):
    * - attributedLinkId: UUID of the deep link currently credited (last-click)
    * - attributedClickId: UUID of the originating click, when known
    * - linkOpenedAt: ISO timestamp of when that deep link opened the app
@@ -239,7 +239,7 @@ export async function sdkRoutes(fastify: FastifyInstance) {
       attributedClickId: z.string().uuid().optional(),
       linkOpenedAt: z.string().datetime().optional(),
       sessionId: z.string().uuid().optional(),
-      // SDK identity for version-health diagnostics (SIT-235). Free-form by
+      // SDK identity for version-health diagnostics. Free-form by
       // design: a consumer tolerates/normalizes non-semver versions — we never
       // reject a request over this metadata. Empty → null.
       sdkName: z.string().max(50).optional(),
@@ -305,7 +305,7 @@ export async function sdkRoutes(fastify: FastifyInstance) {
           // omits attributed_link_id). attributed_click_id is intentionally kept
           // without a link: the orphaned-click case is expected, and a null
           // attributed_link_id is the correct value for link-keyed aggregation
-          // (the SIT-261 consumer must not read it as a data bug).
+          // (a link-keyed consumer must not read it as a data bug).
           eventResult = await db.query(
             `INSERT INTO in_app_events
                (install_id, event_name, event_data, event_timestamp,
@@ -558,7 +558,7 @@ export async function sdkRoutes(fastify: FastifyInstance) {
         const { platform, platformVersion } = parseUserAgent(userAgent);
         const { countryCode, countryName, region, city, latitude, longitude, timezone } = getLocationFromIP(ip);
 
-        // Classify bots at ingestion (SIT-298); persisted for consistent reads.
+        // Classify bots at ingestion; persisted for consistent reads.
         const { isBot, reason: botReason } = classifyBot(
           userAgent,
           request.method,

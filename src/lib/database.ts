@@ -506,7 +506,7 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
       END $$;
     `);
 
-    // Bot classification columns on click_events (SIT-298). Classified at
+    // Bot classification columns on click_events. Classified at
     // ingestion (see lib/bot-detection.ts) and persisted so every consumer reads
     // one consistent flag; analytics excludes is_bot rows. Backward compatible:
     // legacy rows default to is_bot=false and age out of the retention window.
@@ -522,7 +522,7 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
       END $$;
     `);
 
-    // Attribution metadata on install_events (SIT-296): how the install was
+    // Attribution metadata on install_events: how the install was
     // attributed ('fingerprint' | 'none') and which fingerprint signals matched.
     // Makes attribution quality measurable. Backward compatible (NULL until set).
     await client.query(`
@@ -537,7 +537,7 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
       END $$;
     `);
 
-    // Last-click attribution columns on in_app_events (SIT-237).
+    // Last-click attribution columns on in_app_events.
     // Events (screen views + custom events) are attributed to the deep link that
     // drove them, not just the original install link. The SDK stamps each event
     // with the active link, when it opened, and the app-open session; the window
@@ -561,7 +561,7 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
       END $$;
     `);
 
-    // SDK identity columns (SIT-235) — name + version of the SDK that sent the
+    // SDK identity columns — name + version of the SDK that sent the
     // install/event, for SDK version diagnostics. Persisted on BOTH tables:
     // install_events (version at install time) and in_app_events because an app
     // that updates keeps its original install row but sends events with the new

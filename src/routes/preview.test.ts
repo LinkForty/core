@@ -9,9 +9,8 @@ import { isSocialScraper, SCRAPER_PATTERNS } from './preview.js';
  *   - a matched human gets a meta-refresh interstitial instead of their
  *     redirect, which is the worse of the two
  *
- * Kept in sync with the same suite in Cloud
- * (`cloud/backend/src/lib/social-preview-hook.test.ts`). Cloud's hook registers
- * ahead of these routes, so this list governs self-hosted deployments.
+ * A host application may register its own preview handler ahead of these
+ * routes; this list is what governs a standalone deployment.
  */
 
 /** Real server-side fetchers. Each must be served the preview page. */
@@ -29,8 +28,8 @@ const SCRAPERS: Array<[string, string]> = [
   ['Bing', 'Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)'],
   ['Alexa', 'ia_archiver (+http://www.alexa.com/site/help/webmasters)'],
 
-  // Added by SIT-359, matching Cloud. All three were verified in production
-  // falling through to a 302 before the Cloud fix.
+  // All three were observed in production falling through to a 302 — they were
+  // being served a redirect instead of the preview page.
   [
     'Apple / iMessage',
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15 (Applebot/0.1; +http://www.apple.com/go/applebot)',

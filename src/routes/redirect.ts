@@ -353,7 +353,7 @@ export async function redirectRoutes(
         const { platform, platformVersion } = parseUserAgent(userAgent);
         const { countryCode, countryName, region, city, latitude, longitude, timezone } = getLocationFromIP(ip);
 
-        // Classify bots at ingestion (SIT-298) — persisted on the row so
+        // Classify bots at ingestion — persisted on the row so
         // analytics reads a consistent flag instead of re-detecting from the
         // stored user-agent.
         const { isBot, reason: botReason } = classifyBot(
