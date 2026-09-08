@@ -38,6 +38,14 @@ async function connectWithRetry(maxRetries: number = 10, baseDelay: number = 100
   throw new Error('Max retries exceeded');
 }
 
+/**
+ * Advisory lock key guarding schema initialisation.
+ *
+ * Exported so a host application taking its own advisory locks on the same
+ * database can avoid colliding with this one. Stable across releases.
+ */
+export const SCHEMA_INIT_LOCK_KEY = 4977261;
+
 // Initialize database schema
 export async function initializeDatabase(options: DatabaseOptions = {}) {
   // Initialize pool
@@ -50,7 +58,32 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
 
   const client = await connectWithRetry();
 
+  // Serialise schema initialisation across processes.
+  //
+  // `CREATE TABLE IF NOT EXISTS` is not atomic: the existence check and the
+  // creation are separate steps, so two connections can both find the table
+  // absent and both try to create it. The loser fails with
+  // `duplicate key value violates unique constraint "pg_type_typname_nsp_index"`
+  // rather than quietly doing nothing. The same applies to the
+  // `CREATE INDEX IF NOT EXISTS` and `ADD COLUMN IF NOT EXISTS` statements
+  // below.
+  //
+  // That only bites when several processes initialise an *empty* database at
+  // once — the first boot of a new environment that starts more than one
+  // instance, or a test suite running files in parallel. Once the objects
+  // exist, every statement short-circuits and the race disappears, which is why
+  // it never shows up against an established database.
+  //
+  // A session-level advisory lock is enough: it is released automatically if
+  // the connection dies, so a process that crashes mid-initialisation cannot
+  // wedge the others. Waiting here is the desired behaviour — another instance
+  // is building the schema this process is about to use.
+  let lockHeld = false;
+
   try {
+    await client.query('SELECT pg_advisory_lock($1)', [SCHEMA_INIT_LOCK_KEY]);
+    lockHeld = true;
+
     // Organizations table (must be created before links, which references it).
     //
     // The redirect path LEFT JOINs this table to read `settings.appConfig`, which
@@ -610,6 +643,13 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
     console.error('Error initializing database:', error);
     throw error;
   } finally {
+    if (lockHeld) {
+      // Best effort: a broken connection has already dropped the lock, and
+      // failing to unlock must not mask the error that got us here.
+      await client
+        .query('SELECT pg_advisory_unlock($1)', [SCHEMA_INIT_LOCK_KEY])
+        .catch(() => undefined);
+    }
     client.release();
   }
 }
