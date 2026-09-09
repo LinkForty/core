@@ -166,7 +166,8 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
         utm_campaign VARCHAR(255),
         referrer TEXT,
         is_bot BOOLEAN NOT NULL DEFAULT false,
-        bot_reason VARCHAR(16)
+        bot_reason VARCHAR(16),
+        link_params JSONB
       )
     `);
 
@@ -518,6 +519,27 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
         END IF;
         IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='click_events' AND column_name='bot_reason') THEN
           ALTER TABLE click_events ADD COLUMN bot_reason VARCHAR(16);
+        END IF;
+      END $$;
+    `);
+
+    // Non-reserved query parameters carried on the click. A link can
+    // be shared with values on the URL — ?slug=titanic — that the app wants
+    // after a deferred install. Nothing else persists them, so today they are
+    // gone by the time the install is matched.
+    //
+    // Nullable with no default, and deliberately no index. On a table this size
+    // that keeps the change catalog-only: Postgres 11+ adds such a column
+    // without rewriting rows or holding a long lock. NOT NULL, a DEFAULT, or an
+    // index would each rewrite or scan the whole table.
+    //
+    // NULL for the overwhelming majority of clicks, which costs effectively
+    // nothing per row — the point, given how much this table already carries.
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='click_events' AND column_name='link_params') THEN
+          ALTER TABLE click_events ADD COLUMN link_params JSONB;
         END IF;
       END $$;
     `);
