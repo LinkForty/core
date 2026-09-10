@@ -236,8 +236,7 @@ const LINK_PARAMS_MAX = 16;
 const LINK_PARAM_MAX_VALUE_LEN = 256;
 
 /**
- * The non-reserved query parameters on a redirect, to persist on the click row
- * (SIT-410/411).
+ * The non-reserved query parameters on a redirect, to persist on the click row.
  *
  * A link can be shared with values on the URL — `?slug=titanic` — that the app
  * wants after a deferred install. Everything else about the click is recorded;
