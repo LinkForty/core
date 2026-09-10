@@ -6,6 +6,7 @@ import {
   detectDevice,
   getLocationFromIP,
   resolveClickUtms,
+  extractLinkParams,
 } from './utils';
 
 describe('generateShortCode', () => {
@@ -260,5 +261,66 @@ describe('resolveClickUtms', () => {
     });
     expect(Object.keys(result).sort()).toEqual(['utmCampaign', 'utmMedium', 'utmSource']);
     expect(result.utmSource).toBe('frontend');
+  });
+});
+
+describe('extractLinkParams', () => {
+  it('keeps ordinary parameters', () => {
+    expect(extractLinkParams({ slug: 'titanic', id: '42' })).toEqual({
+      slug: 'titanic',
+      id: '42',
+    });
+  });
+
+  it('drops utm_ parameters, which have their own columns', () => {
+    expect(extractLinkParams({ utm_source: 'ig', utm_campaign: 'spring', slug: 'titanic' })).toEqual(
+      { slug: 'titanic' }
+    );
+  });
+
+  it('drops fp_ parameters, which feed the fingerprint', () => {
+    expect(extractLinkParams({ fp_tz: 'UTC', fp_sw: '390', slug: 'titanic' })).toEqual({
+      slug: 'titanic',
+    });
+  });
+
+  it('drops lf_click, the correlation id we set ourselves', () => {
+    expect(extractLinkParams({ lf_click: 'abc-123', slug: 'titanic' })).toEqual({
+      slug: 'titanic',
+    });
+  });
+
+  it('matches reserved prefixes case-insensitively', () => {
+    expect(extractLinkParams({ UTM_Source: 'ig', FP_TZ: 'UTC', LF_Click: 'x' })).toEqual({});
+  });
+
+  it('truncates a value longer than 256 characters', () => {
+    const result = extractLinkParams({ slug: 'a'.repeat(300) });
+    expect(result.slug).toHaveLength(256);
+  });
+
+  it('keeps a value of exactly 256 characters intact', () => {
+    const result = extractLinkParams({ slug: 'a'.repeat(256) });
+    expect(result.slug).toHaveLength(256);
+  });
+
+  it('stops after 16 parameters', () => {
+    const query: Record<string, string> = {};
+    for (let i = 0; i < 30; i++) query[`k${i}`] = String(i);
+    expect(Object.keys(extractLinkParams(query))).toHaveLength(16);
+  });
+
+  it('skips empty and non-string values', () => {
+    expect(
+      extractLinkParams({ empty: '', missing: undefined, repeated: ['a', 'b'], slug: 'titanic' })
+    ).toEqual({ slug: 'titanic' });
+  });
+
+  it('returns {} for an empty query, which is the ordinary case', () => {
+    expect(extractLinkParams({})).toEqual({});
+  });
+
+  it('returns {} rather than throwing when there is no query at all', () => {
+    expect(extractLinkParams(undefined)).toEqual({});
   });
 });
