@@ -1,3 +1,7 @@
+## <small>1.25.1 (2026-09-10)</small>
+
+* docs(changelog): remove a private tracker id from a release entry (#50) ([2766ca5](https://github.com/LinkForty/core/commit/2766ca5)), closes [#50](https://github.com/LinkForty/core/issues/50)
+
 ## 1.25.0 (2026-09-10)
 
 * feat(sdk): deliver captured click params in the deferred payload (SIT-412) (#48) ([77d373f](https://github.com/LinkForty/core/commit/77d373f)), closes [#48](https://github.com/LinkForty/core/issues/48)
