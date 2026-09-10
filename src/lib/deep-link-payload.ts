@@ -49,7 +49,7 @@ export interface DeepLinkPayloadOptions {
    */
   legacyInstallKeys?: boolean;
   /**
-   * Non-reserved query parameters the click carried (SIT-411).
+   * Non-reserved query parameters the click carried.
    *
    * Merged over the link's configured `deep_link_parameters`. A value on the
    * URL wins on a key collision, matching how the inbound query string already
@@ -172,11 +172,11 @@ export function toDeepLinkPayload(
     payload.originalUrl = (link.original_url ?? null) as string | null;
     payload.webFallbackUrl = (link.web_fallback_url ?? null) as string | null;
     payload.targetingRules = link.targeting_rules ?? null;
-    // The same merged value, not the raw column. Deployed SDKs read this alias
-    // in *preference* to `customParameters` — mobile-sdk-react-native does
-    // `deepLinkParameters || customParameters` — so merging into the canonical
-    // field alone would be invisible to every React Native app in the field,
-    // which is the exact flow this feature exists for.
+    // The same merged value, not the raw column. SDKs in the field read this
+    // alias in *preference* to `customParameters`, falling back to the canonical
+    // name only when the alias is absent — so merging into the canonical field
+    // alone would be invisible to already-installed apps, which is the exact
+    // flow this serves.
     payload.deepLinkParameters = mergedParameters ?? null;
   }
 

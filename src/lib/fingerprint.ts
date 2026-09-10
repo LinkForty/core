@@ -26,7 +26,7 @@ export interface FingerprintMatch {
   matchedFactors: string[];
   clickedAt: Date;
   /**
-   * Non-reserved query parameters the click carried (SIT-411). Null for every
+   * Non-reserved query parameters the click carried. Null for every
    * click recorded before that shipped, and for the ordinary click that carried
    * none.
    */

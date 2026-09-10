@@ -163,7 +163,7 @@ describe('legacy install keys', () => {
   });
 });
 
-describe('toDeepLinkPayload — click params (SIT-412)', () => {
+describe('toDeepLinkPayload — click params', () => {
   const link = { short_code: 'abc123' } as any;
   const base = { clickedAt: '2026-09-09T00:00:00.000Z', isDeferred: true };
 
@@ -201,8 +201,8 @@ describe('toDeepLinkPayload — click params (SIT-412)', () => {
       { ...link, deep_link_parameters: { slug: 'default' } },
       { ...base, linkParams: { slug: 'titanic' }, legacyInstallKeys: true }
     );
-    // Deployed SDKs read deepLinkParameters in preference to customParameters,
-    // so the two disagreeing would make the merge invisible in the field.
+    // SDKs in the field read deepLinkParameters in preference to
+    // customParameters, so the two disagreeing would make the merge invisible.
     expect(p.deepLinkParameters).toEqual(p.customParameters);
     expect(p.deepLinkParameters).toEqual({ slug: 'titanic' });
   });
