@@ -4,7 +4,7 @@
 
 ## 1.25.0 (2026-09-10)
 
-* feat(sdk): deliver captured click params in the deferred payload (SIT-412) (#48) ([77d373f](https://github.com/LinkForty/core/commit/77d373f)), closes [#48](https://github.com/LinkForty/core/issues/48)
+* feat(sdk): deliver captured click params in the deferred payload (#48) ([77d373f](https://github.com/LinkForty/core/commit/77d373f)), closes [#48](https://github.com/LinkForty/core/issues/48)
 
 ## 1.24.0 (2026-09-10)
 
