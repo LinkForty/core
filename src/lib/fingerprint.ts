@@ -25,6 +25,12 @@ export interface FingerprintMatch {
   confidenceScore: number;
   matchedFactors: string[];
   clickedAt: Date;
+  /**
+   * Non-reserved query parameters the click carried (SIT-411). Null for every
+   * click recorded before that shipped, and for the ordinary click that carried
+   * none.
+   */
+  linkParams?: Record<string, string> | null;
 }
 
 /**
@@ -402,6 +408,7 @@ export async function matchInstallToClick(
        ce.id as click_id,
        ce.link_id,
        ce.clicked_at,
+       ce.link_params,
        l.attribution_window_hours,
        df.ip_address,
        df.user_agent,
@@ -466,6 +473,7 @@ export async function matchInstallToClick(
         confidenceScore: score,
         matchedFactors,
         clickedAt: new Date(row.clicked_at),
+        linkParams: row.link_params ?? null,
       };
     }
   }
@@ -618,6 +626,7 @@ export async function recordInstallEvent(
         isDeferred: true,
         confidenceScore: match.confidenceScore,
         matchedFactors: match.matchedFactors,
+        linkParams: match.linkParams,
         legacyInstallKeys: true,
       });
 
