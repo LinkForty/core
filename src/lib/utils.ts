@@ -257,9 +257,9 @@ const LINK_PARAM_MAX_VALUE_LEN = 256;
  *
  * Returns `{}` when nothing qualifies, which is the ordinary case.
  *
- * Cloud has an equivalent (`extractPassthroughParams`) feeding its ESP click
- * sync. The duplication is deliberate: this package is published to npm and
- * cannot import from Cloud. Keep the two rule sets in step by hand.
+ * Downstream consumers may implement the same filtering for their own purposes.
+ * The duplication is deliberate — this package is published to npm and cannot
+ * depend on anything downstream — so keep the rule sets in step by hand.
  */
 export function extractLinkParams(
   query: Record<string, unknown> | undefined
