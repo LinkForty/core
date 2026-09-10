@@ -8,7 +8,7 @@
 
 ## 1.23.0 (2026-09-10)
 
-* feat(schema): add click_events.link_params (SIT-410) (#46) ([ebcf64a](https://github.com/LinkForty/core/commit/ebcf64a)), closes [#46](https://github.com/LinkForty/core/issues/46)
+* feat(schema): add click_events.link_params (#46) ([ebcf64a](https://github.com/LinkForty/core/commit/ebcf64a)), closes [#46](https://github.com/LinkForty/core/issues/46)
 
 ## <small>1.22.4 (2026-09-10)</small>
 
