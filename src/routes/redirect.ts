@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { FastifyInstance } from 'fastify';
 import { db } from '../lib/database.js';
 import { getClientIp } from '../lib/client-ip.js';
-import { parseUserAgent, getLocationFromIP, buildRedirectUrl, detectDevice, resolveClickUtms } from '../lib/utils.js';
+import { parseUserAgent, getLocationFromIP, buildRedirectUrl, detectDevice, resolveClickUtms, extractLinkParams } from '../lib/utils.js';
 import { storeFingerprintForClick, type FingerprintData } from '../lib/fingerprint.js';
 import { emitClickEvent } from '../lib/event-emitter.js';
 import { classifyBot, edgeBotSignal } from '../lib/bot-detection.js';
@@ -375,14 +375,21 @@ export async function redirectRoutes(
         const fpScreenWidth = query?.fp_sw ? parseInt(query.fp_sw, 10) : undefined;
         const fpScreenHeight = query?.fp_sh ? parseInt(query.fp_sh, 10) : undefined;
 
+        // Non-reserved query params, persisted so a deferred install can be
+        // handed them. Skipped entirely for bots: crawlers fuzz query
+        // strings, this is the highest-volume table in the product, and bot rows
+        // are already excluded from analytics — so storing theirs buys nothing
+        // and costs storage on every row they touch.
+        const linkParams = isBot ? {} : extractLinkParams(query);
+
         // Insert click event with the pre-generated id (see above) so the row
         // matches the lf_click value already placed on the redirect URL.
         await db.query(
           `INSERT INTO click_events (
             id, link_id, ip_address, user_agent, device_type, platform,
             country_code, country_name, region, city, latitude, longitude, timezone,
-            utm_source, utm_medium, utm_campaign, referrer, is_bot, bot_reason
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+            utm_source, utm_medium, utm_campaign, referrer, is_bot, bot_reason, link_params
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`,
           [
             clickId,
             link.id,
@@ -403,6 +410,9 @@ export async function redirectRoutes(
             referrer,
             isBot,
             botReason,
+            // NULL rather than '{}' when there is nothing to store, so the
+            // column stays empty for the overwhelming majority of rows.
+            Object.keys(linkParams).length > 0 ? JSON.stringify(linkParams) : null,
           ]
         );
 
