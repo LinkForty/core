@@ -376,7 +376,7 @@ export async function redirectRoutes(
         const fpScreenHeight = query?.fp_sh ? parseInt(query.fp_sh, 10) : undefined;
 
         // Non-reserved query params, persisted so a deferred install can be
-        // handed them (SIT-411). Skipped entirely for bots: crawlers fuzz query
+        // handed them. Skipped entirely for bots: crawlers fuzz query
         // strings, this is the highest-volume table in the product, and bot rows
         // are already excluded from analytics — so storing theirs buys nothing
         // and costs storage on every row they touch.
