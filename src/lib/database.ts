@@ -490,7 +490,7 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
       END $$;
     `);
 
-    // Non-reserved query parameters carried on the click (SIT-410). A link can
+    // Non-reserved query parameters carried on the click. A link can
     // be shared with values on the URL — ?slug=titanic — that the app wants
     // after a deferred install. Nothing else persists them, so today they are
     // gone by the time the install is matched.
