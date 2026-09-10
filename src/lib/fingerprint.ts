@@ -528,7 +528,7 @@ export async function recordInstallEvent(
   // Attempt to match install to a click
   const match = await matchInstallToClick(fingerprintData, attributionWindowHours);
 
-  // Attribution metadata for measurement (SIT-296): install attribution is
+  // Attribution metadata for measurement: install attribution is
   // fingerprint-based, so the method is 'fingerprint' on a match and 'none'
   // (organic) otherwise; matched_factors records which signals matched.
   const attributionMethod = match ? 'fingerprint' : 'none';

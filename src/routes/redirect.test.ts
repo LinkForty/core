@@ -162,8 +162,8 @@ describe('pickMobileFallbackUrl — Android in-app browser (FB/Instagram/Line/We
 });
 
 describe('pickMobileFallbackUrl — reporter scenario regression test', () => {
-  // Reproduces SIT-163: user creates a link with iOS, Android, and web fallback URLs;
-  // mobile visitor expects the App/Play Store; previously got the web fallback.
+  // Reproduces a reported regression: a link with iOS, Android and web fallback
+  // URLs served the web fallback to mobile visitors, who expect the App/Play Store.
   it('iOS Safari → iOS App Store (was: web fallback)', () => {
     const r = pickMobileFallbackUrl('ios', UA.iosSafari, URLS.iosStore, URLS.androidStore, URLS.webFallback);
     expect(r?.url).toBe(URLS.iosStore);
