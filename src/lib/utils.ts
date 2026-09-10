@@ -228,3 +228,58 @@ export function detectDevice(userAgent: string): 'ios' | 'android' | 'web' {
 
   return 'web';
 }
+
+/** Most parameters a single click will carry through. */
+const LINK_PARAMS_MAX = 16;
+
+/** Longest value kept; anything beyond this is truncated. */
+const LINK_PARAM_MAX_VALUE_LEN = 256;
+
+/**
+ * The non-reserved query parameters on a redirect, to persist on the click row
+ * (SIT-410/411).
+ *
+ * A link can be shared with values on the URL — `?slug=titanic` — that the app
+ * wants after a deferred install. Everything else about the click is recorded;
+ * these were the one thing thrown away, which is why the base-path-plus-
+ * parameters pattern that AppsFlyer and Branch both support did not work here.
+ *
+ * Reserved prefixes are dropped because they are *already* handled and would
+ * otherwise be stored twice under a second name: `utm_*` lands in the utm_
+ * columns, `fp_*` feeds the fingerprint, and `lf_click` is the correlation id
+ * this redirect just put on the destination itself.
+ *
+ * Both caps exist because the input is a public URL that anyone can lengthen at
+ * will, and this writes to the highest-volume table in the product. They bound
+ * what a single click can cost. Truncation is silent by design — a too-long
+ * value is a caller error, and failing the redirect over it would be worse than
+ * storing a clipped one.
+ *
+ * Returns `{}` when nothing qualifies, which is the ordinary case.
+ *
+ * Cloud has an equivalent (`extractPassthroughParams`) feeding its ESP click
+ * sync. The duplication is deliberate: this package is published to npm and
+ * cannot import from Cloud. Keep the two rule sets in step by hand.
+ */
+export function extractLinkParams(
+  query: Record<string, unknown> | undefined
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!query || typeof query !== 'object') return out;
+
+  for (const [key, value] of Object.entries(query)) {
+    // A repeated parameter arrives as an array; skip rather than guess which
+    // occurrence was meant.
+    if (typeof value !== 'string' || value.length === 0) continue;
+
+    const lower = key.toLowerCase();
+    if (lower.startsWith('utm_') || lower.startsWith('fp_') || lower === 'lf_click') continue;
+
+    out[key] =
+      value.length > LINK_PARAM_MAX_VALUE_LEN ? value.slice(0, LINK_PARAM_MAX_VALUE_LEN) : value;
+
+    if (Object.keys(out).length >= LINK_PARAMS_MAX) break;
+  }
+
+  return out;
+}
