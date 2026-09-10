@@ -1,3 +1,7 @@
+## <small>1.25.2 (2026-09-10)</small>
+
+* docs(changelog): remove the remaining private tracker id (#51) ([9a5f5a7](https://github.com/LinkForty/core/commit/9a5f5a7)), closes [#51](https://github.com/LinkForty/core/issues/51)
+
 ## <small>1.25.1 (2026-09-10)</small>
 
 * docs(changelog): remove a private tracker id from a release entry (#50) ([2766ca5](https://github.com/LinkForty/core/commit/2766ca5)), closes [#50](https://github.com/LinkForty/core/issues/50)
