@@ -1,3 +1,7 @@
+## <small>1.22.4 (2026-09-10)</small>
+
+* fix(database): serialise schema initialisation with an advisory lock (#45) ([3573bad](https://github.com/LinkForty/core/commit/3573bad)), closes [#45](https://github.com/LinkForty/core/issues/45)
+
 ## <small>1.22.3 (2026-09-04)</small>
 
 * fix(attribution): match deferred installs against their click (#44) ([7fb0c45](https://github.com/LinkForty/core/commit/7fb0c45)), closes [#44](https://github.com/LinkForty/core/issues/44)
