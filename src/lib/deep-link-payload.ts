@@ -48,6 +48,15 @@ export interface DeepLinkPayloadOptions {
    * nulls included — until version telemetry shows the old readers are gone.
    */
   legacyInstallKeys?: boolean;
+  /**
+   * Non-reserved query parameters the click carried.
+   *
+   * Merged over the link's configured `deep_link_parameters`. A value on the
+   * URL wins on a key collision, matching how the inbound query string already
+   * beats link configuration for UTMs — what a sharer put on the URL is more
+   * specific than what the link was set up with.
+   */
+  linkParams?: Record<string, string> | null;
 }
 
 export interface DeepLinkPayload {
@@ -86,6 +95,20 @@ export const CANONICAL_DEEP_LINK_KEYS = [
   'isDeferred',
 ] as const;
 
+/**
+ * The link's configured parameters as a plain object, or undefined.
+ *
+ * `deep_link_parameters` is raw JSONB: it can be null, a scalar, or an array as
+ * easily as an object. Spreading one of those would throw inside the install
+ * path and take SDK initialization down with it, so it is guarded the same way
+ * `resolveClickUtms` guards `utm_parameters`.
+ */
+function asPlainObject(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
 function toIsoString(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : value;
 }
@@ -101,6 +124,18 @@ export function toDeepLinkPayload(
   link: DeepLinkLinkRow,
   options: DeepLinkPayloadOptions
 ): DeepLinkPayload {
+  // Configured parameters, with anything the click carried merged over the top.
+  // Computed once: the canonical field and the legacy alias below must never
+  // disagree, and deriving them separately is how they would.
+  const configured = asPlainObject(link.deep_link_parameters);
+  const clickParams =
+    options.linkParams && Object.keys(options.linkParams).length > 0
+      ? options.linkParams
+      : undefined;
+  const mergedParameters = clickParams
+    ? { ...(configured ?? {}), ...clickParams }
+    : link.deep_link_parameters;
+
   const payload: DeepLinkPayload = {
     shortCode: link.short_code,
     linkId: link.id || undefined,
@@ -110,7 +145,7 @@ export function toDeepLinkPayload(
     androidUrl: link.android_app_store_url || undefined,
     webUrl: link.web_fallback_url || undefined,
     utmParameters: link.utm_parameters || undefined,
-    customParameters: link.deep_link_parameters || undefined,
+    customParameters: mergedParameters || undefined,
     clickedAt: toIsoString(options.clickedAt),
     isDeferred: options.isDeferred,
   };
@@ -137,7 +172,12 @@ export function toDeepLinkPayload(
     payload.originalUrl = (link.original_url ?? null) as string | null;
     payload.webFallbackUrl = (link.web_fallback_url ?? null) as string | null;
     payload.targetingRules = link.targeting_rules ?? null;
-    payload.deepLinkParameters = link.deep_link_parameters ?? null;
+    // The same merged value, not the raw column. SDKs in the field read this
+    // alias in *preference* to `customParameters`, falling back to the canonical
+    // name only when the alias is absent — so merging into the canonical field
+    // alone would be invisible to already-installed apps, which is the exact
+    // flow this serves.
+    payload.deepLinkParameters = mergedParameters ?? null;
   }
 
   return payload;

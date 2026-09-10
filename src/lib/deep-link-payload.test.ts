@@ -162,3 +162,75 @@ describe('legacy install keys', () => {
     expect('deepLinkParameters' in payload).toBe(false);
   });
 });
+
+describe('toDeepLinkPayload — click params', () => {
+  const link = { short_code: 'abc123' } as any;
+  const base = { clickedAt: '2026-09-09T00:00:00.000Z', isDeferred: true };
+
+  it('merges click params when the link has none configured', () => {
+    const p = toDeepLinkPayload(link, { ...base, linkParams: { slug: 'titanic' } });
+    expect(p.customParameters).toEqual({ slug: 'titanic' });
+  });
+
+  it('lets a click param override a configured one of the same name', () => {
+    const p = toDeepLinkPayload(
+      { ...link, deep_link_parameters: { slug: 'default', keep: 'me' } },
+      { ...base, linkParams: { slug: 'titanic' } }
+    );
+    expect(p.customParameters).toEqual({ slug: 'titanic', keep: 'me' });
+  });
+
+  it('leaves the payload untouched when there are no click params', () => {
+    const withParams = toDeepLinkPayload({ ...link, deep_link_parameters: { a: '1' } }, base);
+    expect(withParams.customParameters).toEqual({ a: '1' });
+
+    const withNone = toDeepLinkPayload(link, base);
+    expect(withNone.customParameters).toBeUndefined();
+  });
+
+  it('treats an empty click-param object as no params', () => {
+    const p = toDeepLinkPayload({ ...link, deep_link_parameters: { a: '1' } }, {
+      ...base,
+      linkParams: {},
+    });
+    expect(p.customParameters).toEqual({ a: '1' });
+  });
+
+  it('gives the legacy alias the same merged value as the canonical field', () => {
+    const p = toDeepLinkPayload(
+      { ...link, deep_link_parameters: { slug: 'default' } },
+      { ...base, linkParams: { slug: 'titanic' }, legacyInstallKeys: true }
+    );
+    // SDKs in the field read deepLinkParameters in preference to
+    // customParameters, so the two disagreeing would make the merge invisible.
+    expect(p.deepLinkParameters).toEqual(p.customParameters);
+    expect(p.deepLinkParameters).toEqual({ slug: 'titanic' });
+  });
+
+  it('keeps the legacy alias null when nothing is configured or carried', () => {
+    const p = toDeepLinkPayload(link, { ...base, legacyInstallKeys: true });
+    expect(p.deepLinkParameters).toBeNull();
+  });
+
+  it('does not throw when deep_link_parameters is null, a scalar or an array', () => {
+    for (const bad of [null, 'nope', 42, ['a', 'b']]) {
+      const p = toDeepLinkPayload({ ...link, deep_link_parameters: bad } as any, {
+        ...base,
+        linkParams: { slug: 'titanic' },
+      });
+      expect(p.customParameters).toEqual({ slug: 'titanic' });
+    }
+  });
+
+  it('introduces no key outside the canonical set', () => {
+    // The merge must land inside customParameters, never as a new top-level
+    // field — SDKs decode a fixed shape.
+    const p = toDeepLinkPayload(link, { ...base, linkParams: { slug: 'titanic' } });
+    const allowed = new Set<string>([
+      ...CANONICAL_DEEP_LINK_KEYS,
+      'confidenceScore',
+      'matchedFactors',
+    ]);
+    expect(Object.keys(p).filter((k) => !allowed.has(k))).toEqual([]);
+  });
+});
