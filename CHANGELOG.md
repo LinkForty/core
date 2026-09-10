@@ -1,3 +1,7 @@
+## 1.24.0 (2026-09-10)
+
+* feat(redirect): capture non-reserved query params on the click row (#49) ([7271d05](https://github.com/LinkForty/core/commit/7271d05)), closes [#49](https://github.com/LinkForty/core/issues/49)
+
 ## 1.23.0 (2026-09-10)
 
 * feat(schema): add click_events.link_params (SIT-410) (#46) ([ebcf64a](https://github.com/LinkForty/core/commit/ebcf64a)), closes [#46](https://github.com/LinkForty/core/issues/46)
