@@ -1,3 +1,7 @@
+## <small>1.25.4 (2026-09-15)</small>
+
+* fix(redirect): serve a plain page and 410 for a withdrawn link, instead of a JSON 404 (#53) ([9dd49fa](https://github.com/LinkForty/core/commit/9dd49fa)), closes [#53](https://github.com/LinkForty/core/issues/53)
+
 ## <small>1.25.3 (2026-09-15)</small>
 
 * fix(redirect): serve a page, not a JSON error, when a link has no web destination (#52) ([cb9e66a](https://github.com/LinkForty/core/commit/cb9e66a)), closes [#52](https://github.com/LinkForty/core/issues/52)
