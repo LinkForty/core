@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateLinkSafety, generateWarningLinkHTML, escapeHtml, safeHref } from './link-safety.js';
+import {
+  evaluateLinkSafety,
+  generateWarningLinkHTML,
+  escapeHtml,
+  safeHref,
+  evaluateLinkSafetyDecision,
+  blockCauseIsAbuse,
+  generateBlockedLinkHTML,
+} from './link-safety.js';
 
 describe('evaluateLinkSafety', () => {
   it('allows a plain healthy link', () => {
@@ -140,5 +148,116 @@ describe('safeHref', () => {
   it('rejects a relative path, which would point at the redirect host', () => {
     expect(safeHref('/deep/link/path')).toBeNull();
     expect(safeHref('')).toBeNull();
+  });
+});
+
+describe('evaluateLinkSafetyDecision — why a link was blocked', () => {
+  const T = '2026-08-10T00:00:00Z';
+
+  it('reports owner restriction as an abuse cause', () => {
+    const d = evaluateLinkSafetyDecision({ ownerSuspendedAt: T });
+    expect(d).toEqual({ outcome: 'block', cause: 'owner_suspended' });
+    expect(blockCauseIsAbuse(d.cause)).toBe(true);
+  });
+
+  it('reports an explicit disable as an abuse cause', () => {
+    const d = evaluateLinkSafetyDecision({ isActive: false, disabledAt: T });
+    expect(d).toEqual({ outcome: 'block', cause: 'disabled' });
+    expect(blockCauseIsAbuse(d.cause)).toBe(true);
+  });
+
+  /**
+   * The distinction the whole notice rests on. An expiry sweep and a person
+   * switching their own link off both land here, and neither of their visitors was
+   * targeted by anything.
+   */
+  it('reports a merely inactive link as NOT an abuse cause', () => {
+    const d = evaluateLinkSafetyDecision({ isActive: false });
+    expect(d).toEqual({ outcome: 'block', cause: 'inactive' });
+    expect(blockCauseIsAbuse(d.cause)).toBe(false);
+  });
+
+  /**
+   * Ordering guard. An abuse disable sets `isActive: false` as well, so testing
+   * `isActive` first would collapse every abuse disable into `inactive` and the
+   * notice would never be served to anyone. Every route test would still pass on
+   * the owner-restriction path, so this is the only place that catches it.
+   */
+  it('keeps the disable cause even though the link is also inactive', () => {
+    expect(evaluateLinkSafetyDecision({ isActive: false, disabledAt: T }).cause).toBe('disabled');
+  });
+
+  it('lets owner restriction outrank an explicit disable', () => {
+    expect(
+      evaluateLinkSafetyDecision({ ownerSuspendedAt: T, isActive: false, disabledAt: T }).cause
+    ).toBe('owner_suspended');
+  });
+
+  it('carries no cause when the link is fine or only warned', () => {
+    expect(evaluateLinkSafetyDecision({})).toEqual({ outcome: 'allow' });
+    expect(evaluateLinkSafetyDecision({ warnAt: T })).toEqual({ outcome: 'warn' });
+  });
+
+  it('agrees with evaluateLinkSafety on every outcome', () => {
+    for (const input of [
+      {},
+      { warnAt: T },
+      { isActive: false },
+      { disabledAt: T },
+      { ownerSuspendedAt: T },
+      { warnAt: T, ownerSuspendedAt: T },
+    ]) {
+      expect(evaluateLinkSafety(input)).toBe(evaluateLinkSafetyDecision(input).outcome);
+    }
+  });
+});
+
+describe('generateBlockedLinkHTML', () => {
+  const html = generateBlockedLinkHTML();
+
+  it('says only that the link is gone', () => {
+    expect(html).toContain('This link is no longer available');
+    expect(html).toContain('It was removed and no longer goes anywhere.');
+  });
+
+  /**
+   * The guard on the decision, not on the wording.
+   *
+   * The page must not characterise the link, its destination, or whoever made it.
+   * An earlier draft explained that the link had been reported for trying to obtain
+   * passwords and payment details — useful to a victim, but it is an accusation
+   * about a user's content published on a domain we serve, and it would be false
+   * the first time a link is disabled in error. If any of these words come back,
+   * that decision is being reversed and it should be a deliberate edit here first.
+   */
+  it('makes no claim about the link or whoever created it', () => {
+    for (const word of [
+      'phishing', 'fraud', 'fraudulent', 'scam', 'malicious', 'malware', 'abuse',
+      'reported', 'trick', 'steal', 'suspended', 'restricted', 'violat', 'blocked',
+      'password', 'bank', 'card details',
+    ]) {
+      expect(html.toLowerCase(), `page must not mention "${word}"`).not.toContain(word);
+    }
+  });
+
+  it('contains no link out at all', () => {
+    expect(html).not.toMatch(/<a\s/i);
+  });
+
+  it('contains no script and no external asset', () => {
+    expect(html).not.toMatch(/<script/i);
+    expect(html).not.toMatch(/https?:\/\//);
+  });
+
+  it('asks not to be indexed', () => {
+    expect(html).toContain('noindex');
+  });
+
+  /**
+   * Arity is the real containment. Adding a parameter is how a destination or an
+   * owner ends up rendered to a stranger, so it fails here before it fails in review.
+   */
+  it('takes no input, so it cannot carry anything from the link', () => {
+    expect(generateBlockedLinkHTML.length).toBe(0);
   });
 });

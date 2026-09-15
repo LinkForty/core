@@ -100,9 +100,17 @@ afterEach(async () => {
 });
 
 describe('owner restriction cannot be bypassed through the SDK cache', () => {
+  /**
+   * Asserted as "does not resolve", not as a status code. A restricted owner's link
+   * now answers 410 with a notice rather than 404, and this file is about the
+   * bypass, not the wording — pinning the code here would make every future change
+   * to the blocked response look like a security regression.
+   */
   it('blocks a restricted owner when the redirect populates the cache itself', async () => {
     const res = await redirectApp.inject({ method: 'GET', url: '/abc123' });
-    expect(res.statusCode).toBe(404);
+    expect(res.statusCode).not.toBe(302);
+    expect(res.headers.location).toBeUndefined();
+    expect(res.body).not.toContain('example.com');
   });
 
   it('still blocks after an SDK resolve has primed the same cache key', async () => {
@@ -111,7 +119,7 @@ describe('owner restriction cannot be bypassed through the SDK cache', () => {
     expect(redis.store.has('link:abc123')).toBe(true);
 
     const res = await redirectApp.inject({ method: 'GET', url: '/abc123' });
-    expect(res.statusCode, 'a restricted owner must stay blocked on a cache hit').toBe(404);
+    expect(res.statusCode, 'a restricted owner must stay blocked on a cache hit').not.toBe(302);
     expect(res.headers.location).toBeUndefined();
   });
 

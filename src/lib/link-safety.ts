@@ -9,11 +9,34 @@
  *               confirmed, this is strictly better than a hard block: a false
  *               positive still lets the visitor through, while a true positive
  *               still breaks the one-click flow a malicious link depends on.
- *   - `block` — behave as if the link does not exist.
+ *   - `block` — do not resolve.
  *
- * `block` deliberately produces the same response as an unknown short code. A
- * distinct "this link was disabled" response would confirm to whoever is probing
- * that the code was real, and would leak that its owner is under a restriction.
+ * A `block` used to be indistinguishable from an unknown short code, on the
+ * reasoning that a distinct response would confirm the code was real and leak that
+ * its owner is under a restriction.
+ *
+ * Two things were wrong with that. The secrecy was close to nil — whoever created
+ * the links already knows their own short codes, and a live link answers 302 while
+ * a dead one does not, so "real but withdrawn" was already distinguishable by the
+ * only party it was meant to be hidden from. And the response it produced was a raw
+ * JSON error, rendered on whatever branded domain the short link was served from.
+ *
+ * So a block caused by an explicit decision now answers 410 with a plain page —
+ * `blockCauseIsAbuse()` and `generateBlockedLinkHTML()` below. 410 rather than 404
+ * because the code existed and was withdrawn, which is a different fact from never
+ * having existed and is worth stating to anything reading the status.
+ *
+ * **The page says nothing about why.** It makes no claim about the link, its
+ * destination, or whoever created it. That is deliberate: a page on a short-link
+ * domain is not the place to characterise a user's content, and any claim made
+ * there would be wrong — and hard to withdraw — the first time a link is disabled
+ * in error.
+ *
+ * **The carve-out is deliberately narrow, and must stay narrow.** It applies only
+ * to an explicit disable or an owner restriction. A link that is merely inactive —
+ * expired, or switched off by the person who made it — keeps the old opaque
+ * response. Its cause is ambiguous, nobody decided anything about it, and there is
+ * nothing to say.
  */
 export type LinkSafetyOutcome = 'allow' | 'warn' | 'block';
 
@@ -28,19 +51,71 @@ export interface LinkSafetyInput {
    * restriction simply never pass it.
    */
   ownerSuspendedAt?: Date | string | null;
+  /**
+   * Set when the link was explicitly taken out of resolution.
+   *
+   * This is the field that separates "someone decided to stop this link" from
+   * "this link is off", and the distinction carries the whole notice below. An
+   * expiry sweep sets `isActive` and leaves this null; so does a person switching
+   * their own link off. Only a deliberate removal sets it.
+   *
+   * Never infer the cause from `isActive` instead. The two disagree far more often
+   * than they agree — most inactive links in a mature deployment expired or were
+   * switched off, and none of those visitors should be told they were phished.
+   */
+  disabledAt?: Date | string | null;
+}
+
+/** Why a link was blocked. Only the first two are an abuse decision. */
+export type LinkBlockCause = 'owner_suspended' | 'disabled' | 'inactive';
+
+export interface LinkSafetyDecision {
+  outcome: LinkSafetyOutcome;
+  /** Present only when `outcome` is `block`. */
+  cause?: LinkBlockCause;
 }
 
 /**
- * Decide what to do with a link that was found.
+ * Whether a block cause represents a decision someone made about abuse, as opposed
+ * to a link that is simply not live.
  *
- * Order matters: owner restriction and inactivity both beat `warn`. A link whose
- * owner is restricted must be unreachable even if it was only flagged to warn.
+ * The gate for the notice. Kept as a named predicate rather than an inline
+ * comparison so there is exactly one place to look when asking "who sees this
+ * page", and so widening it is a visible edit rather than an incidental one.
+ */
+export function blockCauseIsAbuse(cause: LinkBlockCause | undefined): boolean {
+  return cause === 'owner_suspended' || cause === 'disabled';
+}
+
+/**
+ * Decide what to do with a link that was found, and say why.
+ *
+ * Order matters, and it is not the same as the order of severity. Owner
+ * restriction and an explicit disable both beat `warn`: a link whose owner is
+ * restricted must be unreachable even if it was only flagged to warn.
+ *
+ * `disabled` is tested before the bare `isActive` check so that an abuse disable
+ * keeps its cause. Both set `isActive` to false in practice, and whichever is
+ * tested first wins — putting `isActive` first would silently collapse every
+ * abuse disable into `inactive` and the notice would never be served. There is a
+ * test for exactly that ordering.
+ */
+export function evaluateLinkSafetyDecision(input: LinkSafetyInput): LinkSafetyDecision {
+  if (input.ownerSuspendedAt != null) return { outcome: 'block', cause: 'owner_suspended' };
+  if (input.disabledAt != null) return { outcome: 'block', cause: 'disabled' };
+  if (input.isActive === false) return { outcome: 'block', cause: 'inactive' };
+  if (input.warnAt != null) return { outcome: 'warn' };
+  return { outcome: 'allow' };
+}
+
+/**
+ * The outcome alone.
+ *
+ * Retained with its original signature because it is part of this package's public
+ * surface; callers that only branch on allow/warn/block need no change.
  */
 export function evaluateLinkSafety(input: LinkSafetyInput): LinkSafetyOutcome {
-  if (input.ownerSuspendedAt != null) return 'block';
-  if (input.isActive === false) return 'block';
-  if (input.warnAt != null) return 'warn';
-  return 'allow';
+  return evaluateLinkSafetyDecision(input).outcome;
 }
 
 /**
@@ -151,6 +226,79 @@ export function generateWarningLinkHTML(
        password or personal details.</p>
     ${continueButton}
     ${reportLink}
+  </main>
+</body>
+</html>`;
+}
+
+/**
+ * Copy for the page, separated from the markup.
+ *
+ * A structure rather than inline strings so a translation is a data addition and
+ * not a rewrite.
+ *
+ * Deliberately states only that the link is gone. Earlier drafts explained why and
+ * told the visitor what to do if they had entered a password — useful to someone
+ * who followed a hostile link, but it puts an accusation about a user's content on
+ * a page we serve, and makes a claim that would be false the first time a link is
+ * disabled in error. Nothing here is a claim about anything.
+ */
+const BLOCKED_COPY = {
+  title: 'This link is no longer available',
+  heading: 'This link is no longer available',
+  body: 'It was removed and no longer goes anywhere.',
+} as const;
+
+/**
+ * Page served when a link was blocked by an explicit decision.
+ *
+ * Four things are deliberately absent, and each was a decision rather than an
+ * omission:
+ *
+ *  - **Any statement of why.** See BLOCKED_COPY above.
+ *  - **No way to continue.** The warning interstitial offers one because a `warn`
+ *    link is only suspected. Here there is nowhere to send anyone, and an escape
+ *    hatch would defeat the block.
+ *  - **No destination, owner, or other link detail.** The visitor is not entitled
+ *    to another party's details, and a withheld destination cannot be re-followed.
+ *  - **Next to no branding.** Whoever reads this has no relationship with whatever
+ *    is hosting the link.
+ *
+ * Takes no arguments, so nothing from the link can reach it. That is the property
+ * worth preserving: adding a parameter here is how a destination or an owner ends
+ * up rendered to a stranger. There is a test asserting the arity stays zero.
+ *
+ * No JavaScript and no external assets, so it renders on a bare redirect host and
+ * under a strict content-security policy.
+ */
+export function generateBlockedLinkHTML(): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>${BLOCKED_COPY.title}</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         background:#f6f7f8; color:#16191d; padding:24px;
+         font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  .card { max-width:30rem; width:100%; background:#fff; border:1px solid #e3e6ea;
+          border-radius:10px; padding:28px; text-align:center; }
+  h1 { margin:0 0 10px; font-size:1.25rem; line-height:1.3; }
+  p { margin:0; color:#5b636d; }
+  @media (prefers-color-scheme: dark) {
+    body { background:#14171a; color:#e8eaed; }
+    .card { background:#1d2126; border-color:#2c3238; }
+    p { color:#98a1ab; }
+  }
+</style>
+</head>
+<body>
+  <main class="card">
+    <h1>${BLOCKED_COPY.heading}</h1>
+    <p>${BLOCKED_COPY.body}</p>
   </main>
 </body>
 </html>`;
