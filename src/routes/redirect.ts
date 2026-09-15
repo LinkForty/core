@@ -141,6 +141,74 @@ function generateInterstitialHTML(schemeUrl: string, fallbackUrl: string, title?
 </body></html>`;
 }
 
+/**
+ * Escape a value for interpolation into HTML text or a double-quoted attribute.
+ *
+ * `&` first, or the other replacements' own ampersands get double-escaped.
+ *
+ * The older generators above escape only a subset of these, inline. They predate
+ * this helper and are left alone rather than changed as a drive-by — the values
+ * they interpolate are URLs the workspace owner configured, not free text.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Page shown to a desktop visitor when a link has no web destination at any level
+ * of the chain (link, template, workspace).
+ *
+ * This is the expected configuration for an app-only product, not a mistake — a
+ * customer with no website has nothing to put in a web fallback. Until this page
+ * existed they got `{"error":"No destination URL configured for this link"}` as a
+ * raw 404 body, rendered on their own branded short-link domain.
+ *
+ * Deliberately plain. It is served from the customer's domain, so it should read
+ * as a neutral system page rather than as LinkForty's design; a configurable
+ * version is a separate decision.
+ *
+ * Nothing about the link is disclosed beyond what the visitor already has: a
+ * title, and store links when the link carries them. No destination URL, no
+ * workspace name.
+ */
+function generateNoWebDestinationHTML(opts: {
+  title?: string | null;
+  iosUrl?: string | null;
+  androidUrl?: string | null;
+}): string {
+  const heading = opts.title ? escapeHtml(opts.title) : 'This link opens in an app';
+  const buttons = [
+    opts.iosUrl ? `<a class="btn" href="${escapeHtml(opts.iosUrl)}">Download for iOS</a>` : '',
+    opts.androidUrl ? `<a class="btn" href="${escapeHtml(opts.androidUrl)}">Download for Android</a>` : '',
+  ].join('');
+
+  return `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>${heading}</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f9fafb; color: #111827; text-align: center; }
+  .container { padding: 2rem; max-width: 32rem; }
+  h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 0.5rem; }
+  p { font-size: 0.875rem; color: #6b7280; margin: 0 0 1.5rem; line-height: 1.5; }
+  .btn { display: inline-block; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-size: 0.875rem; font-weight: 500; text-decoration: none; margin: 0.25rem; background: #e5e7eb; color: #374151; }
+</style>
+</head><body>
+<div class="container">
+  <h1>${heading}</h1>
+  <p>This link opens content inside a mobile app. Open it on your phone, or install the app below.</p>
+  ${buttons}
+</div>
+</body></html>`;
+}
+
 export interface RedirectRouteOptions {
   /**
    * Absolute URL of an abuse-reporting page. When set, the interstitial warning
@@ -604,8 +672,34 @@ export async function redirectRoutes(
       redirectUrl = webFallbackUrl || link.original_url;
     }
 
-    // If no URL found at all, return a user-friendly error
+    /**
+     * No destination at any level of the chain.
+     *
+     * On desktop this is a real person who clicked a real link, so serve a page
+     * rather than a JSON error body. Mobile keeps the 404: the branches above
+     * already offer a store URL to a device that could install the app, so
+     * reaching here means the link has nothing at all.
+     *
+     * Unlike the warning page earlier in this handler, this does NOT suppress
+     * click recording — the click was already written by the setImmediate block,
+     * and this is a genuine visit to a working link rather than an enforcement
+     * action. Do not "make them consistent".
+     */
     if (!redirectUrl) {
+      if (device === 'web') {
+        return reply
+          .status(200)
+          .header('X-Robots-Tag', 'noindex, nofollow')
+          .header('Cache-Control', 'no-store')
+          .type('text/html')
+          .send(
+            generateNoWebDestinationHTML({
+              title: link.og_title || link.title,
+              iosUrl,
+              androidUrl,
+            })
+          );
+      }
       return reply.status(404).send({ error: 'No destination URL configured for this link' });
     }
 
