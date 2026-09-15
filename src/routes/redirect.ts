@@ -7,8 +7,10 @@ import { storeFingerprintForClick, type FingerprintData } from '../lib/fingerpri
 import { emitClickEvent } from '../lib/event-emitter.js';
 import { classifyBot, edgeBotSignal } from '../lib/bot-detection.js';
 import {
-  evaluateLinkSafety,
+  evaluateLinkSafetyDecision,
+  blockCauseIsAbuse,
   generateWarningLinkHTML,
+  generateBlockedLinkHTML,
   createOwnerSuspensionSelect,
 } from '../lib/link-safety.js';
 
@@ -284,7 +286,7 @@ export async function redirectRoutes(
           LEFT JOIN link_templates t ON l.template_id = t.id
           LEFT JOIN organizations o ON l.organization_id = o.id
           WHERE l.short_code = $1 AND t.slug = $2
-          AND l.is_active = true
+          AND (l.is_active = true OR l.disabled_at IS NOT NULL)
           AND (l.expires_at IS NULL OR l.expires_at > NOW())
         `;
         params = [shortCode, templateSlug];
@@ -297,7 +299,8 @@ export async function redirectRoutes(
           FROM links l
           LEFT JOIN link_templates t ON l.template_id = t.id
           LEFT JOIN organizations o ON l.organization_id = o.id
-          WHERE l.short_code = $1 AND l.is_active = true
+          WHERE l.short_code = $1
+          AND (l.is_active = true OR l.disabled_at IS NOT NULL)
           AND (l.expires_at IS NULL OR l.expires_at > NOW())
         `;
         params = [shortCode];
@@ -331,22 +334,40 @@ export async function redirectRoutes(
     // the old code did. Staleness is handled by invalidateLinkResolutionCache(),
     // called when a link is updated or deleted.
     //
-    // `is_active` therefore stays filtered in SQL — an inactive link never needs
-    // fetching or caching. What genuinely cannot be expressed in the WHERE clause
-    // is `warn_at`, which needs the row in hand to choose between redirecting and
-    // serving an interstitial.
-    const safety = evaluateLinkSafety({
+    // The WHERE clause admits a row that is inactive *only* when `disabled_at` is
+    // set, because an explicitly disabled link has a notice to serve and therefore
+    // needs fetching. Everything else inactive — expired, or switched off by its
+    // owner — is still excluded in SQL and never reaches here, which is what keeps
+    // those visitors on the opaque response they should get.
+    //
+    // `warn_at` remains the case that cannot be expressed in the WHERE clause at
+    // all, since it needs the row in hand to choose between redirecting and serving
+    // an interstitial.
+    const safety = evaluateLinkSafetyDecision({
       isActive: link.is_active,
       warnAt: link.warn_at,
+      disabledAt: link.disabled_at,
       ownerSuspendedAt: link.owner_suspended_at,
     });
 
-    if (safety === 'block') {
-      // Same response as an unknown code — see evaluateLinkSafety for why.
+    if (safety.outcome === 'block') {
+      // An abuse decision earns an explanation; anything else stays opaque. See the
+      // module comment in link-safety.ts for why that split, and why it stays narrow.
+      if (blockCauseIsAbuse(safety.cause)) {
+        // 410, not 404: this code existed and was withdrawn. No click is recorded,
+        // for the same reason the warning page records none — nobody reached the
+        // destination, and counting it would put phantom traffic on the link.
+        return reply
+          .status(410)
+          .header('X-Robots-Tag', 'noindex, nofollow')
+          .header('Cache-Control', 'no-store')
+          .type('text/html')
+          .send(generateBlockedLinkHTML());
+      }
       return reply.status(404).send({ error: 'Link not found' });
     }
 
-    if (safety === 'warn') {
+    if (safety.outcome === 'warn') {
       // No click is recorded here. A warning view is not a click on the link, and
       // counting it would silently inflate the owner's analytics.
       const destination =

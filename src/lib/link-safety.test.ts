@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateLinkSafety, generateWarningLinkHTML, escapeHtml, safeHref } from './link-safety.js';
+import {
+  evaluateLinkSafety,
+  generateWarningLinkHTML,
+  escapeHtml,
+  safeHref,
+  evaluateLinkSafetyDecision,
+  blockCauseIsAbuse,
+  generateBlockedLinkHTML,
+} from './link-safety.js';
 
 describe('evaluateLinkSafety', () => {
   it('allows a plain healthy link', () => {
@@ -140,5 +148,107 @@ describe('safeHref', () => {
   it('rejects a relative path, which would point at the redirect host', () => {
     expect(safeHref('/deep/link/path')).toBeNull();
     expect(safeHref('')).toBeNull();
+  });
+});
+
+describe('evaluateLinkSafetyDecision — why a link was blocked', () => {
+  const T = '2026-08-10T00:00:00Z';
+
+  it('reports owner restriction as an abuse cause', () => {
+    const d = evaluateLinkSafetyDecision({ ownerSuspendedAt: T });
+    expect(d).toEqual({ outcome: 'block', cause: 'owner_suspended' });
+    expect(blockCauseIsAbuse(d.cause)).toBe(true);
+  });
+
+  it('reports an explicit disable as an abuse cause', () => {
+    const d = evaluateLinkSafetyDecision({ isActive: false, disabledAt: T });
+    expect(d).toEqual({ outcome: 'block', cause: 'disabled' });
+    expect(blockCauseIsAbuse(d.cause)).toBe(true);
+  });
+
+  /**
+   * The distinction the whole notice rests on. An expiry sweep and a person
+   * switching their own link off both land here, and neither of their visitors was
+   * targeted by anything.
+   */
+  it('reports a merely inactive link as NOT an abuse cause', () => {
+    const d = evaluateLinkSafetyDecision({ isActive: false });
+    expect(d).toEqual({ outcome: 'block', cause: 'inactive' });
+    expect(blockCauseIsAbuse(d.cause)).toBe(false);
+  });
+
+  /**
+   * Ordering guard. An abuse disable sets `isActive: false` as well, so testing
+   * `isActive` first would collapse every abuse disable into `inactive` and the
+   * notice would never be served to anyone. Every route test would still pass on
+   * the owner-restriction path, so this is the only place that catches it.
+   */
+  it('keeps the disable cause even though the link is also inactive', () => {
+    expect(evaluateLinkSafetyDecision({ isActive: false, disabledAt: T }).cause).toBe('disabled');
+  });
+
+  it('lets owner restriction outrank an explicit disable', () => {
+    expect(
+      evaluateLinkSafetyDecision({ ownerSuspendedAt: T, isActive: false, disabledAt: T }).cause
+    ).toBe('owner_suspended');
+  });
+
+  it('carries no cause when the link is fine or only warned', () => {
+    expect(evaluateLinkSafetyDecision({})).toEqual({ outcome: 'allow' });
+    expect(evaluateLinkSafetyDecision({ warnAt: T })).toEqual({ outcome: 'warn' });
+  });
+
+  it('agrees with evaluateLinkSafety on every outcome', () => {
+    for (const input of [
+      {},
+      { warnAt: T },
+      { isActive: false },
+      { disabledAt: T },
+      { ownerSuspendedAt: T },
+      { warnAt: T, ownerSuspendedAt: T },
+    ]) {
+      expect(evaluateLinkSafety(input)).toBe(evaluateLinkSafetyDecision(input).outcome);
+    }
+  });
+});
+
+describe('generateBlockedLinkHTML', () => {
+  const html = generateBlockedLinkHTML();
+
+  it('says the link was removed and why, without jargon', () => {
+    expect(html).toContain('This link has been removed');
+    expect(html).toMatch(/passwords, payment details, or personal information/i);
+  });
+
+  it('gives the visitor something to do', () => {
+    expect(html).toMatch(/change that password now/i);
+    expect(html).toMatch(/contact your bank/i);
+    expect(html).toMatch(/verification or one-time code/i);
+  });
+
+  /** The advice most likely to keep someone from being taken twice. */
+  it('warns against using contact details from the page that sent them', () => {
+    expect(html).toMatch(/do not use any contact details from the message or page/i);
+  });
+
+  it('reassures anyone who entered nothing', () => {
+    expect(html).toMatch(/nothing you need to do/i);
+  });
+
+  it('contains no link out at all — there is nowhere safe to send them', () => {
+    expect(html).not.toMatch(/<a\s/i);
+  });
+
+  it('contains no script and no external asset', () => {
+    expect(html).not.toMatch(/<script/i);
+    expect(html).not.toMatch(/https?:\/\//);
+  });
+
+  it('asks not to be indexed', () => {
+    expect(html).toContain('noindex');
+  });
+
+  it('takes no input, so it cannot carry anything from the link', () => {
+    expect(generateBlockedLinkHTML.length).toBe(0);
   });
 });

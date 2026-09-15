@@ -28,6 +28,7 @@ function linkRow(overrides: Record<string, unknown> = {}) {
     deep_link_path: null,
     is_active: true,
     warn_at: null,
+    disabled_at: null,
     owner_suspended_at: null,
     expires_at: null,
     targeting_rules: null,
@@ -90,25 +91,116 @@ describe('redirect safety gate', () => {
     expect(res.headers.location).toBe('https://example.com/landing');
   });
 
-  it('404s an inactive link', async () => {
+  /**
+   * An inactive link with no `disabled_at` is expired or was switched off by whoever
+   * made it. Nobody decided anything about abuse, so nothing is explained.
+   *
+   * In practice the WHERE clause excludes these before they reach the gate; this
+   * covers the row arriving from cache, where it can still be seen.
+   */
+  it('404s an inactive link that was not disabled by a decision', async () => {
     mockDb(linkRow({ is_active: false }));
     const res = await app.inject({ method: 'GET', url: '/abc123' });
     expect(res.statusCode).toBe(404);
+    expect(res.body).not.toContain('This link has been removed');
   });
 
-  it('404s when the owner is restricted, even though the link itself is fine', async () => {
-    mockDb(linkRow({ owner_suspended_at: '2026-08-10T00:00:00Z' }));
-    const res = await app.inject({ method: 'GET', url: '/abc123' });
-    expect(res.statusCode).toBe(404);
-  });
-
-  it('gives a restricted owner the SAME response as an unknown code, leaking nothing', async () => {
-    mockDb(linkRow({ owner_suspended_at: '2026-08-10T00:00:00Z' }));
-    const restricted = await app.inject({ method: 'GET', url: '/abc123' });
+  /**
+   * The narrowed form of the old "leaks nothing" test.
+   *
+   * That test asserted every blocked link was byte-identical to an unknown code.
+   * Deliberately no longer true — an abuse decision now earns an explanation, see
+   * link-safety.ts. What must still hold is that a link which is merely *off* gives
+   * nothing away, because its owner did nothing wrong and its visitor was not
+   * targeted. This is the assertion that fails if the notice is ever widened to
+   * plain `is_active`.
+   */
+  it('gives a merely inactive link the SAME response as an unknown code', async () => {
+    mockDb(linkRow({ is_active: false }));
+    const inactive = await app.inject({ method: 'GET', url: '/abc123' });
     mockDb(null);
     const unknown = await app.inject({ method: 'GET', url: '/nosuchcode' });
-    expect(restricted.statusCode).toBe(unknown.statusCode);
-    expect(restricted.body).toBe(unknown.body);
+    expect(inactive.statusCode).toBe(unknown.statusCode);
+    expect(inactive.body).toBe(unknown.body);
+  });
+
+  describe('a link blocked by an abuse decision', () => {
+    const SUSPENDED = { owner_suspended_at: '2026-08-10T00:00:00Z' };
+    const DISABLED = { is_active: false, disabled_at: '2026-08-10T00:00:00Z' };
+
+    it.each([
+      ['the owner is restricted', SUSPENDED],
+      ['the link itself was disabled', DISABLED],
+    ])('serves the notice with 410 Gone when %s', async (_label, row) => {
+      mockDb(linkRow(row));
+      const res = await app.inject({ method: 'GET', url: '/abc123' });
+      expect(res.statusCode).toBe(410);
+      expect(res.headers['content-type']).toMatch(/text\/html/);
+      expect(res.body).toContain('This link has been removed');
+    });
+
+    it('never redirects — there is nowhere safe to send anyone', async () => {
+      mockDb(linkRow(SUSPENDED));
+      const res = await app.inject({ method: 'GET', url: '/abc123' });
+      expect(res.statusCode).not.toBe(302);
+      expect(res.headers.location).toBeUndefined();
+    });
+
+    /** The warning page offers a way through because it is only a suspicion. This is not. */
+    it('offers no way to continue', async () => {
+      mockDb(linkRow(SUSPENDED));
+      const res = await app.inject({ method: 'GET', url: '/abc123' });
+      expect(res.body).not.toContain('Continue anyway');
+      expect(res.body).not.toMatch(/<a[^>]+href="https?:/i);
+    });
+
+    /**
+     * The assertion that matters most. Naming the destination puts the hostile URL
+     * back in front of the one person already proven to click it, and the workspace
+     * and owner are somebody else's details.
+     */
+    it('names no destination, workspace, or account holder', async () => {
+      mockDb(
+        linkRow({
+          ...SUSPENDED,
+          original_url: 'https://phish.example/steal',
+          web_fallback_url: 'https://phish.example/fallback',
+          deep_link_path: '/secret-path',
+        })
+      );
+      const res = await app.inject({ method: 'GET', url: '/abc123' });
+      expect(res.body).not.toContain('phish.example');
+      expect(res.body).not.toContain('secret-path');
+    });
+
+    it('tells the visitor what to do if they already entered something', async () => {
+      mockDb(linkRow(SUSPENDED));
+      const res = await app.inject({ method: 'GET', url: '/abc123' });
+      expect(res.body).toMatch(/change that password/i);
+      expect(res.body).toMatch(/contact your bank/i);
+      expect(res.body).toMatch(/do not use any contact details/i);
+    });
+
+    it('asks not to be indexed or cached', async () => {
+      mockDb(linkRow(SUSPENDED));
+      const res = await app.inject({ method: 'GET', url: '/abc123' });
+      expect(res.headers['x-robots-tag']).toMatch(/noindex/);
+      expect(res.headers['cache-control']).toMatch(/no-store/);
+    });
+
+    it('records NO click — nobody reached the destination', async () => {
+      mockDb(linkRow(SUSPENDED));
+      await app.inject({ method: 'GET', url: '/abc123' });
+      expect(await clickWasRecorded()).toBe(false);
+    });
+
+    /** An unknown code must stay a plain 404; only a real, withdrawn code is 410. */
+    it('still 404s an unknown short code', async () => {
+      mockDb(null);
+      const res = await app.inject({ method: 'GET', url: '/nosuchcode' });
+      expect(res.statusCode).toBe(404);
+      expect(res.body).not.toContain('This link has been removed');
+    });
   });
 
   describe('a link flagged to warn', () => {
@@ -152,10 +244,27 @@ describe('redirect safety gate', () => {
       expect(res.body).toContain('https://example.net/x');
     });
 
-    it('is outranked by owner restriction', async () => {
+    /**
+     * Precedence is unchanged — a block still outranks a warn. What changed is the
+     * response it produces. The property under test is that the visitor never gets
+     * the interstitial's way through, since a restricted owner's link must be
+     * unreachable even when it was only flagged to warn.
+     */
+    it('is outranked by owner restriction, and offers no way through', async () => {
       mockDb(linkRow({ warn_at: '2026-08-10T00:00:00Z', owner_suspended_at: '2026-08-10T00:00:00Z' }));
       const res = await app.inject({ method: 'GET', url: '/abc123' });
-      expect(res.statusCode).toBe(404);
+      expect(res.statusCode).toBe(410);
+      expect(res.body).toContain('This link has been removed');
+      expect(res.body).not.toContain('Check this link before continuing');
+      expect(res.body).not.toContain('Continue anyway');
+    });
+
+    /** Same precedence, for a link disabled directly rather than via its owner. */
+    it('is outranked by an explicit disable', async () => {
+      mockDb(linkRow({ warn_at: '2026-08-10T00:00:00Z', is_active: false, disabled_at: '2026-08-10T00:00:00Z' }));
+      const res = await app.inject({ method: 'GET', url: '/abc123' });
+      expect(res.statusCode).toBe(410);
+      expect(res.body).not.toContain('Continue anyway');
     });
   });
 
