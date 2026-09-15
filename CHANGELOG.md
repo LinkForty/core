@@ -1,3 +1,7 @@
+## <small>1.25.3 (2026-09-15)</small>
+
+* fix(redirect): serve a page, not a JSON error, when a link has no web destination (#52) ([cb9e66a](https://github.com/LinkForty/core/commit/cb9e66a)), closes [#52](https://github.com/LinkForty/core/issues/52)
+
 ## <small>1.25.2 (2026-09-10)</small>
 
 * docs(changelog): remove the remaining private tracker id (#51) ([9a5f5a7](https://github.com/LinkForty/core/commit/9a5f5a7)), closes [#51](https://github.com/LinkForty/core/issues/51)
