@@ -102,7 +102,7 @@ describe('redirect safety gate', () => {
     mockDb(linkRow({ is_active: false }));
     const res = await app.inject({ method: 'GET', url: '/abc123' });
     expect(res.statusCode).toBe(404);
-    expect(res.body).not.toContain('This link has been removed');
+    expect(res.body).not.toContain('This link is no longer available');
   });
 
   /**
@@ -136,7 +136,7 @@ describe('redirect safety gate', () => {
       const res = await app.inject({ method: 'GET', url: '/abc123' });
       expect(res.statusCode).toBe(410);
       expect(res.headers['content-type']).toMatch(/text\/html/);
-      expect(res.body).toContain('This link has been removed');
+      expect(res.body).toContain('This link is no longer available');
     });
 
     it('never redirects — there is nowhere safe to send anyone', async () => {
@@ -173,12 +173,17 @@ describe('redirect safety gate', () => {
       expect(res.body).not.toContain('secret-path');
     });
 
-    it('tells the visitor what to do if they already entered something', async () => {
+    /**
+     * The page must not tell a visitor why the link went away. It is a claim about
+     * a user's content on a domain we serve, and it would be false the first time a
+     * link is disabled in error.
+     */
+    it('does not say why the link was removed', async () => {
       mockDb(linkRow(SUSPENDED));
       const res = await app.inject({ method: 'GET', url: '/abc123' });
-      expect(res.body).toMatch(/change that password/i);
-      expect(res.body).toMatch(/contact your bank/i);
-      expect(res.body).toMatch(/do not use any contact details/i);
+      for (const word of ['phishing', 'fraud', 'scam', 'abuse', 'reported', 'suspended', 'restricted']) {
+        expect(res.body.toLowerCase(), `must not mention "${word}"`).not.toContain(word);
+      }
     });
 
     it('asks not to be indexed or cached', async () => {
@@ -199,7 +204,7 @@ describe('redirect safety gate', () => {
       mockDb(null);
       const res = await app.inject({ method: 'GET', url: '/nosuchcode' });
       expect(res.statusCode).toBe(404);
-      expect(res.body).not.toContain('This link has been removed');
+      expect(res.body).not.toContain('This link is no longer available');
     });
   });
 
@@ -254,7 +259,7 @@ describe('redirect safety gate', () => {
       mockDb(linkRow({ warn_at: '2026-08-10T00:00:00Z', owner_suspended_at: '2026-08-10T00:00:00Z' }));
       const res = await app.inject({ method: 'GET', url: '/abc123' });
       expect(res.statusCode).toBe(410);
-      expect(res.body).toContain('This link has been removed');
+      expect(res.body).toContain('This link is no longer available');
       expect(res.body).not.toContain('Check this link before continuing');
       expect(res.body).not.toContain('Continue anyway');
     });

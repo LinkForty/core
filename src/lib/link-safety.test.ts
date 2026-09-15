@@ -215,27 +215,32 @@ describe('evaluateLinkSafetyDecision — why a link was blocked', () => {
 describe('generateBlockedLinkHTML', () => {
   const html = generateBlockedLinkHTML();
 
-  it('says the link was removed and why, without jargon', () => {
-    expect(html).toContain('This link has been removed');
-    expect(html).toMatch(/passwords, payment details, or personal information/i);
+  it('says only that the link is gone', () => {
+    expect(html).toContain('This link is no longer available');
+    expect(html).toContain('It was removed and no longer goes anywhere.');
   });
 
-  it('gives the visitor something to do', () => {
-    expect(html).toMatch(/change that password now/i);
-    expect(html).toMatch(/contact your bank/i);
-    expect(html).toMatch(/verification or one-time code/i);
+  /**
+   * The guard on the decision, not on the wording.
+   *
+   * The page must not characterise the link, its destination, or whoever made it.
+   * An earlier draft explained that the link had been reported for trying to obtain
+   * passwords and payment details — useful to a victim, but it is an accusation
+   * about a user's content published on a domain we serve, and it would be false
+   * the first time a link is disabled in error. If any of these words come back,
+   * that decision is being reversed and it should be a deliberate edit here first.
+   */
+  it('makes no claim about the link or whoever created it', () => {
+    for (const word of [
+      'phishing', 'fraud', 'fraudulent', 'scam', 'malicious', 'malware', 'abuse',
+      'reported', 'trick', 'steal', 'suspended', 'restricted', 'violat', 'blocked',
+      'password', 'bank', 'card details',
+    ]) {
+      expect(html.toLowerCase(), `page must not mention "${word}"`).not.toContain(word);
+    }
   });
 
-  /** The advice most likely to keep someone from being taken twice. */
-  it('warns against using contact details from the page that sent them', () => {
-    expect(html).toMatch(/do not use any contact details from the message or page/i);
-  });
-
-  it('reassures anyone who entered nothing', () => {
-    expect(html).toMatch(/nothing you need to do/i);
-  });
-
-  it('contains no link out at all — there is nowhere safe to send them', () => {
+  it('contains no link out at all', () => {
     expect(html).not.toMatch(/<a\s/i);
   });
 
@@ -248,6 +253,10 @@ describe('generateBlockedLinkHTML', () => {
     expect(html).toContain('noindex');
   });
 
+  /**
+   * Arity is the real containment. Adding a parameter is how a destination or an
+   * owner ends up rendered to a stranger, so it fails here before it fails in review.
+   */
   it('takes no input, so it cannot carry anything from the link', () => {
     expect(generateBlockedLinkHTML.length).toBe(0);
   });

@@ -13,29 +13,30 @@
  *
  * A `block` used to be indistinguishable from an unknown short code, on the
  * reasoning that a distinct response would confirm the code was real and leak that
- * its owner is under a restriction. That reasoning does not survive contact with
- * who is actually on the other end.
+ * its owner is under a restriction.
  *
- * The person following a link that was disabled for abuse is the intended victim of
- * whatever the link was doing. They received a message imitating a bank, an
- * employer or a government service, and they clicked it — often having already
- * entered something on the page before it was taken down. A response that says
- * nothing reads as "broken, try again later", and the next thing they do is go
- * looking for the real site, or for the message again.
+ * Two things were wrong with that. The secrecy was close to nil — whoever created
+ * the links already knows their own short codes, and a live link answers 302 while
+ * a dead one does not, so "real but withdrawn" was already distinguishable by the
+ * only party it was meant to be hidden from. And the response it produced was a raw
+ * JSON error, rendered on whatever branded domain the short link was served from.
  *
- * The secrecy it bought was close to nil. Whoever created the links already knows
- * their own short codes, and a working link answers 302 while a dead one does not,
- * so the ability to tell "real but stopped" from "never existed" was already there
- * for the only party it was meant to be hidden from.
+ * So a block caused by an explicit decision now answers 410 with a plain page —
+ * `blockCauseIsAbuse()` and `generateBlockedLinkHTML()` below. 410 rather than 404
+ * because the code existed and was withdrawn, which is a different fact from never
+ * having existed and is worth stating to anything reading the status.
  *
- * So a block caused by an explicit abuse decision now serves a notice instead —
- * `blockCauseIsAbuse()` and `generateBlockedLinkHTML()` below.
+ * **The page says nothing about why.** It makes no claim about the link, its
+ * destination, or whoever created it. That is deliberate: a page on a short-link
+ * domain is not the place to characterise a user's content, and any claim made
+ * there would be wrong — and hard to withdraw — the first time a link is disabled
+ * in error.
  *
  * **The carve-out is deliberately narrow, and must stay narrow.** It applies only
  * to an explicit disable or an owner restriction. A link that is merely inactive —
  * expired, or switched off by the person who made it — keeps the old opaque
- * response, because its cause is ambiguous and telling that link's visitors they
- * may have been phished would be false, and damaging to whoever made it.
+ * response. Its cause is ambiguous, nobody decided anything about it, and there is
+ * nothing to say.
  */
 export type LinkSafetyOutcome = 'allow' | 'warn' | 'block';
 
@@ -231,56 +232,46 @@ export function generateWarningLinkHTML(
 }
 
 /**
- * Copy for the notice, separated from the markup.
+ * Copy for the page, separated from the markup.
  *
  * A structure rather than inline strings so a translation is a data addition and
- * not a rewrite. That matters more than usual here: this page exists for someone
- * who has just been targeted, and advice in a language they do not read is
- * decoration. Only English ships today; the shape is what makes adding to it cheap.
+ * not a rewrite.
+ *
+ * Deliberately states only that the link is gone. Earlier drafts explained why and
+ * told the visitor what to do if they had entered a password — useful to someone
+ * who followed a hostile link, but it puts an accusation about a user's content on
+ * a page we serve, and makes a claim that would be false the first time a link is
+ * disabled in error. Nothing here is a claim about anything.
  */
 const BLOCKED_COPY = {
-  title: 'This link has been removed',
-  heading: 'This link has been removed',
-  lede:
-    'It was reported as a page designed to trick people into giving away passwords, ' +
-    'payment details, or personal information, so it no longer works.',
-  actionHeading: 'If you entered anything after following this link',
-  actions: [
-    'Change that password now, and anywhere else you use the same one.',
-    'If you entered card or bank details, contact your bank straight away.',
-    'If you entered a verification or one-time code, assume someone tried to use it.',
-  ],
-  warning:
-    'Contact the organisation using a phone number or web address you already have — ' +
-    'from a statement, a card, or a site you typed yourself. Do not use any contact ' +
-    'details from the message or page that sent you here; they may belong to the ' +
-    'same people.',
-  reassurance: 'If you did not enter anything, there is nothing you need to do.',
+  title: 'This link is no longer available',
+  heading: 'This link is no longer available',
+  body: 'It was removed and no longer goes anywhere.',
 } as const;
 
 /**
- * Notice served when a link was blocked by an abuse decision.
+ * Page served when a link was blocked by an explicit decision.
  *
- * Three things are deliberately absent, and each was a decision rather than an
+ * Four things are deliberately absent, and each was a decision rather than an
  * omission:
  *
+ *  - **Any statement of why.** See BLOCKED_COPY above.
  *  - **No way to continue.** The warning interstitial offers one because a `warn`
- *    link is only suspected. Here there is nowhere safe to send anyone, and an
- *    escape hatch would defeat the block for the exact person it protects.
- *  - **No destination, workspace, or account holder.** The visitor is not entitled
- *    to another party's details, and naming the destination would put the hostile
- *    URL back in front of the one person already proven to click it.
+ *    link is only suspected. Here there is nowhere to send anyone, and an escape
+ *    hatch would defeat the block.
+ *  - **No destination, owner, or other link detail.** The visitor is not entitled
+ *    to another party's details, and a withheld destination cannot be re-followed.
  *  - **Next to no branding.** Whoever reads this has no relationship with whatever
- *    is hosting the link. A prominent unfamiliar name on a page about fraud invites
- *    the reasonable suspicion that the page is itself the fraud.
+ *    is hosting the link.
+ *
+ * Takes no arguments, so nothing from the link can reach it. That is the property
+ * worth preserving: adding a parameter here is how a destination or an owner ends
+ * up rendered to a stranger. There is a test asserting the arity stays zero.
  *
  * No JavaScript and no external assets, so it renders on a bare redirect host and
- * under a strict content-security policy. Nothing is interpolated from the link, so
- * unlike the warning page there is no untrusted value to escape — keep it that way.
+ * under a strict content-security policy.
  */
 export function generateBlockedLinkHTML(): string {
-  const actions = BLOCKED_COPY.actions.map((a) => `      <li>${a}</li>`).join('\n');
-
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -293,34 +284,21 @@ export function generateBlockedLinkHTML(): string {
   body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
          background:#f6f7f8; color:#16191d; padding:24px;
          font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
-  .card { max-width:34rem; width:100%; background:#fff; border:1px solid #e3e6ea;
-          border-radius:10px; padding:28px; }
-  h1 { margin:0 0 12px; font-size:1.35rem; line-height:1.25; }
-  h2 { margin:22px 0 10px; font-size:1rem; }
-  p { margin:0 0 14px; }
-  ul { margin:0 0 14px; padding-left:20px; }
-  li { margin:0 0 7px; }
-  .warn { background:#fdf3f2; border:1px solid #f3d6d2; border-radius:6px;
-          padding:12px 14px; margin:0 0 14px; }
-  .calm { font-size:.9rem; color:#5b636d; margin:0; }
+  .card { max-width:30rem; width:100%; background:#fff; border:1px solid #e3e6ea;
+          border-radius:10px; padding:28px; text-align:center; }
+  h1 { margin:0 0 10px; font-size:1.25rem; line-height:1.3; }
+  p { margin:0; color:#5b636d; }
   @media (prefers-color-scheme: dark) {
     body { background:#14171a; color:#e8eaed; }
     .card { background:#1d2126; border-color:#2c3238; }
-    .warn { background:#2a1e1e; border-color:#4a2f2c; }
-    .calm { color:#98a1ab; }
+    p { color:#98a1ab; }
   }
 </style>
 </head>
 <body>
   <main class="card">
     <h1>${BLOCKED_COPY.heading}</h1>
-    <p>${BLOCKED_COPY.lede}</p>
-    <h2>${BLOCKED_COPY.actionHeading}</h2>
-    <ul>
-${actions}
-    </ul>
-    <p class="warn">${BLOCKED_COPY.warning}</p>
-    <p class="calm">${BLOCKED_COPY.reassurance}</p>
+    <p>${BLOCKED_COPY.body}</p>
   </main>
 </body>
 </html>`;
