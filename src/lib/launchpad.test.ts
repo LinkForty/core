@@ -60,6 +60,7 @@ describe('readLaunchpadSettings', () => {
           appName: '  Demo App  ',
           appIconUrl: 'https://cdn.example/icon.png',
           accentColor: '#ff8800',
+          backgroundColor: '#101418',
           templateId: 'hero',
           extra: 'ignored',
         },
@@ -70,6 +71,7 @@ describe('readLaunchpadSettings', () => {
       appName: 'Demo App',
       appIconUrl: 'https://cdn.example/icon.png',
       accentColor: '#ff8800',
+      backgroundColor: '#101418',
       templateId: 'hero',
     });
   });
@@ -77,7 +79,7 @@ describe('readLaunchpadSettings', () => {
   it('rejects an unknown mode, a non-hex colour and a non-http icon', () => {
     expect(
       readLaunchpadSettings({
-        launchpad: { desktop: 'sometimes', mobile: 42, accentColor: 'red', appIconUrl: 'javascript:alert(1)' },
+        launchpad: { desktop: 'sometimes', mobile: 42, accentColor: 'red', backgroundColor: 'white', appIconUrl: 'javascript:alert(1)' },
       })
     ).toEqual({});
   });
@@ -259,5 +261,24 @@ describe('renderLaunchpadPage', () => {
   it('uses dark button text on a light accent', () => {
     const html = renderLaunchpadPage({ ...base, content: { ...base.content, theme: { accentColor: '#ffe066' } } });
     expect(html).toContain('--lp-accent: #ffe066; --lp-accent-ink: #16181d;');
+  });
+
+  it('follows the visitor\'s theme unless a background is set', () => {
+    // Only the base light/dark declarations, no fixed override after them.
+    expect(renderLaunchpadPage(base)).not.toMatch(/}\s*:root \{ --lp-bg:/);
+    expect(renderLaunchpadPage(base)).toContain('@media (prefers-color-scheme: dark)');
+  });
+
+  it('a dark background gets light ink; a light one gets dark ink; surfaces lean toward the ink', () => {
+    const dark = renderLaunchpadPage({ ...base, content: { ...base.content, theme: { backgroundColor: '#101418' } } });
+    expect(dark).toContain(':root { --lp-bg: #101418; --lp-ink: #eef0f3; --lp-muted: #a3abb8; --lp-surface: #1d2125; --lp-line: #2f3337; }');
+
+    const light = renderLaunchpadPage({ ...base, content: { ...base.content, theme: { backgroundColor: '#fff7e6' } } });
+    expect(light).toContain(':root { --lp-bg: #fff7e6; --lp-ink: #16181d; --lp-muted: #5f6673; --lp-surface: #f1eada; --lp-line: #ded8ca; }');
+  });
+
+  it('ignores a background that is not #rrggbb', () => {
+    const html = renderLaunchpadPage({ ...base, content: { ...base.content, theme: { backgroundColor: 'url(x)' } } });
+    expect(html).not.toContain('--lp-bg: url');
   });
 });
