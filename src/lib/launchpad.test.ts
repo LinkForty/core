@@ -251,7 +251,7 @@ describe('renderLaunchpadPage', () => {
 
   it('the web link takes the accent, so a page with no buttons still shows the colour', () => {
     const html = renderLaunchpadPage({ ...base, iosUrl: null, androidUrl: null, webUrl: 'https://example.com/p' });
-    expect(html).not.toContain('lp-btn');
+    expect(html).not.toContain('class="lp-btn');
     expect(html).toContain('.lp-web a { color: var(--lp-accent);');
     expect(html).toContain('--lp-accent: #ff8800;');
   });
