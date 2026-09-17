@@ -1,3 +1,7 @@
+## 1.27.0 (2026-09-17)
+
+* feat(redirect): let a workspace show the launchpad page to mobile visitors instead of a store redire ([08b9f02](https://github.com/LinkForty/core/commit/08b9f02)), closes [#55](https://github.com/LinkForty/core/issues/55)
+
 ## 1.26.0 (2026-09-17)
 
 * feat(redirect): serve a launchpad page to desktop visitors instead of the plain no-destination page  ([d874b7a](https://github.com/LinkForty/core/commit/d874b7a)), closes [#54](https://github.com/LinkForty/core/issues/54)
