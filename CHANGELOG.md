@@ -1,3 +1,7 @@
+## <small>1.27.1 (2026-09-17)</small>
+
+* fix(redirect): keep configured URLs out of the interstitial's JavaScript, and refuse executable sche ([ee5cc26](https://github.com/LinkForty/core/commit/ee5cc26)), closes [#56](https://github.com/LinkForty/core/issues/56)
+
 ## 1.27.0 (2026-09-17)
 
 * feat(redirect): let a workspace show the launchpad page to mobile visitors instead of a store redire ([08b9f02](https://github.com/LinkForty/core/commit/08b9f02)), closes [#55](https://github.com/LinkForty/core/issues/55)
