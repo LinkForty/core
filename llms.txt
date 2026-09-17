@@ -102,6 +102,18 @@ interface ServerOptions {
     origin: string | string[];
   };
   logger?: boolean;      // Enable Fastify logger
+  trustProxy?: boolean | number;  // Trust X-Forwarded-For behind a proxy
+  redirect?: {
+    abuseReportUrl?: string;   // Linked from the link-safety warning page
+    launchpad?: {
+      // Richer content for the launchpad page (see Redirect Flow). Return null
+      // for the default. `heroHtml` is inserted unescaped — render it yourself.
+      resolveContent?: (link, settings) => Promise<LaunchpadContent | null>;
+      // Receives `{ linkId, event }` beacons ("view", "cta_ios", "cta_android",
+      // "cta_open") from the page. Unset = the page sends nothing.
+      beaconUrl?: string;
+    };
+  };
 }
 ```
 
@@ -178,6 +190,7 @@ interface Link {
   og_description?: string;
   og_image_url?: string;
   og_type?: string;
+  launchpad_mode?: 'inherit' | 'on' | 'off';  // Launchpad page override
 
   // Lifecycle
   attribution_window_hours?: number;   // Default: 168 (7 days)
@@ -226,6 +239,7 @@ interface CreateLinkRequest {
   ogDescription?: string;
   ogImageUrl?: string;
   ogType?: string;
+  launchpadMode?: 'inherit' | 'on' | 'off';
   attributionWindowHours?: number;     // 1-2160
   customCode?: string;                 // Custom short code (auto-generated if omitted)
   expiresAt?: string;                  // ISO 8601 datetime
@@ -589,6 +603,8 @@ When a user clicks a short link (e.g., `https://go.yourdomain.com/abc123`):
 5. Select destination URL based on device (iOS → Android → web → original)
 6. Append UTM parameters to destination URL
 7. Return 302 redirect
+
+**Launchpad page.** A desktop visitor to a link that resolves no web destination (link → template → workspace `appConfig`) gets a hosted landing page instead of an error: title/description/image from the link's `og_*` fields (falling back to `title`/`description`), the app's icon and name, App Store / Google Play buttons, and a QR code to continue on a phone. `noindex`, `Cache-Control: no-store`, nonce-based CSP, no automatic navigation. Controlled by `organizations.settings.launchpad` — `{ desktop: "no-destination" | "always" | "off", appName, appIconUrl, accentColor }` — and per link by `links.launchpad_mode` (`launchpadMode` on the API: `inherit` | `on` | `off`; the link wins). Default: served only where the alternative is nothing. With `off`, the plain "This link opens in an app" page is served instead. Exported helpers: `renderLaunchpadPage()`, `defaultLaunchpadContent()`, `shouldServeLaunchpadOnDesktop()`, `readLaunchpadSettings()`.
 
 ## Fingerprint Attribution
 

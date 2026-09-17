@@ -66,6 +66,8 @@ export interface Link {
   og_description?: string;
   og_image_url?: string;
   og_type?: string;
+  /** Launchpad page override: 'inherit' (workspace setting), 'on', or 'off'. */
+  launchpad_mode?: 'inherit' | 'on' | 'off';
   attribution_window_hours?: number;
   is_active: boolean;
   expires_at?: string;

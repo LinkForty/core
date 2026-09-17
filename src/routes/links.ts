@@ -49,6 +49,10 @@ const createLinkSchema = z.object({
   ogDescription: z.string().optional(),
   ogImageUrl: z.string().url().optional(),
   ogType: z.string().optional(),
+  // Launchpad page override. `inherit` follows the workspace setting; `on`
+  // serves the page to desktop visitors even when the link has a web
+  // destination; `off` never serves it.
+  launchpadMode: z.enum(['inherit', 'on', 'off']).optional(),
   attributionWindowHours: z.number()
     .int('Attribution window must be an integer')
     .min(1, 'Attribution window must be at least 1 hour')
@@ -188,8 +192,8 @@ export async function linkRoutes(fastify: FastifyInstance) {
         app_scheme, ios_universal_link, android_app_link, deep_link_path, deep_link_parameters,
         utm_parameters, targeting_rules,
         og_title, og_description, og_image_url, og_type,
-        attribution_window_hours, expires_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+        attribution_window_hours, expires_at, launchpad_mode
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
          RETURNING *`,
       [
         data.userId || null,
@@ -214,6 +218,7 @@ export async function linkRoutes(fastify: FastifyInstance) {
         data.ogType || 'website',
         data.attributionWindowHours || 168, // Default 7 days
         data.expiresAt || null,
+        data.launchpadMode || 'inherit',
       ]
     );
 
@@ -364,8 +369,8 @@ export async function linkRoutes(fastify: FastifyInstance) {
         app_scheme, ios_universal_link, android_app_link, deep_link_path, deep_link_parameters,
         utm_parameters, targeting_rules,
         og_title, og_description, og_image_url, og_type,
-        attribution_window_hours, expires_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+        attribution_window_hours, expires_at, launchpad_mode
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
          RETURNING *`,
       [
         link.user_id,
@@ -390,6 +395,7 @@ export async function linkRoutes(fastify: FastifyInstance) {
         link.og_type,
         link.attribution_window_hours,
         link.expires_at,
+        link.launchpad_mode || 'inherit',
       ]
     );
 
