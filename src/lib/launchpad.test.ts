@@ -249,6 +249,13 @@ describe('renderLaunchpadPage', () => {
     expect(renderLaunchpadPage({ ...base, webUrl: 'javascript:alert(1)' })).not.toContain('Continue on the web');
   });
 
+  it('the web link takes the accent, so a page with no buttons still shows the colour', () => {
+    const html = renderLaunchpadPage({ ...base, iosUrl: null, androidUrl: null, webUrl: 'https://example.com/p' });
+    expect(html).not.toContain('lp-btn');
+    expect(html).toContain('.lp-web a { color: var(--lp-accent);');
+    expect(html).toContain('--lp-accent: #ff8800;');
+  });
+
   it('uses dark button text on a light accent', () => {
     const html = renderLaunchpadPage({ ...base, content: { ...base.content, theme: { accentColor: '#ffe066' } } });
     expect(html).toContain('--lp-accent: #ffe066; --lp-accent-ink: #16181d;');

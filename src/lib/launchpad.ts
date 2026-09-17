@@ -51,7 +51,7 @@ export interface LaunchpadSettings {
   appName?: string;
   /** Absolute https URL of the app icon, shown at 64×64. */
   appIconUrl?: string;
-  /** `#rrggbb`. Drives the primary button. Anything else is ignored. */
+  /** `#rrggbb`. Drives the primary button, the web link and focus rings. Anything else is ignored. */
   accentColor?: string;
   /** Opaque to Core: a host application may key its own page templates on it. */
   templateId?: string;
@@ -287,7 +287,7 @@ const STYLES = `
   .lp-btn-primary { background: var(--lp-accent); border-color: var(--lp-accent); color: var(--lp-accent-ink); }
   .lp-btn:focus-visible { outline: 2px solid var(--lp-accent); outline-offset: 2px; }
   .lp-web { margin: -0.5rem 0 0; font-size: 0.95rem; }
-  .lp-web a { color: var(--lp-muted); text-decoration: underline; text-underline-offset: 3px; }
+  .lp-web a { color: var(--lp-accent); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
   .lp-web a:hover { color: var(--lp-ink); }
   .lp-qr { display: flex; align-items: center; gap: 1.25rem; padding: 1rem; border: 1px solid var(--lp-line); border-radius: 14px; background: var(--lp-surface); }
   .lp-qr img { width: 132px; height: 132px; border-radius: 8px; background: #fff; flex: none; }
