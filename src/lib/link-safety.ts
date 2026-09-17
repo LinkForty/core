@@ -146,6 +146,29 @@ export function safeHref(destination: string): string | null {
   return url.protocol === 'http:' || url.protocol === 'https:' ? destination : null;
 }
 
+/**
+ * Schemes a browser will execute or treat as local content rather than hand to
+ * another application. A URI-scheme link exists to open a native app; nothing on
+ * this list is one.
+ */
+const EXECUTABLE_SCHEMES = new Set(['javascript', 'data', 'vbscript', 'file', 'blob', 'about']);
+
+/**
+ * Accept a URI-scheme URL (`myapp://…`, `com.example.app://…`) for an href that
+ * is meant to open a native app, rejecting the schemes a browser would execute
+ * instead. `safeHref` is the wrong tool here — it admits only http(s), which is
+ * the one family a scheme link is not.
+ *
+ * Returns null when the value has no scheme, or a scheme on the executable list.
+ * The check is on the raw string, not `new URL()`: WHATWG parsing of unknown
+ * schemes is permissive about whitespace and case, and this must not be.
+ */
+export function safeSchemeHref(url: string): string | null {
+  const match = /^([a-z][a-z0-9+.-]*):/i.exec(url);
+  if (!match) return null;
+  return EXECUTABLE_SCHEMES.has(match[1].toLowerCase()) ? null : url;
+}
+
 /** Minimal HTML escaping for interpolating a URL into markup and an href. */
 export function escapeHtml(value: string): string {
   return String(value)

@@ -12,6 +12,8 @@ import {
   generateWarningLinkHTML,
   generateBlockedLinkHTML,
   createOwnerSuspensionSelect,
+  escapeHtml,
+  safeSchemeHref,
 } from '../lib/link-safety.js';
 import {
   createLaunchpadNonce,
@@ -139,9 +141,13 @@ function buildAppSchemeUrl(link: {
  * in the fragment and is never sent to the server.
  */
 function generateInterstitialHTML(schemeUrl: string, fallbackUrl: string, title?: string): string {
-  const safeSchemeUrl = schemeUrl.replace(/"/g, '&quot;').replace(/</g, '&lt;');
-  const safeFallbackUrl = fallbackUrl.replace(/"/g, '&quot;').replace(/</g, '&lt;');
-  const safeTitle = (title || 'the app').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Both URLs reach the document only as attribute values; the script reads
+  // them back from the DOM rather than having them interpolated into JavaScript
+  // source, where a quote, backslash or line terminator in a configured value
+  // would end the string literal.
+  const safeSchemeUrl = escapeHtml(schemeUrl);
+  const safeFallbackUrl = escapeHtml(fallbackUrl);
+  const safeTitle = escapeHtml(title || 'the app');
 
   return `<!DOCTYPE html>
 <html><head>
@@ -169,31 +175,15 @@ function generateInterstitialHTML(schemeUrl: string, fallbackUrl: string, title?
 </div>
 <script>
   // Preserve URL fragment (E2E encryption key) through the scheme redirect
+  var openBtn = document.getElementById('open-btn');
+  var storeBtn = document.getElementById('store-btn');
   var hash = window.location.hash || '';
-  var schemeUrl = "${safeSchemeUrl}" + hash;
-  document.getElementById('open-btn').href = schemeUrl;
+  var schemeUrl = openBtn.getAttribute('href') + hash;
+  openBtn.href = schemeUrl;
   window.location = schemeUrl;
-  setTimeout(function() { window.location.replace("${safeFallbackUrl}"); }, 1500);
+  setTimeout(function() { window.location.replace(storeBtn.getAttribute('href')); }, 1500);
 </script>
 </body></html>`;
-}
-
-/**
- * Escape a value for interpolation into HTML text or a double-quoted attribute.
- *
- * `&` first, or the other replacements' own ampersands get double-escaped.
- *
- * The older generators above escape only a subset of these, inline. They predate
- * this helper and are left alone rather than changed as a drive-by — the values
- * they interpolate are URLs the workspace owner configured, not free text.
- */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 /**
@@ -751,6 +741,17 @@ export async function redirectRoutes(
     };
 
     /**
+     * The link's URI scheme, or null when it names something a browser would
+     * execute rather than hand to an app (javascript:, data:, …). On the
+     * response path such a link is treated as having no scheme at all: it
+     * takes the store / web-fallback route like any other link without one.
+     * `app_scheme` is validated as a scheme *token* at write time, which does
+     * not exclude these names.
+     */
+    const appScheme: string | null =
+      link.app_scheme && safeSchemeHref(`${link.app_scheme}:`) ? link.app_scheme : null;
+
+    /**
      * Render and send the launchpad page (lib/launchpad.ts). Shared by the
      * desktop and mobile decisions below; the caller decides the two things
      * that differ between them — whether there is a scheme to offer a button
@@ -815,9 +816,9 @@ export async function redirectRoutes(
       // 4. Original URL — ultimate fallback
       if (link.ios_universal_link) {
         redirectUrl = link.ios_universal_link;
-      } else if (link.app_scheme && link.deep_link_path) {
+      } else if (appScheme && link.deep_link_path) {
         // Build URI scheme URL: myapp://product/123
-        redirectUrl = `${link.app_scheme}://${link.deep_link_path.replace(/^\//, '')}`;
+        redirectUrl = `${appScheme}://${link.deep_link_path.replace(/^\//, '')}`;
         useSchemeUrl = true;
       } else {
         const fb = pickMobileFallbackUrl('ios', userAgent, iosUrl, androidUrl, webFallbackUrl);
@@ -828,9 +829,9 @@ export async function redirectRoutes(
       // Android Priority — same logic as iOS, with android_app_link in place of UL
       if (link.android_app_link) {
         redirectUrl = link.android_app_link;
-      } else if (link.app_scheme && link.deep_link_path) {
+      } else if (appScheme && link.deep_link_path) {
         // Build URI scheme URL: myapp://product/123
-        redirectUrl = `${link.app_scheme}://${link.deep_link_path.replace(/^\//, '')}`;
+        redirectUrl = `${appScheme}://${link.deep_link_path.replace(/^\//, '')}`;
         useSchemeUrl = true;
       } else {
         const fb = pickMobileFallbackUrl('android', userAgent, iosUrl, androidUrl, webFallbackUrl);
@@ -896,7 +897,7 @@ export async function redirectRoutes(
         // to open an installed app, the same reason pickMobileFallbackUrl()
         // prefers it there.
         return serveLaunchpad(launchpadSettings, {
-          schemeUrl: link.app_scheme ? buildAppSchemeUrl(link) : null,
+          schemeUrl: appScheme ? buildAppSchemeUrl(link) : null,
           showQr: false,
           webUrl: webFallbackUrl || link.original_url ? decorateWebDestination(webFallbackUrl || link.original_url) : null,
           storeUrls: device === 'ios' ? { iosUrl, androidUrl: null } : { iosUrl: null, androidUrl },
@@ -955,7 +956,7 @@ export async function redirectRoutes(
     // This works for both in-app browsers (where Universal Links don't fire) and regular
     // browsers (where a 302 to a custom scheme fails silently if the app isn't installed).
     // The interstitial JavaScript preserves the URL fragment (E2E encryption key).
-    if ((device === 'ios' || device === 'android') && link.app_scheme) {
+    if ((device === 'ios' || device === 'android') && appScheme) {
       // The interstitial JS tries the scheme first; storeFallback is what we
       // navigate to if the scheme doesn't open the app within ~1.5s. Pick it
       // browser-aware: regular browsers prefer the store URL, in-app browsers
@@ -963,10 +964,13 @@ export async function redirectRoutes(
       const fb = pickMobileFallbackUrl(device, userAgent, iosUrl, androidUrl, webFallbackUrl);
       const storeFallback = fb?.url || link.original_url;
 
-      if (storeFallback) {
+      // `appScheme` is already vetted; this re-checks the assembled URL so a
+      // custom scheme URL naming an executable scheme is refused too.
+      const schemeUrl = safeSchemeHref(buildAppSchemeUrl(link));
+      if (storeFallback && schemeUrl) {
         return reply
           .header('Content-Type', 'text/html; charset=utf-8')
-          .send(generateInterstitialHTML(buildAppSchemeUrl(link), storeFallback, link.title || link.og_title));
+          .send(generateInterstitialHTML(schemeUrl, storeFallback, link.title || link.og_title));
       }
     }
 
