@@ -237,7 +237,7 @@ export function launchpadContentSecurityPolicy(nonce: string, beaconUrl?: string
 
 export interface LaunchpadPageContext {
   content: LaunchpadContent;
-  /** The link's id; the QR code is fetched from `/api/links/{id}/qr`. */
+  /** The link's id; the QR code is fetched from `/api/links/{id}/qr` and encodes `pageUrl`. */
   linkId: string;
   /** Absolute URL of this page, for `og:url`. */
   pageUrl: string;
@@ -386,7 +386,7 @@ export function renderLaunchpadPage(ctx: LaunchpadPageContext): string {
     : '';
 
   const qr = ctx.showQr
-    ? `<section class="lp-qr"><img src="/api/links/${escapeHtml(ctx.linkId)}/qr?format=svg&amp;size=264" alt="QR code for this link" width="132" height="132"><div><strong>Scan to open on your phone</strong><p>Point your phone's camera at the code to open this link there.</p></div></section>`
+    ? `<section class="lp-qr"><img src="/api/links/${escapeHtml(ctx.linkId)}/qr?format=svg&amp;size=264&amp;url=${escapeHtml(encodeURIComponent(ctx.pageUrl))}" alt="QR code for this link" width="132" height="132"><div><strong>Scan to open on your phone</strong><p>Point your phone's camera at the code to open this link there.</p></div></section>`
     : '';
 
   const needsScript = Boolean(schemeUrl || ctx.beaconUrl);
