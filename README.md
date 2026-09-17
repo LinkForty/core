@@ -243,7 +243,7 @@ Automatically redirects users to the appropriate URL based on device type (iOS/A
 
 **Launchpad page (desktop):** A link to app-only content has nowhere to send a desktop visitor. When the chain resolves no web destination (link → template → workspace `appConfig`), a desktop request gets a hosted landing page instead of an error: the link's title, description and image (`ogTitle` / `ogDescription` / `ogImageUrl`, falling back to `title` / `description`), the app's icon and name, App Store / Google Play buttons, and a QR code so the visitor can finish on their phone. The page is `noindex`, sent with `Cache-Control: no-store` and a content-security policy that allows no script without a per-response nonce, and it never navigates on its own — no timers, no automatic scheme attempts.
 
-By default it appears **only** where the alternative is nothing; a link that resolves to a destination still gets its 302. Two knobs change that:
+When the link does have a web destination, the page offers it as a "Continue on the web" link, so a visitor is never trapped. By default it appears **only** where the alternative is nothing; a link that resolves to a destination still gets its 302. Two knobs change that:
 
 - `organizations.settings.launchpad` (per workspace):
 
@@ -251,6 +251,7 @@ By default it appears **only** where the alternative is nothing; a link that res
   {
     "launchpad": {
       "desktop": "no-destination",     // "no-destination" (default) | "always" | "off"
+      "mobile": "store",               // "store" (default) | "page"
       "appName": "Ride Alert",
       "appIconUrl": "https://cdn.example/icon.png",
       "accentColor": "#0f766e"
@@ -261,6 +262,8 @@ By default it appears **only** where the alternative is nothing; a link that res
 - `links.launchpad_mode` (per link, `launchpadMode` on the links API): `inherit` (default), `on` or `off`. The link's value wins over the workspace's.
 
 With `desktop: "off"` (or `launchpad_mode: "off"`), a link with no web destination gets the plain "This link opens in an app" page instead.
+
+**Launchpad page (mobile):** With `mobile: "page"`, a phone visitor whose platform has no Universal Link / App Link on the link gets the same page instead of the store redirect or the scheme interstitial: an "Open in app" button when the link has a URI scheme (a tap, not a navigation — the URL fragment is appended on tap), the visitor's own store button, and the web fallback as a "Continue on the web" link. That last one matters inside in-app browsers (Gmail, Facebook, Instagram…), which bypass Universal Links: the store redirect would send someone who *has* the app to the store, so the redirect path prefers the web fallback there to give the OS a second chance on the next hop — and the page keeps that hop available as a tap. Links that carry a Universal Link / App Link keep their 302 regardless, because the OS resolves the installed case before the request reaches this server. `launchpad_mode: "off"` opts a link out; `"on"` does not force the page onto a workspace that chose `"store"`. The default, `"store"`, is unchanged behaviour.
 
 Two hooks on `RedirectRouteOptions` let a host application extend the page without forking it — see [Server Options](#server-options).
 

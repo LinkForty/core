@@ -6,6 +6,7 @@ import {
   readLaunchpadSettings,
   renderLaunchpadPage,
   shouldServeLaunchpadOnDesktop,
+  shouldServeLaunchpadOnMobile,
   type LaunchpadPageContext,
 } from './launchpad.js';
 
@@ -25,6 +26,21 @@ describe('shouldServeLaunchpadOnDesktop', () => {
   ];
   for (const [name, input, expected] of table) {
     it(name, () => expect(shouldServeLaunchpadOnDesktop(input)).toBe(expected));
+  }
+});
+
+describe('shouldServeLaunchpadOnMobile', () => {
+  const table: Array<[string, Parameters<typeof shouldServeLaunchpadOnMobile>[0], boolean]> = [
+    ['defaults → store', { hasAppOpenPath: false }, false],
+    ['store explicitly → store', { hasAppOpenPath: false, mobileMode: 'store' }, false],
+    ['page → page', { hasAppOpenPath: false, mobileMode: 'page' }, true],
+    ['page, but a Universal Link / App Link → the OS handles it', { hasAppOpenPath: true, mobileMode: 'page' }, false],
+    ['page, link off → store', { hasAppOpenPath: false, mobileMode: 'page', linkMode: 'off' }, false],
+    ['page, link on → page', { hasAppOpenPath: false, mobileMode: 'page', linkMode: 'on' }, true],
+    ['store, link on → still store (on never forces a hop)', { hasAppOpenPath: false, mobileMode: 'store', linkMode: 'on' }, false],
+  ];
+  for (const [name, input, expected] of table) {
+    it(name, () => expect(shouldServeLaunchpadOnMobile(input)).toBe(expected));
   }
 });
 
@@ -224,6 +240,13 @@ describe('renderLaunchpadPage', () => {
     expect(html).not.toContain('class="lp-app"');
     expect(html).not.toContain('meta name="description"');
     expect(html).toContain('<meta name="twitter:card" content="summary">');
+  });
+
+  it('offers the web destination as a link only when given one that is http(s)', () => {
+    expect(renderLaunchpadPage(base)).not.toContain('Continue on the web');
+    const html = renderLaunchpadPage({ ...base, webUrl: 'https://example.com/page?a=1&b=2' });
+    expect(html).toContain('<a data-lp-cta="cta_web" href="https://example.com/page?a=1&amp;b=2">Continue on the web</a>');
+    expect(renderLaunchpadPage({ ...base, webUrl: 'javascript:alert(1)' })).not.toContain('Continue on the web');
   });
 
   it('uses dark button text on a light accent', () => {

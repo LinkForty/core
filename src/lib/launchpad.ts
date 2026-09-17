@@ -40,9 +40,11 @@ export interface LaunchpadSettings {
   /** When a desktop visitor gets the page. Default `no-destination`. */
   desktop?: LaunchpadDesktopMode;
   /**
-   * What a mobile visitor without the app gets. Default `store` (a redirect).
-   * Reserved: the mobile routing does not yet read it, so `page` currently
-   * behaves as `store`.
+   * What a mobile visitor gets when the link has no Universal Link / App Link
+   * for their platform. Default `store`: today's behaviour — a redirect to the
+   * store, or the scheme interstitial when the link has a URI scheme. `page`
+   * serves the launchpad page instead, with "Open in app" as a button the
+   * visitor taps rather than a navigation the page performs.
    */
   mobile?: LaunchpadMobileMode;
   /** Shown in the page header, and as the `<title>` fallback. */
@@ -155,6 +157,26 @@ export function shouldServeLaunchpadOnDesktop(input: {
   }
 }
 
+/**
+ * Whether a mobile visitor gets the page.
+ *
+ * Only when the workspace chose `page`, and never for a platform whose link
+ * carries a Universal Link / App Link: the OS resolves the installed case
+ * before this server sees the click, and the 302 to that URL must stay so it
+ * can. A link's `on` does not force the page onto a workspace that chose
+ * `store` — that would be the extra hop other products had to add a skip flag
+ * for — but `off` still opts a link out.
+ */
+export function shouldServeLaunchpadOnMobile(input: {
+  mobileMode?: LaunchpadMobileMode;
+  linkMode?: LaunchpadLinkMode;
+  hasAppOpenPath: boolean;
+}): boolean {
+  if ((input.linkMode ?? 'inherit') === 'off') return false;
+  if ((input.mobileMode ?? 'store') !== 'page') return false;
+  return !input.hasAppOpenPath;
+}
+
 /** Content from the link row alone: what any deployment can show with no extra machinery. */
 export function defaultLaunchpadContent(link: LaunchpadLinkFields, settings: LaunchpadSettings): LaunchpadContent {
   const image = link.og_image_url && safeHref(link.og_image_url) ? link.og_image_url : null;
@@ -222,6 +244,14 @@ export interface LaunchpadPageContext {
   iosUrl: string | null;
   androidUrl: string | null;
   /**
+   * The link's web destination, when it has one. Rendered as a plain
+   * "Continue on the web" link so the page is never a dead end: a desktop
+   * visitor in `always` mode still has the destination the 302 would have
+   * given them, and a phone visitor inside an in-app browser keeps the path
+   * that lets a Universal Link fire on the next hop.
+   */
+  webUrl?: string | null;
+  /**
    * The app's URI-scheme URL for this link, or null. When set, an "Open in app"
    * button is rendered whose only job is to navigate to it on tap. The URL
    * fragment of the page is appended on tap, so a key that lives only in the
@@ -233,7 +263,7 @@ export interface LaunchpadPageContext {
   nonce: string;
   /**
    * When set, the page reports `view` on load and `cta_ios` / `cta_android` /
-   * `cta_open` on the matching tap via `navigator.sendBeacon`, as a JSON body
+   * `cta_open` / `cta_web` on the matching tap via `navigator.sendBeacon`, as a JSON body
    * `{ linkId, event }`. No cookies, no identifiers. Absent by default; the
    * endpoint is the host application's to provide.
    */
@@ -256,6 +286,9 @@ const STYLES = `
   .lp-btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.8rem 1.25rem; border-radius: 10px; font-size: 0.95rem; font-weight: 600; text-decoration: none; border: 1px solid var(--lp-line); background: var(--lp-surface); color: var(--lp-ink); }
   .lp-btn-primary { background: var(--lp-accent); border-color: var(--lp-accent); color: var(--lp-accent-ink); }
   .lp-btn:focus-visible { outline: 2px solid var(--lp-accent); outline-offset: 2px; }
+  .lp-web { margin: -0.5rem 0 0; font-size: 0.95rem; }
+  .lp-web a { color: var(--lp-muted); text-decoration: underline; text-underline-offset: 3px; }
+  .lp-web a:hover { color: var(--lp-ink); }
   .lp-qr { display: flex; align-items: center; gap: 1.25rem; padding: 1rem; border: 1px solid var(--lp-line); border-radius: 14px; background: var(--lp-surface); }
   .lp-qr img { width: 132px; height: 132px; border-radius: 8px; background: #fff; flex: none; }
   .lp-qr strong { display: block; font-size: 1rem; margin-bottom: 0.2rem; }
@@ -345,7 +378,11 @@ export function renderLaunchpadPage(ctx: LaunchpadPageContext): string {
   ]
     .filter(Boolean)
     .join('');
+  const webUrl = ctx.webUrl && safeHref(ctx.webUrl) ? escapeHtml(ctx.webUrl) : null;
   const actions = buttons ? `<section class="lp-actions">${buttons}</section>` : '';
+  const web = webUrl
+    ? `<p class="lp-web"><a data-lp-cta="cta_web" href="${webUrl}">Continue on the web</a></p>`
+    : '';
 
   const qr = ctx.showQr
     ? `<section class="lp-qr"><img src="/api/links/${escapeHtml(ctx.linkId)}/qr?format=svg&amp;size=264" alt="QR code for this link" width="132" height="132"><div><strong>Scan to open on your phone</strong><p>Point your phone's camera at the code to open this link there.</p></div></section>`
@@ -373,6 +410,7 @@ ${head}
 ${header}
 ${hero}
 ${actions}
+${web}
 ${qr}
 </main>
 ${needsScript ? `<script nonce="${nonce}">${SCRIPT}</script>` : ''}

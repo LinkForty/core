@@ -20,6 +20,11 @@ const DESKTOP_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 const IPHONE_UA =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+const ANDROID_UA =
+  'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36';
+/** Facebook's iOS in-app browser: Universal Links do not fire here. */
+const FB_IOS_UA =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [FBAN/FBIOS;FBAV/450.0.0.0.0]';
 
 function linkRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -126,6 +131,42 @@ describe('launchpad page — when it is served', () => {
     const res = await get(app, DESKTOP_UA);
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain('class="lp"');
+  });
+
+  it("under 'always' the page links to the destination the 302 would have used", async () => {
+    mockDb(linkRow({ web_fallback_url: 'https://example.com/page', org_settings: { launchpad: { desktop: 'always' } } }));
+    const res = await get(app, DESKTOP_UA);
+    expect(res.body).toContain('href="https://example.com/page">Continue on the web</a>');
+
+    mockDb(linkRow({ original_url: 'https://example.com/original', org_settings: { launchpad: { desktop: 'always' } } }));
+    const original = await get(app, DESKTOP_UA);
+    expect(original.body).toContain('href="https://example.com/original">Continue on the web</a>');
+  });
+
+  it('the web link carries the same UTMs, deep-link params and click id the 302 would have', async () => {
+    mockDb(
+      linkRow({
+        web_fallback_url: 'https://example.com/page',
+        utm_parameters: { source: 'newsletter', medium: 'email' },
+        deep_link_parameters: { ref: 'abc' },
+        append_click_id: true,
+        org_settings: { launchpad: { desktop: 'always' } },
+      })
+    );
+    const res = await get(app, DESKTOP_UA);
+    const href = /data-lp-cta="cta_web" href="([^"]+)"/.exec(res.body)?.[1]?.replace(/&amp;/g, '&');
+    expect(href).toBeDefined();
+    const url = new URL(href!);
+    expect(url.origin + url.pathname).toBe('https://example.com/page');
+    expect(url.searchParams.get('utm_source')).toBe('newsletter');
+    expect(url.searchParams.get('utm_medium')).toBe('email');
+    expect(url.searchParams.get('ref')).toBe('abc');
+    expect(url.searchParams.get('lf_click')).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('has no web link when the link has no web destination', async () => {
+    mockDb(linkRow());
+    expect((await get(app, DESKTOP_UA)).body).not.toContain('Continue on the web');
   });
 
   it("a link set to 'off' wins over a workspace set to 'always'", async () => {
@@ -288,5 +329,132 @@ describe('launchpad page — host hooks', () => {
     expect(res.body).toContain('data-lp-cta="cta_ios"');
     expect(res.body).toContain('data-lp-cta="cta_android"');
     expect(res.headers['content-security-policy']).toContain("connect-src 'self' https://events.example");
+  });
+});
+
+describe('launchpad page — mobile mode', () => {
+  const pageMode = { launchpad: { mobile: 'page' } };
+
+  it("serves the page to an iPhone with a scheme: 'Open in app' is a button, nothing navigates", async () => {
+    mockDb(linkRow({ app_scheme: 'demo', deep_link_path: '/p/1', deep_link_parameters: { x: '1' }, org_settings: pageMode }));
+    const res = await get(app, IPHONE_UA);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-security-policy']).toMatch(/script-src 'nonce-/);
+    expect(res.body).toContain('class="lp"');
+    expect(res.body).toContain('id="lp-open"');
+    expect(res.body).toContain('data-scheme="demo://p/1?x=1"');
+    expect(res.body).toContain('href="demo://p/1?x=1"');
+    expect(res.body).toContain('window.location.hash');
+    expect(res.body).not.toContain('setTimeout');
+    expect(res.body).not.toContain('location.replace');
+    expect(res.body).not.toContain('Opening');
+  });
+
+  it('shows only the visitor\'s own store, and no QR block', async () => {
+    mockDb(linkRow({ org_settings: pageMode }));
+    const iphone = await get(app, IPHONE_UA);
+    expect(iphone.body).toContain('Download on the App Store');
+    expect(iphone.body).not.toContain('Get it on Google Play');
+    expect(iphone.body).not.toContain('class="lp-qr"');
+
+    mockDb(linkRow({ org_settings: pageMode }));
+    const android = await get(app, ANDROID_UA);
+    expect(android.body).toContain('Get it on Google Play');
+    expect(android.body).not.toContain('Download on the App Store');
+  });
+
+  it('serves the page without an Open button when the link has no scheme', async () => {
+    mockDb(linkRow({ org_settings: pageMode }));
+    const res = await get(app, IPHONE_UA);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('class="lp"');
+    expect(res.body).not.toContain('id="lp-open"');
+    expect(res.body).not.toContain('<script');
+  });
+
+  it('keeps the 302 to a Universal Link / App Link — the OS owns the installed case', async () => {
+    mockDb(linkRow({ ios_universal_link: 'https://app.example/p/1', org_settings: pageMode }));
+    const ios = await get(app, IPHONE_UA);
+    expect(ios.statusCode).toBe(302);
+    expect(ios.headers.location).toBe('https://app.example/p/1');
+
+    mockDb(linkRow({ android_app_link: 'https://app.example/p/1', org_settings: pageMode }));
+    const android = await get(app, ANDROID_UA);
+    expect(android.statusCode).toBe(302);
+  });
+
+  it('a Universal Link for iOS does not stop the page on Android', async () => {
+    mockDb(linkRow({ ios_universal_link: 'https://app.example/p/1', org_settings: pageMode }));
+    const android = await get(app, ANDROID_UA);
+    expect(android.statusCode).toBe(200);
+    expect(android.body).toContain('class="lp"');
+  });
+
+  it('serves the page inside an in-app browser, where a bare scheme redirect fails silently', async () => {
+    mockDb(linkRow({ app_scheme: 'demo', deep_link_path: '/p/1', web_fallback_url: 'https://example.com/p/1', org_settings: pageMode }));
+    const res = await get(app, FB_IOS_UA);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('id="lp-open"');
+  });
+
+  /**
+   * In-app browsers bypass Universal Links, so the store redirect that a regular
+   * browser gets would send someone who has the app to the store. The redirect
+   * path handles that by preferring the web fallback there (pickMobileFallbackUrl),
+   * which gives the OS a second chance to open the app on the next hop. In page
+   * mode that hop must still exist — as a link.
+   */
+  it('keeps the web fallback reachable from the page, so the Universal Link second chance survives', async () => {
+    mockDb(linkRow({ web_fallback_url: 'https://app.example/p/1', org_settings: pageMode }));
+    const inApp = await get(app, FB_IOS_UA);
+    expect(inApp.statusCode).toBe(200);
+    expect(inApp.body).toContain('href="https://app.example/p/1">Continue on the web</a>');
+    expect(inApp.body).toContain('Download on the App Store');
+
+    // Store mode is untouched either way: regular browser → store, in-app browser → web fallback.
+    mockDb(linkRow({ web_fallback_url: 'https://app.example/p/1' }));
+    const safari = await get(app, IPHONE_UA);
+    expect(safari.statusCode).toBe(302);
+    expect(safari.headers.location).toBe('https://apps.apple.com/app/id1');
+
+    mockDb(linkRow({ web_fallback_url: 'https://app.example/p/1' }));
+    const fb = await get(app, FB_IOS_UA);
+    expect(fb.statusCode).toBe(302);
+    expect(fb.headers.location).toBe('https://app.example/p/1');
+  });
+
+  it("a link set to 'off' keeps the store behaviour under 'page'", async () => {
+    mockDb(linkRow({ launchpad_mode: 'off', org_settings: pageMode }));
+    const res = await get(app, IPHONE_UA);
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toBe('https://apps.apple.com/app/id1');
+  });
+
+  it("a link set to 'on' does not force the page onto a workspace that chose 'store'", async () => {
+    mockDb(linkRow({ launchpad_mode: 'on' }));
+    const res = await get(app, IPHONE_UA);
+    expect(res.statusCode).toBe(302);
+  });
+
+  it("'store' and an absent setting produce the same interstitial, byte for byte", async () => {
+    const row = { app_scheme: 'demo', deep_link_path: '/p/1', deep_link_parameters: { x: '1', y: 'two words' } };
+    mockDb(linkRow(row));
+    const absent = await get(app, IPHONE_UA);
+    mockDb(linkRow({ ...row, org_settings: { launchpad: { mobile: 'store' } } }));
+    const explicit = await get(app, IPHONE_UA);
+
+    expect(absent.statusCode).toBe(200);
+    expect(absent.body).toContain('Opening');
+    expect(absent.body).toContain('setTimeout');
+    expect(absent.body).toContain('var schemeUrl = "demo://p/1?x=1&y=two+words" + hash;');
+    expect(absent.body).not.toContain('class="lp"');
+    expect(explicit.body).toBe(absent.body);
+    expect(explicit.headers['content-type']).toBe(absent.headers['content-type']);
+  });
+
+  it('page mode changes nothing on desktop', async () => {
+    mockDb(linkRow({ web_fallback_url: 'https://example.com/page', org_settings: pageMode }));
+    const res = await get(app, DESKTOP_UA);
+    expect(res.statusCode).toBe(302);
   });
 });
