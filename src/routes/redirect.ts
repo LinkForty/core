@@ -28,6 +28,9 @@ import {
   type LaunchpadSettings,
 } from '../lib/launchpad.js';
 
+/** Longest query string the Launchpad page carries into its QR code and og:url. */
+const MAX_PAGE_URL_SEARCH = 512;
+
 /**
  * Detect iOS in-app browsers where Universal Links don't fire.
  * These browsers use WKWebView which bypasses the Universal Links mechanism.
@@ -778,6 +781,11 @@ export async function redirectRoutes(
       const beaconUrl = options.launchpad?.beaconUrl;
       const host = request.headers.host || request.hostname;
       const pagePath = templateSlug ? `${templateSlug}/${shortCode}` : shortCode;
+      // The page's own URL — host, template path and the visitor's query string —
+      // is what the QR code hands to the phone, so nothing is lost in the hop.
+      // A query string too long to fit a scannable code is dropped, not truncated.
+      const rawSearch = new URL(request.url, 'http://x').search;
+      const search = rawSearch.length <= MAX_PAGE_URL_SEARCH ? rawSearch : '';
       return reply
         .status(200)
         .header('X-Robots-Tag', 'noindex, nofollow')
@@ -788,7 +796,7 @@ export async function redirectRoutes(
           renderLaunchpadPage({
             content,
             linkId: link.id,
-            pageUrl: `${request.protocol}://${host}/${pagePath}`,
+            pageUrl: `${request.protocol}://${host}/${pagePath}${search}`,
             iosUrl: opts.storeUrls ? opts.storeUrls.iosUrl : iosUrl,
             androidUrl: opts.storeUrls ? opts.storeUrls.androidUrl : androidUrl,
             webUrl: opts.webUrl,

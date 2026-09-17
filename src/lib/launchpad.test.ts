@@ -152,7 +152,7 @@ describe('renderLaunchpadPage', () => {
     expect(html).toContain('<h1>A title</h1>');
     expect(html).toContain('Download on the App Store');
     expect(html).toContain('Get it on Google Play');
-    expect(html).toContain('/api/links/link-1/qr?format=svg&amp;size=264');
+    expect(html).toContain('/api/links/link-1/qr?format=svg&amp;size=264&amp;url=');
     expect(html).toContain('<span>Demo App</span>');
     expect(html).toContain('--lp-accent: #ff8800; --lp-accent-ink: #ffffff;');
   });

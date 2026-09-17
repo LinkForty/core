@@ -3,6 +3,22 @@ import QRCode from 'qrcode';
 import { db } from '../lib/database.js';
 
 /**
+ * True when `candidate` is an http(s) URL whose path ends in `/{shortCode}` —
+ * the link itself, on any host and under any template path.
+ */
+export function urlPointsAtLink(candidate: string, shortCode: string | null): boolean {
+  if (!shortCode) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+  return parsed.pathname === `/${shortCode}` || parsed.pathname.endsWith(`/${shortCode}`);
+}
+
+/**
  * QR Code Routes - Generate QR codes for links
  */
 export async function qrRoutes(fastify: FastifyInstance) {
@@ -15,6 +31,10 @@ export async function qrRoutes(fastify: FastifyInstance) {
    * - size: number 128-2048 (default: 512)
    * - color: hex color for foreground (default: '#000000')
    * - bgcolor: hex color for background (default: '#ffffff')
+   * - url: the exact URL to encode instead of `SHORTLINK_DOMAIN/{shortCode}` —
+   *   the link as served on a custom domain or under a template path. Must be
+   *   http(s) and its path must end in this link's short code, so the endpoint
+   *   cannot be used to mint QR codes for arbitrary destinations.
    *
    * Returns: QR code image (PNG or SVG)
    */
@@ -26,14 +46,15 @@ export async function qrRoutes(fastify: FastifyInstance) {
     const size = Math.min(Math.max(parseInt(query.size || '512', 10), 128), 2048);
     const color = query.color || '#000000';
     const bgcolor = query.bgcolor || '#ffffff';
+    const urlOverride = query.url;
 
     // Validate format
     if (!['png', 'svg'].includes(format)) {
       return reply.status(400).send({ error: 'Invalid format. Use "png" or "svg".' });
     }
 
-    // Build cache key
-    const cacheKey = `qr:${id}:${format}:${size}:${color}:${bgcolor}`;
+    // Build cache key (the override is part of it so one link can carry several codes)
+    const cacheKey = `qr:${id}:${format}:${size}:${color}:${bgcolor}:${urlOverride || 'default'}`;
 
     // Try to get from cache
     if (fastify.redis) {
@@ -74,12 +95,20 @@ export async function qrRoutes(fastify: FastifyInstance) {
 
     const link = result.rows[0];
 
-    // Build short URL using configured domain or request hostname
-    // Use SHORTLINK_DOMAIN env var for production deployments
-    const shortLinkDomain = process.env.SHORTLINK_DOMAIN || `${request.protocol}://${request.hostname}`;
-    const shortUrl = link.short_code
-      ? `${shortLinkDomain}/${link.short_code}`
-      : link.original_url;
+    let shortUrl: string;
+    if (urlOverride) {
+      if (!urlPointsAtLink(urlOverride, link.short_code)) {
+        return reply.status(400).send({ error: 'url must be an http(s) URL whose path ends in this link\'s short code' });
+      }
+      shortUrl = urlOverride;
+    } else {
+      // Build short URL using configured domain or request hostname
+      // Use SHORTLINK_DOMAIN env var for production deployments
+      const shortLinkDomain = process.env.SHORTLINK_DOMAIN || `${request.protocol}://${request.hostname}`;
+      shortUrl = link.short_code
+        ? `${shortLinkDomain}/${link.short_code}`
+        : link.original_url;
+    }
 
     try {
       // QR code options

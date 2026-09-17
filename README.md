@@ -272,7 +272,10 @@ Two hooks on `RedirectRouteOptions` let a host application extend the page witho
 ```bash
 GET /api/links/:id/qr?format=png&size=300
 GET /api/links/:id/qr?format=svg
+GET /api/links/:id/qr?url=https://links.example.com/spring/abc123   # encode the link on a custom host / template path
 ```
+
+Without `url` the code encodes `SHORTLINK_DOMAIN/{shortCode}`. `url` must be an http(s) URL whose path ends in the link's short code; anything else is a 400. The Launchpad page uses it to encode its own address, so a phone that scans the code lands on the same host and path the visitor is on.
 
 ### Webhooks
 

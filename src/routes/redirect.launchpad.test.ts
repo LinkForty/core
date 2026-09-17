@@ -106,7 +106,9 @@ describe('launchpad page — when it is served', () => {
     expect(res.body).toContain('Live updates for your route');
     expect(res.body).toContain('Download on the App Store');
     expect(res.body).toContain('Get it on Google Play');
-    expect(res.body).toContain('/api/links/00000000-0000-0000-0000-0000000000aa/qr?format=svg');
+    expect(res.body).toContain(
+      '/api/links/00000000-0000-0000-0000-0000000000aa/qr?format=svg&amp;size=264&amp;url=http%3A%2F%2Fgo.example%2Fabc123"'
+    );
     expect(res.body).toContain('<meta property="og:url" content="http://go.example/abc123">');
     expect(res.body).not.toContain('This link opens in an app');
   });
@@ -209,6 +211,19 @@ describe('launchpad page — when it is served', () => {
     mockDb(linkRow());
     const res = await get(app, DESKTOP_UA, '/promo/abc123');
     expect(res.body).toContain('<meta property="og:url" content="http://go.example/promo/abc123">');
+  });
+
+  it('hands the visitor\'s host, template path and query string to the QR code', async () => {
+    mockDb(linkRow());
+    const res = await get(app, DESKTOP_UA, '/promo/abc123?utm_source=poster&product=42');
+    expect(res.body).toContain('&amp;url=http%3A%2F%2Fgo.example%2Fpromo%2Fabc123%3Futm_source%3Dposter%26product%3D42"');
+    expect(res.body).toContain('og:url" content="http://go.example/promo/abc123?utm_source=poster&amp;product=42"');
+  });
+
+  it('drops a query string too long to fit a scannable code', async () => {
+    mockDb(linkRow());
+    const res = await get(app, DESKTOP_UA, '/abc123?x=' + 'a'.repeat(600));
+    expect(res.body).toContain('&amp;url=http%3A%2F%2Fgo.example%2Fabc123"');
   });
 });
 
