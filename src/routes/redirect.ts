@@ -709,6 +709,48 @@ export async function redirectRoutes(
     const webFallbackUrl = link.web_fallback_url || templateSettings.defaultWebFallbackUrl || orgAppConfig.webFallbackUrl || null;
 
     /**
+     * Everything the redirect adds to an http(s) destination before sending a
+     * visitor there: the link's UTM parameters, its deep-link parameters as a
+     * query string, and — when the link opted in — the originating click id.
+     * Used for the 302, and for the "Continue on the web" link on the
+     * launchpad page, so a visitor who goes via the page lands on the same
+     * URL as one who was redirected.
+     */
+    const decorateWebDestination = (destination: string): string => {
+      // For HTTP(S) URLs, add UTM parameters
+      let url = buildRedirectUrl(destination, link.utm_parameters) || destination;
+
+      // Add deep link parameters as query params
+      if (link.deep_link_parameters && Object.keys(link.deep_link_parameters).length > 0) {
+        try {
+          const parsed = new URL(url);
+          Object.entries(link.deep_link_parameters).forEach(([key, value]) => {
+            parsed.searchParams.set(key, String(value));
+          });
+          url = parsed.toString();
+        } catch (error) {
+          // If URL parsing fails, continue without deep link parameters
+          console.error('Failed to add deep link parameters:', error);
+        }
+      }
+
+      // When opted in per link (append_click_id), append the originating click id
+      // so a downstream analytics tool on the landing page can correlate the
+      // landing visit to this exact click. Opt-in (default off), web/HTTPS only —
+      // an absent/false flag (incl. stale cache) leaves the destination untouched.
+      if (link.append_click_id === true) {
+        try {
+          const parsed = new URL(url);
+          parsed.searchParams.set('lf_click', clickId);
+          url = parsed.toString();
+        } catch {
+          // Non-absolute / unparseable URL — skip the correlation param.
+        }
+      }
+      return url;
+    };
+
+    /**
      * Render and send the launchpad page (lib/launchpad.ts). Shared by the
      * desktop and mobile decisions below; the caller decides the two things
      * that differ between them — whether there is a scheme to offer a button
@@ -822,7 +864,11 @@ export async function redirectRoutes(
         // Desktop never attempts the URI scheme: there is no app to open. The
         // web destination, when there is one, is offered as a link so `always`
         // mode never traps a visitor who would otherwise have been redirected.
-        return serveLaunchpad(launchpadSettings, { schemeUrl: null, showQr: true, webUrl: redirectUrl || null });
+        return serveLaunchpad(launchpadSettings, {
+          schemeUrl: null,
+          showQr: true,
+          webUrl: redirectUrl ? decorateWebDestination(redirectUrl) : null,
+        });
       }
     }
 
@@ -852,7 +898,7 @@ export async function redirectRoutes(
         return serveLaunchpad(launchpadSettings, {
           schemeUrl: link.app_scheme ? buildAppSchemeUrl(link) : null,
           showQr: false,
-          webUrl: webFallbackUrl || link.original_url || null,
+          webUrl: webFallbackUrl || link.original_url ? decorateWebDestination(webFallbackUrl || link.original_url) : null,
           storeUrls: device === 'ios' ? { iosUrl, androidUrl: null } : { iosUrl: null, androidUrl },
         });
       }
@@ -893,36 +939,7 @@ export async function redirectRoutes(
     let finalUrl = redirectUrl;
 
     if (!useSchemeUrl) {
-      // For HTTP(S) URLs, add UTM parameters
-      finalUrl = buildRedirectUrl(redirectUrl, link.utm_parameters) || redirectUrl;
-
-      // Add deep link parameters as query params
-      if (link.deep_link_parameters && Object.keys(link.deep_link_parameters).length > 0) {
-        try {
-          const url = new URL(finalUrl);
-          Object.entries(link.deep_link_parameters).forEach(([key, value]) => {
-            url.searchParams.set(key, String(value));
-          });
-          finalUrl = url.toString();
-        } catch (error) {
-          // If URL parsing fails, continue without deep link parameters
-          console.error('Failed to add deep link parameters:', error);
-        }
-      }
-
-      // When opted in per link (append_click_id), append the originating click id
-      // so a downstream analytics tool on the landing page can correlate the
-      // landing visit to this exact click. Opt-in (default off), web/HTTPS only —
-      // an absent/false flag (incl. stale cache) leaves the destination untouched.
-      if (link.append_click_id === true) {
-        try {
-          const url = new URL(finalUrl);
-          url.searchParams.set('lf_click', clickId);
-          finalUrl = url.toString();
-        } catch {
-          // Non-absolute / unparseable URL — skip the correlation param.
-        }
-      }
+      finalUrl = decorateWebDestination(redirectUrl);
     } else {
       // For URI scheme URLs, append query params differently
       if (link.deep_link_parameters && Object.keys(link.deep_link_parameters).length > 0) {

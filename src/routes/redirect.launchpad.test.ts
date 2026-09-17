@@ -143,6 +143,27 @@ describe('launchpad page — when it is served', () => {
     expect(original.body).toContain('href="https://example.com/original">Continue on the web</a>');
   });
 
+  it('the web link carries the same UTMs, deep-link params and click id the 302 would have', async () => {
+    mockDb(
+      linkRow({
+        web_fallback_url: 'https://example.com/page',
+        utm_parameters: { source: 'newsletter', medium: 'email' },
+        deep_link_parameters: { ref: 'abc' },
+        append_click_id: true,
+        org_settings: { launchpad: { desktop: 'always' } },
+      })
+    );
+    const res = await get(app, DESKTOP_UA);
+    const href = /data-lp-cta="cta_web" href="([^"]+)"/.exec(res.body)?.[1]?.replace(/&amp;/g, '&');
+    expect(href).toBeDefined();
+    const url = new URL(href!);
+    expect(url.origin + url.pathname).toBe('https://example.com/page');
+    expect(url.searchParams.get('utm_source')).toBe('newsletter');
+    expect(url.searchParams.get('utm_medium')).toBe('email');
+    expect(url.searchParams.get('ref')).toBe('abc');
+    expect(url.searchParams.get('lf_click')).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
   it('has no web link when the link has no web destination', async () => {
     mockDb(linkRow());
     expect((await get(app, DESKTOP_UA)).body).not.toContain('Continue on the web');
