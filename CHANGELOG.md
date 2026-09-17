@@ -1,3 +1,8 @@
+## 1.28.0 (2026-09-17)
+
+* feat(launchpad): optional fixed background color for the page (#60) ([1390635](https://github.com/LinkForty/core/commit/1390635)), closes [#60](https://github.com/LinkForty/core/issues/60)
+* fix(launchpad): QR code encodes the page's own URL, not SHORTLINK_DOMAIN/{shortCode} (#59) ([a10dc0b](https://github.com/LinkForty/core/commit/a10dc0b)), closes [#59](https://github.com/LinkForty/core/issues/59)
+
 ## <small>1.27.2 (2026-09-17)</small>
 
 * fix(launchpad): colour the web link with the accent (#58) ([13c494c](https://github.com/LinkForty/core/commit/13c494c)), closes [#58](https://github.com/LinkForty/core/issues/58)
