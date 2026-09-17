@@ -1,3 +1,7 @@
+## <small>1.27.2 (2026-09-17)</small>
+
+* fix(launchpad): colour the web link with the accent (#58) ([13c494c](https://github.com/LinkForty/core/commit/13c494c)), closes [#58](https://github.com/LinkForty/core/issues/58)
+
 ## <small>1.27.1 (2026-09-17)</small>
 
 * fix(redirect): keep configured URLs out of the interstitial's JavaScript, and refuse executable sche ([ee5cc26](https://github.com/LinkForty/core/commit/ee5cc26)), closes [#56](https://github.com/LinkForty/core/issues/56)
