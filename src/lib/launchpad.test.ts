@@ -242,6 +242,13 @@ describe('renderLaunchpadPage', () => {
     expect(html).toContain('<meta name="twitter:card" content="summary">');
   });
 
+  it('offers the web destination as a link only when given one that is http(s)', () => {
+    expect(renderLaunchpadPage(base)).not.toContain('Continue on the web');
+    const html = renderLaunchpadPage({ ...base, webUrl: 'https://example.com/page?a=1&b=2' });
+    expect(html).toContain('<a data-lp-cta="cta_web" href="https://example.com/page?a=1&amp;b=2">Continue on the web</a>');
+    expect(renderLaunchpadPage({ ...base, webUrl: 'javascript:alert(1)' })).not.toContain('Continue on the web');
+  });
+
   it('uses dark button text on a light accent', () => {
     const html = renderLaunchpadPage({ ...base, content: { ...base.content, theme: { accentColor: '#ffe066' } } });
     expect(html).toContain('--lp-accent: #ffe066; --lp-accent-ink: #16181d;');

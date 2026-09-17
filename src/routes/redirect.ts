@@ -716,7 +716,12 @@ export async function redirectRoutes(
      */
     const serveLaunchpad = async (
       launchpadSettings: LaunchpadSettings,
-      opts: { schemeUrl: string | null; showQr: boolean; storeUrls?: { iosUrl: string | null; androidUrl: string | null } }
+      opts: {
+        schemeUrl: string | null;
+        showQr: boolean;
+        webUrl: string | null;
+        storeUrls?: { iosUrl: string | null; androidUrl: string | null };
+      }
     ) => {
       let content: LaunchpadContent | null = null;
       try {
@@ -743,6 +748,7 @@ export async function redirectRoutes(
             pageUrl: `${request.protocol}://${host}/${pagePath}`,
             iosUrl: opts.storeUrls ? opts.storeUrls.iosUrl : iosUrl,
             androidUrl: opts.storeUrls ? opts.storeUrls.androidUrl : androidUrl,
+            webUrl: opts.webUrl,
             schemeUrl: opts.schemeUrl,
             showQr: opts.showQr,
             nonce,
@@ -813,8 +819,10 @@ export async function redirectRoutes(
         linkMode: readLaunchpadLinkMode(link.launchpad_mode),
       });
       if (shouldServe) {
-        // Desktop never attempts the URI scheme: there is no app to open.
-        return serveLaunchpad(launchpadSettings, { schemeUrl: null, showQr: true });
+        // Desktop never attempts the URI scheme: there is no app to open. The
+        // web destination, when there is one, is offered as a link so `always`
+        // mode never traps a visitor who would otherwise have been redirected.
+        return serveLaunchpad(launchpadSettings, { schemeUrl: null, showQr: true, webUrl: redirectUrl || null });
       }
     }
 
@@ -837,9 +845,14 @@ export async function redirectRoutes(
         })
       ) {
         // Only this platform's store: a Google Play button on an iPhone is noise.
+        // The web fallback stays reachable as a link — inside an in-app browser
+        // it is the hop that gives a Universal Link / App Link its second chance
+        // to open an installed app, the same reason pickMobileFallbackUrl()
+        // prefers it there.
         return serveLaunchpad(launchpadSettings, {
           schemeUrl: link.app_scheme ? buildAppSchemeUrl(link) : null,
           showQr: false,
+          webUrl: webFallbackUrl || link.original_url || null,
           storeUrls: device === 'ios' ? { iosUrl, androidUrl: null } : { iosUrl: null, androidUrl },
         });
       }

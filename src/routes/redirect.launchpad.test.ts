@@ -133,6 +133,21 @@ describe('launchpad page — when it is served', () => {
     expect(res.body).toContain('class="lp"');
   });
 
+  it("under 'always' the page links to the destination the 302 would have used", async () => {
+    mockDb(linkRow({ web_fallback_url: 'https://example.com/page', org_settings: { launchpad: { desktop: 'always' } } }));
+    const res = await get(app, DESKTOP_UA);
+    expect(res.body).toContain('href="https://example.com/page">Continue on the web</a>');
+
+    mockDb(linkRow({ original_url: 'https://example.com/original', org_settings: { launchpad: { desktop: 'always' } } }));
+    const original = await get(app, DESKTOP_UA);
+    expect(original.body).toContain('href="https://example.com/original">Continue on the web</a>');
+  });
+
+  it('has no web link when the link has no web destination', async () => {
+    mockDb(linkRow());
+    expect((await get(app, DESKTOP_UA)).body).not.toContain('Continue on the web');
+  });
+
   it("a link set to 'off' wins over a workspace set to 'always'", async () => {
     mockDb(
       linkRow({
@@ -359,6 +374,32 @@ describe('launchpad page — mobile mode', () => {
     const res = await get(app, FB_IOS_UA);
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain('id="lp-open"');
+  });
+
+  /**
+   * In-app browsers bypass Universal Links, so the store redirect that a regular
+   * browser gets would send someone who has the app to the store. The redirect
+   * path handles that by preferring the web fallback there (pickMobileFallbackUrl),
+   * which gives the OS a second chance to open the app on the next hop. In page
+   * mode that hop must still exist — as a link.
+   */
+  it('keeps the web fallback reachable from the page, so the Universal Link second chance survives', async () => {
+    mockDb(linkRow({ web_fallback_url: 'https://app.example/p/1', org_settings: pageMode }));
+    const inApp = await get(app, FB_IOS_UA);
+    expect(inApp.statusCode).toBe(200);
+    expect(inApp.body).toContain('href="https://app.example/p/1">Continue on the web</a>');
+    expect(inApp.body).toContain('Download on the App Store');
+
+    // Store mode is untouched either way: regular browser → store, in-app browser → web fallback.
+    mockDb(linkRow({ web_fallback_url: 'https://app.example/p/1' }));
+    const safari = await get(app, IPHONE_UA);
+    expect(safari.statusCode).toBe(302);
+    expect(safari.headers.location).toBe('https://apps.apple.com/app/id1');
+
+    mockDb(linkRow({ web_fallback_url: 'https://app.example/p/1' }));
+    const fb = await get(app, FB_IOS_UA);
+    expect(fb.statusCode).toBe(302);
+    expect(fb.headers.location).toBe('https://app.example/p/1');
   });
 
   it("a link set to 'off' keeps the store behaviour under 'page'", async () => {
