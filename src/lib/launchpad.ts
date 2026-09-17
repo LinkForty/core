@@ -1,5 +1,5 @@
 import { randomBytes } from 'crypto';
-import { escapeHtml, safeHref } from './link-safety.js';
+import { escapeHtml, safeHref, safeSchemeHref } from './link-safety.js';
 
 /**
  * Launchpad: the page a visitor sees when a link cannot open the app.
@@ -365,15 +365,16 @@ export function renderLaunchpadPage(ctx: LaunchpadPageContext): string {
         description ? `<p>${description}</p>` : ''
       }</section>`;
 
+  const schemeUrl = ctx.schemeUrl && safeSchemeHref(ctx.schemeUrl) ? escapeHtml(ctx.schemeUrl) : null;
   const buttons = [
-    ctx.schemeUrl
-      ? `<a class="lp-btn lp-btn-primary" id="lp-open" data-lp-cta="cta_open" data-scheme="${escapeHtml(ctx.schemeUrl)}" href="${escapeHtml(ctx.schemeUrl)}">Open in app</a>`
+    schemeUrl
+      ? `<a class="lp-btn lp-btn-primary" id="lp-open" data-lp-cta="cta_open" data-scheme="${schemeUrl}" href="${schemeUrl}">Open in app</a>`
       : '',
     iosUrl
-      ? `<a class="lp-btn${ctx.schemeUrl ? '' : ' lp-btn-primary'}" data-lp-cta="cta_ios" href="${iosUrl}">Download on the App Store</a>`
+      ? `<a class="lp-btn${schemeUrl ? '' : ' lp-btn-primary'}" data-lp-cta="cta_ios" href="${iosUrl}">Download on the App Store</a>`
       : '',
     androidUrl
-      ? `<a class="lp-btn${ctx.schemeUrl || iosUrl ? '' : ' lp-btn-primary'}" data-lp-cta="cta_android" href="${androidUrl}">Get it on Google Play</a>`
+      ? `<a class="lp-btn${schemeUrl || iosUrl ? '' : ' lp-btn-primary'}" data-lp-cta="cta_android" href="${androidUrl}">Get it on Google Play</a>`
       : '',
   ]
     .filter(Boolean)
@@ -388,7 +389,7 @@ export function renderLaunchpadPage(ctx: LaunchpadPageContext): string {
     ? `<section class="lp-qr"><img src="/api/links/${escapeHtml(ctx.linkId)}/qr?format=svg&amp;size=264" alt="QR code for this link" width="132" height="132"><div><strong>Scan to open on your phone</strong><p>Point your phone's camera at the code to open this link there.</p></div></section>`
     : '';
 
-  const needsScript = Boolean(ctx.schemeUrl || ctx.beaconUrl);
+  const needsScript = Boolean(schemeUrl || ctx.beaconUrl);
   const bodyAttrs = [
     `data-link-id="${escapeHtml(ctx.linkId)}"`,
     ctx.beaconUrl ? `data-beacon="${escapeHtml(ctx.beaconUrl)}"` : '',

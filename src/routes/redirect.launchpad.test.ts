@@ -446,7 +446,7 @@ describe('launchpad page — mobile mode', () => {
     expect(absent.statusCode).toBe(200);
     expect(absent.body).toContain('Opening');
     expect(absent.body).toContain('setTimeout');
-    expect(absent.body).toContain('var schemeUrl = "demo://p/1?x=1&y=two+words" + hash;');
+    expect(absent.body).toContain('id="open-btn" href="demo://p/1?x=1&amp;y=two+words"');
     expect(absent.body).not.toContain('class="lp"');
     expect(explicit.body).toBe(absent.body);
     expect(explicit.headers['content-type']).toBe(absent.headers['content-type']);
