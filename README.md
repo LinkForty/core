@@ -254,10 +254,13 @@ When the link does have a web destination, the page offers it as a "Continue on 
       "mobile": "store",               // "store" (default) | "page"
       "appName": "Ride Alert",
       "appIconUrl": "https://cdn.example/icon.png",
-      "accentColor": "#0f766e"
+      "accentColor": "#0f766e",           // buttons, the web link, focus rings
+      "backgroundColor": "#101418"        // optional; fixes the page's palette (see below)
     }
   }
   ```
+
+  Without `backgroundColor` the page follows the visitor's light/dark preference. With one, the background is fixed and the text, surfaces and borders are derived from it — a light or a dark brand color both stay legible, and the visitor's theme no longer changes the page.
 
 - `links.launchpad_mode` (per link, `launchpadMode` on the links API): `inherit` (default), `on` or `off`. The link's value wins over the workspace's.
 

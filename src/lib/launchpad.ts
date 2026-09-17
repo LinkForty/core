@@ -53,6 +53,12 @@ export interface LaunchpadSettings {
   appIconUrl?: string;
   /** `#rrggbb`. Drives the primary button, the web link and focus rings. Anything else is ignored. */
   accentColor?: string;
+  /**
+   * `#rrggbb`. Fixes the page background; text, surfaces and borders are
+   * derived from it so a light or a dark brand both stay legible. Unset, the
+   * page follows the visitor's light/dark preference.
+   */
+  backgroundColor?: string;
   /** Opaque to Core: a host application may key its own page templates on it. */
   templateId?: string;
 }
@@ -61,6 +67,7 @@ export interface LaunchpadTheme {
   appName?: string;
   appIconUrl?: string;
   accentColor?: string;
+  backgroundColor?: string;
 }
 
 /**
@@ -117,6 +124,7 @@ export function readLaunchpadSettings(orgSettings: unknown): LaunchpadSettings {
   const desktop = DESKTOP_MODES.find((m) => m === r.desktop);
   const mobile = MOBILE_MODES.find((m) => m === r.mobile);
   const accentColor = asString(r.accentColor, 7);
+  const backgroundColor = asString(r.backgroundColor, 7);
   const appIconUrl = asString(r.appIconUrl, 2048);
   return {
     ...(desktop ? { desktop } : {}),
@@ -124,6 +132,7 @@ export function readLaunchpadSettings(orgSettings: unknown): LaunchpadSettings {
     ...(asString(r.appName, 60) ? { appName: asString(r.appName, 60) } : {}),
     ...(appIconUrl && safeHref(appIconUrl) ? { appIconUrl } : {}),
     ...(accentColor && HEX_COLOR.test(accentColor) ? { accentColor } : {}),
+    ...(backgroundColor && HEX_COLOR.test(backgroundColor) ? { backgroundColor } : {}),
     ...(asString(r.templateId, 64) ? { templateId: asString(r.templateId, 64) } : {}),
   };
 }
@@ -188,6 +197,7 @@ export function defaultLaunchpadContent(link: LaunchpadLinkFields, settings: Lau
       ...(settings.appName ? { appName: settings.appName } : {}),
       ...(settings.appIconUrl ? { appIconUrl: settings.appIconUrl } : {}),
       ...(settings.accentColor ? { accentColor: settings.accentColor } : {}),
+      ...(settings.backgroundColor ? { backgroundColor: settings.backgroundColor } : {}),
     },
   };
 }
@@ -199,6 +209,33 @@ function isLightColor(hex: string): boolean {
     return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
   };
   return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5) > 0.5;
+}
+
+/** `#rrggbb` blended `t` of the way from `from` to `to`. */
+function mixHex(from: string, to: string, t: number): string {
+  const ch = (hex: string, i: number) => parseInt(hex.slice(i, i + 2), 16);
+  return (
+    '#' +
+    [1, 3, 5]
+      .map((i) => Math.round(ch(from, i) + (ch(to, i) - ch(from, i)) * t).toString(16).padStart(2, '0'))
+      .join('')
+  );
+}
+
+/**
+ * The full palette for a fixed page background: ink and muted text from the
+ * light/dark default set that reads on it, surfaces and borders as the
+ * background nudged toward the ink. Emitted after the base styles at the same
+ * specificity, so it overrides both the light default and the dark media
+ * query: the page no longer follows the visitor's theme.
+ */
+export function launchpadPaletteCss(backgroundColor: string): string {
+  const light = isLightColor(backgroundColor);
+  const ink = light ? '#16181d' : '#eef0f3';
+  const muted = light ? '#5f6673' : '#a3abb8';
+  const surface = mixHex(backgroundColor, ink, 0.06);
+  const line = mixHex(backgroundColor, ink, 0.14);
+  return `:root { --lp-bg: ${backgroundColor}; --lp-ink: ${ink}; --lp-muted: ${muted}; --lp-surface: ${surface}; --lp-line: ${line}; }`;
 }
 
 /** A fresh CSP nonce per response. */
@@ -337,6 +374,7 @@ export function renderLaunchpadPage(ctx: LaunchpadPageContext): string {
   const androidUrl = ctx.androidUrl && safeHref(ctx.androidUrl) ? escapeHtml(ctx.androidUrl) : null;
   const accent = theme.accentColor && HEX_COLOR.test(theme.accentColor) ? theme.accentColor : null;
   const accentInk = accent && isLightColor(accent) ? '#16181d' : '#ffffff';
+  const background = theme.backgroundColor && HEX_COLOR.test(theme.backgroundColor) ? theme.backgroundColor : null;
   const nonce = escapeHtml(ctx.nonce);
 
   const head = [
@@ -404,7 +442,9 @@ export function renderLaunchpadPage(ctx: LaunchpadPageContext): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 ${head}
-<style>${STYLES}${accent ? `\n  :root { --lp-accent: ${accent}; --lp-accent-ink: ${accentInk}; }` : ''}</style>
+<style>${STYLES}${accent ? `\n  :root { --lp-accent: ${accent}; --lp-accent-ink: ${accentInk}; }` : ''}${
+    background ? `\n  ${launchpadPaletteCss(background)}` : ''
+  }</style>
 </head>
 <body ${bodyAttrs}>
 <main class="lp">
