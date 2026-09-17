@@ -1,10 +1,13 @@
 /**
- * Route-level tests for the page shown when a link has no web destination.
+ * Route-level tests for the plain page shown when a link has no web destination
+ * and the launchpad page is switched off.
  *
  * A link belonging to an app-only product has nothing to put in a web fallback,
  * so a desktop visitor used to receive `{"error":"No destination URL configured
- * for this link"}` as a raw 404 body — rendered on the customer's own branded
- * short-link domain.
+ * for this link"}` as a raw 404 body — rendered on the link owner's own branded
+ * short-link domain. The launchpad page (redirect.launchpad.test.ts) is now the
+ * default for that case; the plain page remains for workspaces that opt out, so
+ * every test here pins `launchpad.desktop = 'off'`.
  *
  * The generator is module-private, so these drive the real `redirectRoutes`
  * plugin through `fastify.inject()` with only the data layer mocked, following
@@ -57,6 +60,11 @@ function linkRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** The same link, in a workspace that has switched the launchpad page off. */
+function plainPageRow(overrides: Record<string, unknown> = {}) {
+  return linkRow({ org_settings: { launchpad: { desktop: 'off' } }, ...overrides });
+}
+
 function mockDb(row: Record<string, unknown> | null) {
   query.mockReset();
   query.mockImplementation(async (sql: string) => {
@@ -89,7 +97,7 @@ afterEach(async () => {
 
 describe('no web destination', () => {
   it('serves an HTML page to a desktop visitor instead of a JSON 404', async () => {
-    mockDb(linkRow());
+    mockDb(plainPageRow());
     const res = await get(app, DESKTOP_UA);
 
     expect(res.statusCode).toBe(200);
@@ -100,14 +108,14 @@ describe('no web destination', () => {
   });
 
   it('uses the link title, preferring og_title', async () => {
-    mockDb(linkRow({ title: 'Plain title', og_title: 'OG title' }));
+    mockDb(plainPageRow({ title: 'Plain title', og_title: 'OG title' }));
     const res = await get(app, DESKTOP_UA);
     expect(res.body).toContain('OG title');
     expect(res.body).not.toContain('Plain title');
   });
 
   it('falls back to title when og_title is unset', async () => {
-    mockDb(linkRow({ title: 'Plain title' }));
+    mockDb(plainPageRow({ title: 'Plain title' }));
     expect((await get(app, DESKTOP_UA)).body).toContain('Plain title');
   });
 
@@ -116,7 +124,7 @@ describe('no web destination', () => {
    * the test that matters most in this file.
    */
   it('escapes a title containing HTML', async () => {
-    mockDb(linkRow({ og_title: `<script>alert("xss")</script> & 'quotes'` }));
+    mockDb(plainPageRow({ og_title: `<script>alert("xss")</script> & 'quotes'` }));
     const res = await get(app, DESKTOP_UA);
 
     expect(res.body).not.toContain('<script>');
@@ -127,20 +135,36 @@ describe('no web destination', () => {
   });
 
   it('shows store buttons only for the platforms the link carries', async () => {
-    mockDb(linkRow({ ios_app_store_url: 'https://apps.apple.com/app/id1' }));
+    mockDb(plainPageRow({ ios_app_store_url: 'https://apps.apple.com/app/id1' }));
     const onlyIos = await get(app, DESKTOP_UA);
     expect(onlyIos.body).toContain('Download for iOS');
     expect(onlyIos.body).not.toContain('Download for Android');
 
-    mockDb(linkRow());
+    mockDb(plainPageRow());
     const neither = await get(app, DESKTOP_UA);
     expect(neither.body).not.toContain('Download for');
   });
 
   it('escapes a store URL into the href', async () => {
-    mockDb(linkRow({ ios_app_store_url: 'https://apps.apple.com/app?a=1&b=2' }));
+    mockDb(plainPageRow({ ios_app_store_url: 'https://apps.apple.com/app?a=1&b=2' }));
     const res = await get(app, DESKTOP_UA);
     expect(res.body).toContain('https://apps.apple.com/app?a=1&amp;b=2');
+  });
+
+  it('is the fallback when the link itself opts out of the launchpad page', async () => {
+    mockDb(linkRow({ launchpad_mode: 'off' }));
+    const res = await get(app, DESKTOP_UA);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('This link opens in an app');
+    expect(res.body).not.toContain('class="lp"');
+  });
+
+  it('is not served by default — the launchpad page is', async () => {
+    mockDb(linkRow());
+    const res = await get(app, DESKTOP_UA);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('class="lp"');
+    expect(res.body).not.toContain('This link opens in an app');
   });
 
   it('resolves through the template and workspace chain before showing the page', async () => {
@@ -170,7 +194,7 @@ describe('no web destination', () => {
    * opposite case — a genuine visit to a working link.
    */
   it('still records the click', async () => {
-    mockDb(linkRow());
+    mockDb(plainPageRow());
     await get(app, DESKTOP_UA);
     await new Promise((r) => setImmediate(r));
     expect(query.mock.calls.some(([sql]) => /INSERT INTO click_events/i.test(String(sql)))).toBe(true);

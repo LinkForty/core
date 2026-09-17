@@ -13,6 +13,17 @@ import {
   generateBlockedLinkHTML,
   createOwnerSuspensionSelect,
 } from '../lib/link-safety.js';
+import {
+  createLaunchpadNonce,
+  defaultLaunchpadContent,
+  launchpadContentSecurityPolicy,
+  readLaunchpadLinkMode,
+  readLaunchpadSettings,
+  renderLaunchpadPage,
+  shouldServeLaunchpadOnDesktop,
+  type LaunchpadContent,
+  type LaunchpadSettings,
+} from '../lib/launchpad.js';
 
 /**
  * Detect iOS in-app browsers where Universal Links don't fire.
@@ -163,16 +174,18 @@ function escapeHtml(value: string): string {
 
 /**
  * Page shown to a desktop visitor when a link has no web destination at any level
- * of the chain (link, template, workspace).
+ * of the chain (link, template, workspace) **and** the launchpad page is switched
+ * off for the workspace or the link.
  *
- * This is the expected configuration for an app-only product, not a mistake — a
- * customer with no website has nothing to put in a web fallback. Until this page
- * existed they got `{"error":"No destination URL configured for this link"}` as a
- * raw 404 body, rendered on their own branded short-link domain.
+ * This is the expected configuration for an app-only product, not a mistake — an
+ * app with no website has nothing to put in a web fallback. Until this page
+ * existed the visitor got `{"error":"No destination URL configured for this link"}`
+ * as a raw 404 body, rendered on the link owner's own branded short-link domain.
  *
- * Deliberately plain. It is served from the customer's domain, so it should read
- * as a neutral system page rather than as LinkForty's design; a configurable
- * version is a separate decision.
+ * Deliberately plain. It is served from the link owner's domain, so it should read
+ * as a neutral system page rather than as LinkForty's design. The configurable
+ * version is the launchpad page (lib/launchpad.ts), which is the default; this
+ * one remains for deployments that opt out.
  *
  * Nothing about the link is disclosed beyond what the visitor already has: a
  * title, and store links when the link carries them. No destination URL, no
@@ -217,6 +230,27 @@ export interface RedirectRouteOptions {
    * page links to it. Optional — deployments without one simply omit the link.
    */
   abuseReportUrl?: string;
+  /**
+   * Launchpad page hooks (see lib/launchpad.ts). Both optional: without them
+   * the page is built from the link row alone and reports nothing.
+   */
+  launchpad?: {
+    /**
+     * Supply richer page content than the link row carries — a rendered share
+     * image, a templated hero. Return null to use the default. A hook that
+     * throws is logged and treated as null; the page never fails because of it.
+     */
+    resolveContent?: (
+      link: Record<string, any>,
+      settings: LaunchpadSettings
+    ) => Promise<LaunchpadContent | null> | LaunchpadContent | null;
+    /**
+     * Endpoint that receives `{ linkId, event }` beacons from the page
+     * (`view`, `cta_ios`, `cta_android`, `cta_open`). Relative or absolute.
+     * Unset means the page sends nothing.
+     */
+    beaconUrl?: string;
+  };
 }
 
 export async function redirectRoutes(
@@ -691,6 +725,60 @@ export async function redirectRoutes(
     } else if (device === 'web') {
       // Web fallback
       redirectUrl = webFallbackUrl || link.original_url;
+
+      /**
+       * Launchpad page for desktop visitors (lib/launchpad.ts).
+       *
+       * By default it replaces the plain no-destination page below, i.e. it
+       * is served only when the chain resolved nothing. A workspace can widen
+       * that to every desktop visit (`launchpad.desktop = 'always'`), narrow
+       * it to nothing (`'off'`), and a link can override either way with
+       * `launchpad_mode`. A link that resolves to a destination and has not
+       * opted in still gets its 302 — the page must never add a hop to a link
+       * that works.
+       *
+       * The click has already been recorded above; this is a genuine visit.
+       */
+      const launchpadSettings = readLaunchpadSettings(orgSettings);
+      const serveLaunchpad = shouldServeLaunchpadOnDesktop({
+        hasWebDestination: Boolean(redirectUrl),
+        orgMode: launchpadSettings.desktop,
+        linkMode: readLaunchpadLinkMode(link.launchpad_mode),
+      });
+      if (serveLaunchpad) {
+        let content: LaunchpadContent | null = null;
+        try {
+          content = (await options.launchpad?.resolveContent?.(link, launchpadSettings)) ?? null;
+        } catch (err) {
+          fastify.log.error({ err, shortCode }, 'Launchpad resolveContent threw; using default content');
+        }
+        content ??= defaultLaunchpadContent(link, launchpadSettings);
+
+        const nonce = createLaunchpadNonce();
+        const beaconUrl = options.launchpad?.beaconUrl;
+        const host = request.headers.host || request.hostname;
+        const pagePath = templateSlug ? `${templateSlug}/${shortCode}` : shortCode;
+        return reply
+          .status(200)
+          .header('X-Robots-Tag', 'noindex, nofollow')
+          .header('Cache-Control', 'no-store')
+          .header('Content-Security-Policy', launchpadContentSecurityPolicy(nonce, beaconUrl))
+          .type('text/html')
+          .send(
+            renderLaunchpadPage({
+              content,
+              linkId: link.id,
+              pageUrl: `${request.protocol}://${host}/${pagePath}`,
+              iosUrl,
+              androidUrl,
+              // Desktop never attempts the URI scheme: there is no app to open.
+              schemeUrl: null,
+              showQr: true,
+              nonce,
+              beaconUrl,
+            })
+          );
+      }
     }
 
     /**

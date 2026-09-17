@@ -2,7 +2,7 @@ import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import redis from '@fastify/redis';
 import { initializeDatabase, DatabaseOptions } from './lib/database.js';
-import { redirectRoutes } from './routes/redirect.js';
+import { redirectRoutes, type RedirectRouteOptions } from './routes/redirect.js';
 import { linkRoutes } from './routes/links.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { sdkRoutes } from './routes/sdk.js';
@@ -26,6 +26,8 @@ export interface ServerOptions {
   logger?: boolean;
   /** When true or a number (proxy hop count), Fastify trusts X-Forwarded-For so request.ip is the real client IP. Set when behind a reverse proxy. */
   trustProxy?: boolean | number;
+  /** Options for the redirect routes: abuse-report link, launchpad page hooks. */
+  redirect?: RedirectRouteOptions;
 }
 
 /**
@@ -61,7 +63,7 @@ export async function createServer(options: ServerOptions = {}) {
   // Routes
   await fastify.register(healthRoutes);
   await fastify.register(wellKnownRoutes);
-  await fastify.register(redirectRoutes);
+  await fastify.register(redirectRoutes, options.redirect ?? {});
   await fastify.register(linkRoutes);
   await fastify.register(analyticsRoutes);
   await fastify.register(sdkRoutes);
@@ -79,6 +81,8 @@ export * from './lib/database.js';
 export * from './lib/fingerprint.js';
 export * from './lib/webhook.js';
 export * from './lib/link-safety.js';
+export * from './lib/launchpad.js';
 export * from './lib/event-emitter.js';
 export * from './types/index.js';
+export type { RedirectRouteOptions } from './routes/redirect.js';
 export { redirectRoutes, linkRoutes, analyticsRoutes, sdkRoutes, webhookRoutes, templateRoutes, qrRoutes, previewRoutes, debugRoutes, wellKnownRoutes, healthRoutes } from './routes/index.js';

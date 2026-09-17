@@ -367,6 +367,26 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
       END $$;
     `);
 
+    // Per-link override for the launchpad page (see lib/launchpad.ts):
+    //   inherit — follow the workspace setting (the default)
+    //   on      — serve the page to desktop visitors even when the link has a
+    //             web destination
+    //   off     — never serve it; a link with no web destination gets the plain
+    //             "opens in an app" page instead
+    // NOT NULL with a default, so a cached row from before the column existed
+    // and a freshly inserted row read the same way.
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name='links' AND column_name='launchpad_mode'
+        ) THEN
+          ALTER TABLE links ADD COLUMN launchpad_mode VARCHAR(10) NOT NULL DEFAULT 'inherit';
+        END IF;
+      END $$;
+    `);
+
     await client.query(`
       DO $$
       BEGIN

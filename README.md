@@ -241,6 +241,29 @@ Automatically redirects users to the appropriate URL based on device type (iOS/A
 
 **Mobile interstitial:** When a link has `appScheme` configured and a store fallback URL (iOS App Store or Google Play), mobile requests receive a smart interstitial page instead of a raw 302 redirect. The interstitial tries to open the app via URI scheme and falls back to the app store after 1.5 seconds. This handles the case where a 302 to a custom URI scheme fails silently when the app is not installed. URL fragments are preserved through the redirect, enabling patterns like E2E encryption where the decryption key lives in the fragment.
 
+**Launchpad page (desktop):** A link to app-only content has nowhere to send a desktop visitor. When the chain resolves no web destination (link → template → workspace `appConfig`), a desktop request gets a hosted landing page instead of an error: the link's title, description and image (`ogTitle` / `ogDescription` / `ogImageUrl`, falling back to `title` / `description`), the app's icon and name, App Store / Google Play buttons, and a QR code so the visitor can finish on their phone. The page is `noindex`, sent with `Cache-Control: no-store` and a content-security policy that allows no script without a per-response nonce, and it never navigates on its own — no timers, no automatic scheme attempts.
+
+By default it appears **only** where the alternative is nothing; a link that resolves to a destination still gets its 302. Two knobs change that:
+
+- `organizations.settings.launchpad` (per workspace):
+
+  ```json
+  {
+    "launchpad": {
+      "desktop": "no-destination",     // "no-destination" (default) | "always" | "off"
+      "appName": "Ride Alert",
+      "appIconUrl": "https://cdn.example/icon.png",
+      "accentColor": "#0f766e"
+    }
+  }
+  ```
+
+- `links.launchpad_mode` (per link, `launchpadMode` on the links API): `inherit` (default), `on` or `off`. The link's value wins over the workspace's.
+
+With `desktop: "off"` (or `launchpad_mode: "off"`), a link with no web destination gets the plain "This link opens in an app" page instead.
+
+Two hooks on `RedirectRouteOptions` let a host application extend the page without forking it — see [Server Options](#server-options).
+
 ### QR Codes
 
 ```bash
@@ -322,8 +345,27 @@ interface ServerOptions {
   };
   logger?: boolean;         // Enable Fastify logger (default: true)
   trustProxy?: boolean | number;  // Trust X-Forwarded-For when behind a proxy (default: false)
+  redirect?: RedirectRouteOptions;  // See below
+}
+
+interface RedirectRouteOptions {
+  abuseReportUrl?: string;  // Linked from the link-safety warning page
+  launchpad?: {
+    // Supply richer content for the launchpad page than the link row carries:
+    // a rendered share image, a templated hero. Return null for the default.
+    // A hook that throws is logged and treated as null — the page never fails
+    // because of it. `heroHtml` is inserted unescaped: render it yourself,
+    // never from end-user input.
+    resolveContent?: (link, settings) => Promise<LaunchpadContent | null>;
+    // Endpoint that receives `{ linkId, event }` beacons from the page —
+    // "view" on load, "cta_ios" / "cta_android" / "cta_open" on tap. No
+    // cookies or identifiers. Unset means the page sends nothing.
+    beaconUrl?: string;
+  };
 }
 ```
+
+`renderLaunchpadPage()`, `defaultLaunchpadContent()` and `shouldServeLaunchpadOnDesktop()` are exported so a host can render the same page elsewhere (a settings preview, for instance).
 
 ### Running behind a reverse proxy
 
@@ -378,6 +420,7 @@ Core does not create a `users` table. Authentication and user management are the
 | og_description          | TEXT         | Open Graph description                   |
 | og_image_url            | TEXT         | Open Graph image URL                     |
 | og_type                 | VARCHAR(50)  | Open Graph type (default: "website")     |
+| launchpad_mode          | VARCHAR(10)  | Launchpad page: inherit / on / off       |
 | attribution_window_hours| INTEGER      | Install attribution window (default: 168)|
 | is_active               | BOOLEAN      | Active status                            |
 | expires_at              | TIMESTAMP    | Expiration date                          |
