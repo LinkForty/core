@@ -6,6 +6,7 @@ import {
   readLaunchpadSettings,
   renderLaunchpadPage,
   shouldServeLaunchpadOnDesktop,
+  shouldServeLaunchpadOnMobile,
   type LaunchpadPageContext,
 } from './launchpad.js';
 
@@ -25,6 +26,21 @@ describe('shouldServeLaunchpadOnDesktop', () => {
   ];
   for (const [name, input, expected] of table) {
     it(name, () => expect(shouldServeLaunchpadOnDesktop(input)).toBe(expected));
+  }
+});
+
+describe('shouldServeLaunchpadOnMobile', () => {
+  const table: Array<[string, Parameters<typeof shouldServeLaunchpadOnMobile>[0], boolean]> = [
+    ['defaults → store', { hasAppOpenPath: false }, false],
+    ['store explicitly → store', { hasAppOpenPath: false, mobileMode: 'store' }, false],
+    ['page → page', { hasAppOpenPath: false, mobileMode: 'page' }, true],
+    ['page, but a Universal Link / App Link → the OS handles it', { hasAppOpenPath: true, mobileMode: 'page' }, false],
+    ['page, link off → store', { hasAppOpenPath: false, mobileMode: 'page', linkMode: 'off' }, false],
+    ['page, link on → page', { hasAppOpenPath: false, mobileMode: 'page', linkMode: 'on' }, true],
+    ['store, link on → still store (on never forces a hop)', { hasAppOpenPath: false, mobileMode: 'store', linkMode: 'on' }, false],
+  ];
+  for (const [name, input, expected] of table) {
+    it(name, () => expect(shouldServeLaunchpadOnMobile(input)).toBe(expected));
   }
 });
 

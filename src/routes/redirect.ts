@@ -21,6 +21,7 @@ import {
   readLaunchpadSettings,
   renderLaunchpadPage,
   shouldServeLaunchpadOnDesktop,
+  shouldServeLaunchpadOnMobile,
   type LaunchpadContent,
   type LaunchpadSettings,
 } from '../lib/launchpad.js';
@@ -104,6 +105,29 @@ export function pickMobileFallbackUrl(
     if (webFallbackUrl) return { url: webFallbackUrl, reason: 'web_fallback_url' };
   }
   return null;
+}
+
+/**
+ * The URI-scheme URL that opens this link's content in the app, with the
+ * link's deep-link parameters appended as a query string. Shared by the
+ * scheme interstitial and the launchpad page's "Open in app" button so the two
+ * can never disagree about where the app is sent.
+ */
+function buildAppSchemeUrl(link: {
+  app_scheme: string;
+  deep_link_path?: string | null;
+  custom_scheme_url?: string | null;
+  deep_link_parameters?: Record<string, unknown> | null;
+}): string {
+  const deepPath = link.deep_link_path ? link.deep_link_path.replace(/^\//, '') : '';
+  let schemeUrl = link.custom_scheme_url || `${link.app_scheme}://${deepPath}`;
+  if (link.deep_link_parameters && Object.keys(link.deep_link_parameters).length > 0) {
+    const params = new URLSearchParams(
+      Object.entries(link.deep_link_parameters).map(([k, v]) => [k, String(v)] as [string, string])
+    );
+    schemeUrl += (schemeUrl.includes('?') ? '&' : '?') + params.toString();
+  }
+  return schemeUrl;
 }
 
 /**
@@ -684,6 +708,49 @@ export async function redirectRoutes(
     const androidUrl = link.android_app_store_url || templateSettings.defaultAndroidUrl || orgAppConfig.androidAppStoreUrl || null;
     const webFallbackUrl = link.web_fallback_url || templateSettings.defaultWebFallbackUrl || orgAppConfig.webFallbackUrl || null;
 
+    /**
+     * Render and send the launchpad page (lib/launchpad.ts). Shared by the
+     * desktop and mobile decisions below; the caller decides the two things
+     * that differ between them — whether there is a scheme to offer a button
+     * for, and whether a QR code makes sense.
+     */
+    const serveLaunchpad = async (
+      launchpadSettings: LaunchpadSettings,
+      opts: { schemeUrl: string | null; showQr: boolean; storeUrls?: { iosUrl: string | null; androidUrl: string | null } }
+    ) => {
+      let content: LaunchpadContent | null = null;
+      try {
+        content = (await options.launchpad?.resolveContent?.(link, launchpadSettings)) ?? null;
+      } catch (err) {
+        fastify.log.error({ err, shortCode }, 'Launchpad resolveContent threw; using default content');
+      }
+      content ??= defaultLaunchpadContent(link, launchpadSettings);
+
+      const nonce = createLaunchpadNonce();
+      const beaconUrl = options.launchpad?.beaconUrl;
+      const host = request.headers.host || request.hostname;
+      const pagePath = templateSlug ? `${templateSlug}/${shortCode}` : shortCode;
+      return reply
+        .status(200)
+        .header('X-Robots-Tag', 'noindex, nofollow')
+        .header('Cache-Control', 'no-store')
+        .header('Content-Security-Policy', launchpadContentSecurityPolicy(nonce, beaconUrl))
+        .type('text/html')
+        .send(
+          renderLaunchpadPage({
+            content,
+            linkId: link.id,
+            pageUrl: `${request.protocol}://${host}/${pagePath}`,
+            iosUrl: opts.storeUrls ? opts.storeUrls.iosUrl : iosUrl,
+            androidUrl: opts.storeUrls ? opts.storeUrls.androidUrl : androidUrl,
+            schemeUrl: opts.schemeUrl,
+            showQr: opts.showQr,
+            nonce,
+            beaconUrl,
+          })
+        );
+    };
+
     let redirectUrl = link.original_url;
     let useSchemeUrl = false; // Track if we're using a URI scheme URL
 
@@ -740,44 +807,41 @@ export async function redirectRoutes(
        * The click has already been recorded above; this is a genuine visit.
        */
       const launchpadSettings = readLaunchpadSettings(orgSettings);
-      const serveLaunchpad = shouldServeLaunchpadOnDesktop({
+      const shouldServe = shouldServeLaunchpadOnDesktop({
         hasWebDestination: Boolean(redirectUrl),
         orgMode: launchpadSettings.desktop,
         linkMode: readLaunchpadLinkMode(link.launchpad_mode),
       });
-      if (serveLaunchpad) {
-        let content: LaunchpadContent | null = null;
-        try {
-          content = (await options.launchpad?.resolveContent?.(link, launchpadSettings)) ?? null;
-        } catch (err) {
-          fastify.log.error({ err, shortCode }, 'Launchpad resolveContent threw; using default content');
-        }
-        content ??= defaultLaunchpadContent(link, launchpadSettings);
+      if (shouldServe) {
+        // Desktop never attempts the URI scheme: there is no app to open.
+        return serveLaunchpad(launchpadSettings, { schemeUrl: null, showQr: true });
+      }
+    }
 
-        const nonce = createLaunchpadNonce();
-        const beaconUrl = options.launchpad?.beaconUrl;
-        const host = request.headers.host || request.hostname;
-        const pagePath = templateSlug ? `${templateSlug}/${shortCode}` : shortCode;
-        return reply
-          .status(200)
-          .header('X-Robots-Tag', 'noindex, nofollow')
-          .header('Cache-Control', 'no-store')
-          .header('Content-Security-Policy', launchpadContentSecurityPolicy(nonce, beaconUrl))
-          .type('text/html')
-          .send(
-            renderLaunchpadPage({
-              content,
-              linkId: link.id,
-              pageUrl: `${request.protocol}://${host}/${pagePath}`,
-              iosUrl,
-              androidUrl,
-              // Desktop never attempts the URI scheme: there is no app to open.
-              schemeUrl: null,
-              showQr: true,
-              nonce,
-              beaconUrl,
-            })
-          );
+    /**
+     * Launchpad page for mobile visitors, when the workspace asked for it
+     * (`launchpad.mobile = 'page'`). Sits in front of the store redirect and
+     * the scheme interstitial below, never in front of a Universal Link / App
+     * Link 302 — the OS handles the installed case there, and only there.
+     * The page's "Open in app" is a button; the interstitial's scheme attempt
+     * is a navigation. That difference is the whole reason the mode exists.
+     */
+    if (device === 'ios' || device === 'android') {
+      const launchpadSettings = readLaunchpadSettings(orgSettings);
+      const hasAppOpenPath = device === 'ios' ? Boolean(link.ios_universal_link) : Boolean(link.android_app_link);
+      if (
+        shouldServeLaunchpadOnMobile({
+          mobileMode: launchpadSettings.mobile,
+          linkMode: readLaunchpadLinkMode(link.launchpad_mode),
+          hasAppOpenPath,
+        })
+      ) {
+        // Only this platform's store: a Google Play button on an iPhone is noise.
+        return serveLaunchpad(launchpadSettings, {
+          schemeUrl: link.app_scheme ? buildAppSchemeUrl(link) : null,
+          showQr: false,
+          storeUrls: device === 'ios' ? { iosUrl, androidUrl: null } : { iosUrl: null, androidUrl },
+        });
       }
     }
 
@@ -862,10 +926,6 @@ export async function redirectRoutes(
     // browsers (where a 302 to a custom scheme fails silently if the app isn't installed).
     // The interstitial JavaScript preserves the URL fragment (E2E encryption key).
     if ((device === 'ios' || device === 'android') && link.app_scheme) {
-      const deepPath = link.deep_link_path ? link.deep_link_path.replace(/^\//, '') : '';
-      const schemeUrl = link.custom_scheme_url
-        || `${link.app_scheme}://${deepPath}`;
-
       // The interstitial JS tries the scheme first; storeFallback is what we
       // navigate to if the scheme doesn't open the app within ~1.5s. Pick it
       // browser-aware: regular browsers prefer the store URL, in-app browsers
@@ -874,17 +934,9 @@ export async function redirectRoutes(
       const storeFallback = fb?.url || link.original_url;
 
       if (storeFallback) {
-        let fullSchemeUrl = schemeUrl;
-        if (link.deep_link_parameters && Object.keys(link.deep_link_parameters).length > 0) {
-          const params = new URLSearchParams(
-            Object.entries(link.deep_link_parameters).map(([k, v]: [string, any]) => [k, String(v)] as [string, string])
-          );
-          fullSchemeUrl += (fullSchemeUrl.includes('?') ? '&' : '?') + params.toString();
-        }
-
         return reply
           .header('Content-Type', 'text/html; charset=utf-8')
-          .send(generateInterstitialHTML(fullSchemeUrl, storeFallback, link.title || link.og_title));
+          .send(generateInterstitialHTML(buildAppSchemeUrl(link), storeFallback, link.title || link.og_title));
       }
     }
 

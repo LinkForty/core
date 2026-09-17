@@ -251,6 +251,7 @@ By default it appears **only** where the alternative is nothing; a link that res
   {
     "launchpad": {
       "desktop": "no-destination",     // "no-destination" (default) | "always" | "off"
+      "mobile": "store",               // "store" (default) | "page"
       "appName": "Ride Alert",
       "appIconUrl": "https://cdn.example/icon.png",
       "accentColor": "#0f766e"
@@ -261,6 +262,8 @@ By default it appears **only** where the alternative is nothing; a link that res
 - `links.launchpad_mode` (per link, `launchpadMode` on the links API): `inherit` (default), `on` or `off`. The link's value wins over the workspace's.
 
 With `desktop: "off"` (or `launchpad_mode: "off"`), a link with no web destination gets the plain "This link opens in an app" page instead.
+
+**Launchpad page (mobile):** With `mobile: "page"`, a phone visitor whose platform has no Universal Link / App Link on the link gets the same page instead of the store redirect or the scheme interstitial: an "Open in app" button when the link has a URI scheme (a tap, not a navigation — the URL fragment is appended on tap), and the visitor's own store button. Links that carry a Universal Link / App Link keep their 302 regardless, because the OS resolves the installed case before the request reaches this server. `launchpad_mode: "off"` opts a link out; `"on"` does not force the page onto a workspace that chose `"store"`. The default, `"store"`, is unchanged behaviour.
 
 Two hooks on `RedirectRouteOptions` let a host application extend the page without forking it — see [Server Options](#server-options).
 
