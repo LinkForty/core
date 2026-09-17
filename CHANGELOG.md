@@ -1,3 +1,7 @@
+## 1.26.0 (2026-09-17)
+
+* feat(redirect): serve a launchpad page to desktop visitors instead of the plain no-destination page  ([d874b7a](https://github.com/LinkForty/core/commit/d874b7a)), closes [#54](https://github.com/LinkForty/core/issues/54)
+
 ## <small>1.25.4 (2026-09-15)</small>
 
 * fix(redirect): serve a plain page and 410 for a withdrawn link, instead of a JSON 404 (#53) ([9dd49fa](https://github.com/LinkForty/core/commit/9dd49fa)), closes [#53](https://github.com/LinkForty/core/issues/53)
