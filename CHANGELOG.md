@@ -1,3 +1,7 @@
+## <small>1.28.1 (2026-09-18)</small>
+
+* fix(launchpad): center the page on a desktop viewport and widen the column (#61) ([5fb0667](https://github.com/LinkForty/core/commit/5fb0667)), closes [#61](https://github.com/LinkForty/core/issues/61)
+
 ## 1.28.0 (2026-09-17)
 
 * feat(launchpad): optional fixed background color for the page (#60) ([1390635](https://github.com/LinkForty/core/commit/1390635)), closes [#60](https://github.com/LinkForty/core/issues/60)
