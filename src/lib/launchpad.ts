@@ -307,12 +307,20 @@ export interface LaunchpadPageContext {
   beaconUrl?: string;
 }
 
+/**
+ * One centered column on a full-bleed background. `margin: auto` on a flex
+ * child centers it on both axes when the viewport is taller than the page — a
+ * desktop visitor gets the content in the middle of the screen, not pinned to
+ * the top-left — and collapses to zero when the page is taller, so a phone
+ * scrolls from the top as before. 48rem gives the hero image room beside the
+ * text on a desktop while still reading as one column.
+ */
 const STYLES = `
   :root { --lp-ink: #16181d; --lp-muted: #5f6673; --lp-bg: #ffffff; --lp-surface: #f4f5f7; --lp-line: #e2e5ea; --lp-accent: #2563eb; --lp-accent-ink: #ffffff; }
   @media (prefers-color-scheme: dark) { :root { --lp-ink: #eef0f3; --lp-muted: #a3abb8; --lp-bg: #121418; --lp-surface: #1c1f25; --lp-line: #2b3038; } }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--lp-bg); color: var(--lp-ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.5; -webkit-font-smoothing: antialiased; }
-  .lp { max-width: 40rem; margin: 0 auto; padding: 2rem 1.25rem 3rem; display: flex; flex-direction: column; gap: 1.5rem; }
+  body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: var(--lp-bg); color: var(--lp-ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  .lp { width: 100%; max-width: 48rem; margin: auto; padding: 2rem 1.25rem 3rem; display: flex; flex-direction: column; gap: 1.5rem; }
   .lp-app { display: flex; align-items: center; gap: 0.75rem; min-height: 1rem; }
   .lp-app img { width: 48px; height: 48px; border-radius: 12px; object-fit: cover; background: var(--lp-surface); }
   .lp-app span { font-weight: 600; font-size: 1rem; }
