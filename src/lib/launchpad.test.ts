@@ -263,6 +263,12 @@ describe('renderLaunchpadPage', () => {
     expect(html).toContain('--lp-accent: #ffe066; --lp-accent-ink: #16181d;');
   });
 
+  it('lays out one centered column that also centers vertically on a tall viewport', () => {
+    const html = renderLaunchpadPage(base);
+    expect(html).toContain('body { margin: 0; min-height: 100vh; display: flex; flex-direction: column;');
+    expect(html).toContain('.lp { width: 100%; max-width: 48rem; margin: auto;');
+  });
+
   it('follows the visitor\'s theme unless a background is set', () => {
     // Only the base light/dark declarations, no fixed override after them.
     expect(renderLaunchpadPage(base)).not.toMatch(/}\s*:root \{ --lp-bg:/);
