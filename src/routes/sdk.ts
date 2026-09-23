@@ -19,12 +19,14 @@ import { classifyBot, edgeBotSignal } from '../lib/bot-detection.js';
  * An event arrived for an install this server does not have. Put the install
  * back rather than refusing the event.
  *
- * The id lives in the app's own storage for the life of the install, so a
- * missing row is not a transient condition: every event that device will ever
- * send refers to an id we cannot resolve, and refusing them means the app goes
- * silent forever with no way to recover. A deployment that prunes analytics on
- * a retention window reaches this state the moment an install outlives the
- * window, which is the common case and not an edge one.
+ * The id lives in the app's own storage for the life of the install while our
+ * copy may not, so a missing row is not a transient condition: every event
+ * that device will ever send refers to an id we cannot resolve, and the SDKs
+ * store the id once and never re-register, so refusing them means the app goes
+ * silent forever with no way back. A row goes missing in ordinary operation —
+ * a restore from an older backup, a manual cleanup, a build pointed at a fresh
+ * database, an analytics retention job — and none of those are the device's
+ * fault.
  *
  * The recovered row is deliberately thin. We know the device exists and which
  * SDK it runs; we do not know what brought it here, and we must not invent
