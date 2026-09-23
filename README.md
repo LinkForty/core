@@ -303,6 +303,15 @@ GET  /api/sdk/v1/resolve/:shortCode    # Resolve link to deep link data (no redi
 GET  /api/sdk/v1/health                # Health check
 ```
 
+An event whose `installId` this server no longer has is **recovered, not
+refused**: the install is recorded again (marked `recovered`, with no link,
+click or confidence score, so it is never mistaken for a fresh attributed
+install) and the event is stored against it. This matters if you prune
+analytics on a retention window — the id lives in the app's storage for the
+life of the install, so without recovery a device that outlived the window
+would be refused forever with no way back. The 404 that remains carries
+`code: "INSTALL_NOT_FOUND"` and `action: "reregister"`.
+
 ### Health
 
 ```bash

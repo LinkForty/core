@@ -16,6 +16,57 @@ import { emitClickEvent } from '../lib/event-emitter.js';
 import { classifyBot, edgeBotSignal } from '../lib/bot-detection.js';
 
 /**
+ * An event arrived for an install this server does not have. Put the install
+ * back rather than refusing the event.
+ *
+ * The id lives in the app's own storage for the life of the install, so a
+ * missing row is not a transient condition: every event that device will ever
+ * send refers to an id we cannot resolve, and refusing them means the app goes
+ * silent forever with no way to recover. A deployment that prunes analytics on
+ * a retention window reaches this state the moment an install outlives the
+ * window, which is the common case and not an edge one.
+ *
+ * The recovered row is deliberately thin. We know the device exists and which
+ * SDK it runs; we do not know what brought it here, and we must not invent
+ * that: `attribution_method` says `recovered` and there is no link, click or
+ * confidence score, so nothing downstream can mistake it for a fresh
+ * attributed install. The fingerprint is a marker rather than a hash — it can
+ * never equal a real one, so it cannot match a click by accident.
+ *
+ * Creating a row from a client-supplied id adds no exposure that
+ * `POST /api/sdk/v1/install` does not already have: that endpoint is
+ * unauthenticated and creates an install row for anyone who calls it. The only
+ * difference here is who chose the id, and a UUID the caller picked is still
+ * only ever their own row.
+ *
+ * Returns the row, or null when a concurrent request already created it and we
+ * lost the race but cannot read it back — the caller then answers 404 as
+ * before, and the SDK's next event succeeds.
+ */
+async function recoverInstall(
+  installId: string,
+  sdkName?: string,
+  sdkVersion?: string
+): Promise<{ id: string; link_id: string | null } | null> {
+  const inserted = await db.query(
+    `INSERT INTO install_events
+       (id, fingerprint_hash, attribution_method, installed_at, first_open_at, sdk_name, sdk_version)
+     VALUES ($1, $2, 'recovered', NOW(), NOW(), $3, $4)
+     ON CONFLICT (id) DO NOTHING
+     RETURNING id, link_id`,
+    [installId, `recovered:${installId}`, sdkName || null, sdkVersion || null]
+  );
+  if (inserted.rows[0]) return inserted.rows[0];
+
+  // Lost the race with a concurrent event for the same install.
+  const existing = await db.query(
+    `SELECT id, link_id FROM install_events WHERE id = $1`,
+    [installId]
+  );
+  return existing.rows[0] ?? null;
+}
+
+/**
  * SDK Routes - Mobile SDK endpoints for deferred deep linking
  * These endpoints are used by the mobile SDKs to report installs and retrieve attribution data
  */
@@ -228,6 +279,13 @@ export async function sdkRoutes(fastify: FastifyInstance) {
    * Response:
    * - eventId: UUID of the tracked event
    * - acknowledged: Boolean confirmation
+   *
+   * An `installId` this server no longer has is recovered rather than
+   * refused: the install is recorded again, marked `recovered`, and the event
+   * is stored against it. See recoverInstall above. A 404 with
+   * `code: 'INSTALL_NOT_FOUND'` and `action: 'reregister'` is returned only in
+   * the rare case where recovery itself could not complete; an SDK seeing it
+   * should register a fresh install rather than retry the same id.
    */
   fastify.post('/api/sdk/v1/event', async (request, reply) => {
     const schema = z.object({
@@ -249,19 +307,23 @@ export async function sdkRoutes(fastify: FastifyInstance) {
     const body = schema.parse(request.body);
 
     try {
-      // Verify install exists and get link_id for webhook lookup
+      // The install this event belongs to, recovered if we no longer have it.
       const installCheck = await db.query(
         `SELECT id, link_id FROM install_events WHERE id = $1`,
         [body.installId]
       );
 
-      if (installCheck.rows.length === 0) {
+      const install =
+        installCheck.rows[0] ??
+        (await recoverInstall(body.installId, body.sdkName, body.sdkVersion));
+
+      if (!install) {
         return reply.status(404).send({
           error: 'Install event not found',
+          code: 'INSTALL_NOT_FOUND',
+          action: 'reregister',
         });
       }
-
-      const install = installCheck.rows[0];
       const eventTimestamp = body.timestamp || new Date().toISOString();
       const eventDataJson = JSON.stringify(body.eventData || {});
 
