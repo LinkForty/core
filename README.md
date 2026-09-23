@@ -303,6 +303,19 @@ GET  /api/sdk/v1/resolve/:shortCode    # Resolve link to deep link data (no redi
 GET  /api/sdk/v1/health                # Health check
 ```
 
+An event whose `installId` this server no longer has is **recovered, not
+refused**: the install is recorded again (marked `recovered`, with no link,
+click or confidence score, so it is never mistaken for a fresh attributed
+install) and the event is stored against it.
+
+This matters because the id lives in the app's storage for the life of the
+install while the server's copy may not: a restore from an older backup, a
+manual cleanup, an app build pointed at a fresh database, or an analytics
+retention job all leave a live device holding an id nothing resolves. The
+bundled SDKs store the id once and never re-register, so without recovery
+that device is refused forever with no way back. The 404 that remains carries
+`code: "INSTALL_NOT_FOUND"` and `action: "reregister"`.
+
 ### Health
 
 ```bash

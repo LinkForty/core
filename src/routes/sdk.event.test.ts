@@ -142,13 +142,124 @@ describe('POST /api/sdk/v1/event — last-click attribution stamp', () => {
     await app.close();
   });
 
-  it('returns 404 when the install does not exist', async () => {
-    mockQuery.mockResolvedValueOnce({ rows: [] });
+});
+
+/**
+ * An event whose install is gone.
+ *
+ * The install id lives in the app's storage for the life of the install, so a
+ * missing row is permanent from the device's point of view: refusing the event
+ * silences that app forever. A deployment that prunes analytics on a retention
+ * window reaches this the moment an install outlives the window.
+ */
+describe('POST /api/sdk/v1/event — an install the server no longer has', () => {
+  beforeEach(() => {
+    mockQuery.mockReset();
+  });
+
+  const orphanEvent = {
+    installId: INSTALL_ID,
+    eventName: 'purchase',
+    eventData: { value: 12 },
+    sdkName: 'android',
+    sdkVersion: '1.3.2',
+  };
+
+  it('records the install again and stores the event against it', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });                               // 1) install lookup: gone
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: INSTALL_ID, link_id: null }] }); // 2) recovery insert
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: EVENT_ID }] });               // 3) the event insert
 
     const app = await buildApp();
-    const res = await app.inject({ method: 'POST', url: '/api/sdk/v1/event', payload: stampedEvent });
+    const res = await app.inject({ method: 'POST', url: '/api/sdk/v1/event', payload: orphanEvent });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ eventId: EVENT_ID, acknowledged: true });
+
+    const recovery = mockQuery.mock.calls[1];
+    expect(recovery[0]).toMatch(/INSERT INTO install_events/);
+    // The id the client sent, so the device's next event resolves normally.
+    expect(recovery[1][0]).toBe(INSTALL_ID);
+    // A marker, never a real hash: it cannot collide with a fingerprint match.
+    expect(recovery[1][1]).toBe(`recovered:${INSTALL_ID}`);
+    expect(recovery[1].slice(2)).toEqual(['android', '1.3.2']);
+    // Concurrent events for the same install must not collide.
+    expect(recovery[0]).toMatch(/ON CONFLICT \(id\) DO NOTHING/);
+
+    // The event is stored against that install, unattributed.
+    const insert = mockQuery.mock.calls[2];
+    expect(insert[0]).toMatch(/INSERT INTO in_app_events/);
+    expect(insert[1][0]).toBe(INSTALL_ID);
+
+    await app.close();
+  });
+
+  it('claims no attribution for a recovered install', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: INSTALL_ID, link_id: null }] });
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: EVENT_ID }] });
+
+    const app = await buildApp();
+    await app.inject({ method: 'POST', url: '/api/sdk/v1/event', payload: orphanEvent });
+
+    const sql = mockQuery.mock.calls[1][0] as string;
+    expect(sql).toMatch(/'recovered'/);
+    // No link, click or confidence among the columns written: a device we have
+    // met before is not a new attributed install, and nothing downstream may
+    // read it as one. (The RETURNING clause reads link_id back; that is not a
+    // write.)
+    const columns = sql.slice(sql.indexOf('('), sql.indexOf('VALUES'));
+    expect(columns).not.toMatch(/link_id|click_id|confidence_score/);
+
+    await app.close();
+  });
+
+  it('uses the row a concurrent request created rather than failing', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });                                  // lookup: gone
+    mockQuery.mockResolvedValueOnce({ rows: [] });                                  // insert: lost the race
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: INSTALL_ID, link_id: LINK_ID }] }); // re-read
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: EVENT_ID }] });                  // event insert
+    mockQuery.mockResolvedValueOnce({ rows: [] });                                  // webhook lookup (link_id set)
+
+    const app = await buildApp();
+    const res = await app.inject({ method: 'POST', url: '/api/sdk/v1/event', payload: orphanEvent });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ eventId: EVENT_ID, acknowledged: true });
+
+    await app.close();
+  });
+
+  it('tells a client what to do when recovery cannot complete', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] }); // lookup: gone
+    mockQuery.mockResolvedValueOnce({ rows: [] }); // insert: no row
+    mockQuery.mockResolvedValueOnce({ rows: [] }); // re-read: still nothing
+
+    const app = await buildApp();
+    const res = await app.inject({ method: 'POST', url: '/api/sdk/v1/event', payload: orphanEvent });
 
     expect(res.statusCode).toBe(404);
+    expect(res.json()).toEqual({
+      error: 'Install event not found',
+      code: 'INSTALL_NOT_FOUND',
+      action: 'reregister',
+    });
+
+    await app.close();
+  });
+
+  it('leaves a known install untouched', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: INSTALL_ID, link_id: null }] });
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: EVENT_ID }] });
+
+    const app = await buildApp();
+    const res = await app.inject({ method: 'POST', url: '/api/sdk/v1/event', payload: orphanEvent });
+
+    expect(res.statusCode).toBe(200);
+    // Two queries only: the lookup and the event. No recovery insert.
+    expect(mockQuery.mock.calls).toHaveLength(2);
+    expect(mockQuery.mock.calls[1][0]).toMatch(/INSERT INTO in_app_events/);
+
     await app.close();
   });
 });
