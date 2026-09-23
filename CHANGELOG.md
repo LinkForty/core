@@ -1,3 +1,7 @@
+## <small>1.28.2 (2026-09-23)</small>
+
+* fix(sdk): recover an install the server no longer has instead of refusing its events (#62) ([d68dc48](https://github.com/LinkForty/core/commit/d68dc48)), closes [#62](https://github.com/LinkForty/core/issues/62)
+
 ## <small>1.28.1 (2026-09-18)</small>
 
 * fix(launchpad): center the page on a desktop viewport and widen the column (#61) ([5fb0667](https://github.com/LinkForty/core/commit/5fb0667)), closes [#61](https://github.com/LinkForty/core/issues/61)
