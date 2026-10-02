@@ -1,0 +1,14 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "LinkForty Core",
+  "description": "Open-source, self-hosted deep linking engine (Fastify + PostgreSQL + optional Redis): device-aware redirects, click analytics, deferred deep linking, webhooks, QR codes, link templates, and mobile SDK endpoints. AGPL-3.0. A replacement for Firebase Dynamic Links, Branch, and AppsFlyer OneLink.",
+  "folders": [],
+  "excludeFolders": [".github", "src", "migrations", "signatures", "coverage"],
+  "excludeFiles": ["CONTRIBUTING.md", "CLA.md", "PUBLISHING.md", "DOCKERHUB.md", "CHANGELOG.md"],
+  "rules": [
+    "Install with `npm install @linkforty/core` and start it with `createServer()`; there is no built-in auth, so wrap the routes with your own.",
+    "Requires Node.js 20+ and PostgreSQL 14+; Redis is optional but recommended for link caching.",
+    "Short codes are immutable once created.",
+    "Hosted docs and the full integration guide live at https://docs.linkforty.com and https://docs.linkforty.com/llms-full.txt."
+  ]
+}
