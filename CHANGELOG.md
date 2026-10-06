@@ -1,3 +1,7 @@
+## 1.29.0 (2026-10-06)
+
+* feat(templates): web-only templates open the website on every device (#64) ([31b5542](https://github.com/LinkForty/core/commit/31b5542)), closes [#64](https://github.com/LinkForty/core/issues/64)
+
 ## <small>1.28.2 (2026-09-23)</small>
 
 * fix(sdk): recover an install the server no longer has instead of refusing its events (#62) ([d68dc48](https://github.com/LinkForty/core/commit/d68dc48)), closes [#62](https://github.com/LinkForty/core/issues/62)
