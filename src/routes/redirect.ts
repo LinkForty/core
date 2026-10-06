@@ -27,6 +27,7 @@ import {
   type LaunchpadContent,
   type LaunchpadSettings,
 } from '../lib/launchpad.js';
+import { isWebOnlyTemplate } from '../lib/app-association.js';
 
 /** Longest query string the Launchpad page carries into its QR code and og:url. */
 const MAX_PAGE_URL_SEARCH = 512;
@@ -582,7 +583,11 @@ export async function redirectRoutes(
         let redirectUrl = link.original_url;
         let redirectReason = 'original_url';
 
-        if (deviceType === 'ios') {
+        if (isWebOnlyTemplate(tplSettings)) {
+          // Mirrors the web-only 302 in the main handler below.
+          redirectUrl = webFallback || link.original_url;
+          redirectReason = 'web_only_template';
+        } else if (deviceType === 'ios') {
           if (link.ios_universal_link) {
             redirectUrl = link.ios_universal_link;
             redirectReason = 'ios_universal_link';
@@ -807,6 +812,17 @@ export async function redirectRoutes(
           })
         );
     };
+
+    /**
+     * Web-only template (lib/app-association.ts): the link is for the web on
+     * every device. Same destination desktop gets, sent as a plain 302 — no
+     * Launchpad page, no scheme interstitial, no store. The association files
+     * exclude the template's path, so an installed app never sees it either.
+     */
+    if (isWebOnlyTemplate(templateSettings)) {
+      const webDestination = webFallbackUrl || link.original_url;
+      if (webDestination) return reply.redirect(302, decorateWebDestination(webDestination));
+    }
 
     let redirectUrl = link.original_url;
     let useSchemeUrl = false; // Track if we're using a URI scheme URL
