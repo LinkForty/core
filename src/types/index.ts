@@ -11,6 +11,8 @@ export interface LinkTemplateSettings {
   utmParameters?: UTMParameters;
   targetingRules?: TargetingRules;
   expiresAfterDays?: number;
+  /** Links open the website on every device, never the app. Opt-in; app links are the default. */
+  webOnly?: boolean;
 }
 
 /**
