@@ -1,3 +1,7 @@
+## 1.30.0 (2026-10-07)
+
+* feat(redirect): isWebLinkRequest hook for hosts reserved for web links; remove web-only templates (# ([474775a](https://github.com/LinkForty/core/commit/474775a)), closes [#65](https://github.com/LinkForty/core/issues/65)
+
 ## 1.29.0 (2026-10-06)
 
 * feat(templates): web-only templates open the website on every device (#64) ([31b5542](https://github.com/LinkForty/core/commit/31b5542)), closes [#64](https://github.com/LinkForty/core/issues/64)
