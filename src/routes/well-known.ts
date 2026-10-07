@@ -11,24 +11,6 @@
  */
 
 import { FastifyInstance } from 'fastify';
-import { db } from '../lib/database.js';
-import { buildAppleAppSiteAssociation, buildAssetLinks } from '../lib/app-association.js';
-
-/**
- * Slugs of templates whose links must open the web, never the app (see
- * lib/app-association.ts). Single-tenant: every web-only template on this
- * deployment. A failed lookup claims every path, as before the flag existed —
- * missing exclusions are better than no association file at all.
- */
-async function webOnlyTemplateSlugs(log: FastifyInstance['log']): Promise<string[]> {
-  try {
-    const result = await db.query(`SELECT slug FROM link_templates WHERE settings->>'webOnly' = 'true'`);
-    return result.rows.map((r: { slug: string }) => r.slug);
-  } catch (err) {
-    log.error({ err }, 'Failed to load web-only templates; association file claims every path');
-    return [];
-  }
-}
 
 export async function wellKnownRoutes(fastify: FastifyInstance) {
   /**
@@ -50,11 +32,17 @@ export async function wellKnownRoutes(fastify: FastifyInstance) {
       });
     }
 
-    const aasa = buildAppleAppSiteAssociation(
-      `${teamId}.${bundleId}`,
-      await webOnlyTemplateSlugs(fastify.log),
-      (count, bytes) => fastify.log.error({ count, bytes }, 'AASA exclusions over budget; claiming every path')
-    );
+    const aasa = {
+      applinks: {
+        apps: [],
+        details: [
+          {
+            appID: `${teamId}.${bundleId}`,
+            paths: ['*'] // Match all paths
+          }
+        ]
+      }
+    };
 
     // AASA file must be served:
     // 1. Without .json extension
@@ -98,7 +86,16 @@ export async function wellKnownRoutes(fastify: FastifyInstance) {
       });
     }
 
-    const assetlinks = buildAssetLinks(packageName, fingerprints, await webOnlyTemplateSlugs(fastify.log));
+    const assetlinks = [
+      {
+        relation: ['delegate_permission/common.handle_all_urls'],
+        target: {
+          namespace: 'android_app',
+          package_name: packageName,
+          sha256_cert_fingerprints: fingerprints
+        }
+      }
+    ];
 
     return reply
       .header('Content-Type', 'application/json')

@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest } from 'fastify';
 import { db } from '../lib/database.js';
 import { getClientIp } from '../lib/client-ip.js';
 import { parseUserAgent, getLocationFromIP, buildRedirectUrl, detectDevice, resolveClickUtms, extractLinkParams } from '../lib/utils.js';
@@ -27,7 +27,6 @@ import {
   type LaunchpadContent,
   type LaunchpadSettings,
 } from '../lib/launchpad.js';
-import { isWebOnlyTemplate } from '../lib/app-association.js';
 
 /** Longest query string the Launchpad page carries into its QR code and og:url. */
 const MAX_PAGE_URL_SEARCH = 512;
@@ -269,6 +268,15 @@ export interface RedirectRouteOptions {
      */
     beaconUrl?: string;
   };
+  /**
+   * Whether this request arrived on a host reserved for web links. On such a
+   * host every link sends every device to its web destination with a plain
+   * 302: no Launchpad page, no scheme attempt, no store. The deployment owns
+   * the rule (a host list, a database flag); the redirect only asks. Pair it
+   * with not serving association files on that host, so no installed app can
+   * claim its URLs either. A hook that throws is logged and treated as false.
+   */
+  isWebLinkRequest?: (request: FastifyRequest) => Promise<boolean> | boolean;
 }
 
 export async function redirectRoutes(
@@ -477,6 +485,17 @@ export async function redirectRoutes(
       }
     }
 
+    // Asked once per click: the async click record and the response below
+    // must agree on where the visitor was sent.
+    let isWebLink = false;
+    if (options.isWebLinkRequest) {
+      try {
+        isWebLink = (await options.isWebLinkRequest(request)) === true;
+      } catch (err) {
+        fastify.log.error({ err, shortCode }, 'isWebLinkRequest threw; treating the request as an app-link host');
+      }
+    }
+
     // Generate the click id up front (rather than letting the DB default it on
     // insert) so the synchronous redirect below can carry it on the destination
     // URL while the click row is still written asynchronously with the same id.
@@ -583,10 +602,10 @@ export async function redirectRoutes(
         let redirectUrl = link.original_url;
         let redirectReason = 'original_url';
 
-        if (isWebOnlyTemplate(tplSettings)) {
-          // Mirrors the web-only 302 in the main handler below.
+        if (isWebLink) {
+          // Mirrors the web-link 302 in the main handler below.
           redirectUrl = webFallback || link.original_url;
-          redirectReason = 'web_only_template';
+          redirectReason = 'web_link_host';
         } else if (deviceType === 'ios') {
           if (link.ios_universal_link) {
             redirectUrl = link.ios_universal_link;
@@ -814,12 +833,12 @@ export async function redirectRoutes(
     };
 
     /**
-     * Web-only template (lib/app-association.ts): the link is for the web on
-     * every device. Same destination desktop gets, sent as a plain 302 — no
-     * Launchpad page, no scheme interstitial, no store. The association files
-     * exclude the template's path, so an installed app never sees it either.
+     * Web-link host (`isWebLinkRequest`): every device gets the destination a
+     * desktop visitor gets, as a plain 302 — no Launchpad page, no scheme
+     * interstitial, no store. Whatever app fields the link carries are for its
+     * other hosts.
      */
-    if (isWebOnlyTemplate(templateSettings)) {
+    if (isWebLink) {
       const webDestination = webFallbackUrl || link.original_url;
       if (webDestination) return reply.redirect(302, decorateWebDestination(webDestination));
     }

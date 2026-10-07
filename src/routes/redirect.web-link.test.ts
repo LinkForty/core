@@ -1,11 +1,12 @@
 /**
- * A link whose template is web-only opens the website on every device: a plain
- * 302 to the same destination desktop gets, never the Launchpad page, the
- * scheme interstitial or a store. Follows redirect.launchpad.test.ts.
+ * On a host the deployment reserves for web links (`isWebLinkRequest`), every
+ * link opens the website on every device: a plain 302 to the destination
+ * desktop gets, never the Launchpad page, the scheme interstitial or a store.
+ * Follows redirect.launchpad.test.ts.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { redirectRoutes } from './redirect.js';
+import { redirectRoutes, type RedirectRouteOptions } from './redirect.js';
 
 const query = vi.fn();
 vi.mock('../lib/database.js', () => ({
@@ -23,7 +24,11 @@ const ANDROID_UA =
 const FB_IOS_UA =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [FBAN/FBIOS;FBAV/450.0.0.0.0]';
 
-const WEB_ONLY = { webOnly: true };
+const WEB_HOST = 'links.example';
+/** The deployment's rule: one host is for web links. */
+const options: RedirectRouteOptions = {
+  isWebLinkRequest: (request) => request.headers.host === WEB_HOST,
+};
 /** Launchpad page mode: without the flag, a mobile visitor to an app-less link gets the page. */
 const PAGE_MODE = { launchpad: { mobile: 'page' } };
 
@@ -50,7 +55,7 @@ function linkRow(overrides: Record<string, unknown> = {}) {
     owner_suspended_at: null,
     expires_at: null,
     targeting_rules: null,
-    template_settings: WEB_ONLY,
+    template_settings: null,
     org_settings: PAGE_MODE,
     utm_parameters: null,
     deep_link_parameters: null,
@@ -72,14 +77,14 @@ function mockDb(row: Record<string, unknown> | null) {
   });
 }
 
-const get = (app: FastifyInstance, ua: string) =>
-  app.inject({ method: 'GET', url: '/abc123', headers: { 'user-agent': ua, host: 'go.example' } });
+const get = (app: FastifyInstance, ua: string, host = WEB_HOST) =>
+  app.inject({ method: 'GET', url: '/abc123', headers: { 'user-agent': ua, host } });
 
 let app: FastifyInstance;
 
 beforeEach(async () => {
   app = Fastify();
-  await app.register(redirectRoutes);
+  await app.register(redirectRoutes, options);
   await app.ready();
 });
 
@@ -88,7 +93,7 @@ afterEach(async () => {
   await app.close();
 });
 
-describe('web-only template', () => {
+describe('web-link host', () => {
   it('302s every device to the web destination, even with the workspace in Launchpad page mode', async () => {
     mockDb(linkRow());
     for (const ua of [IPHONE_UA, ANDROID_UA, FB_IOS_UA, DESKTOP_UA]) {
@@ -131,13 +136,23 @@ describe('web-only template', () => {
     expect(location.searchParams.get('utm_campaign')).toBe('oct');
   });
 
-  it('leaves app links alone: an unflagged template still gets the Launchpad page on mobile', async () => {
-    mockDb(
-      linkRow({
-        template_settings: { webOnly: false },
-        ios_app_store_url: 'https://apps.apple.com/app/id1',
-      })
-    );
+  it('leaves every other host alone: the same link gets the Launchpad page on an app-link host', async () => {
+    mockDb(linkRow({ ios_app_store_url: 'https://apps.apple.com/app/id1' }));
+    const res = await get(app, IPHONE_UA, 'go.example');
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/html/);
+  });
+
+  it('treats a hook that throws as an app-link host rather than failing the click', async () => {
+    await app.close();
+    app = Fastify();
+    await app.register(redirectRoutes, {
+      isWebLinkRequest: () => {
+        throw new Error('lookup failed');
+      },
+    });
+    await app.ready();
+    mockDb(linkRow({ ios_app_store_url: 'https://apps.apple.com/app/id1' }));
     const res = await get(app, IPHONE_UA);
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toMatch(/text\/html/);
