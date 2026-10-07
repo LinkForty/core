@@ -384,6 +384,12 @@ interface RedirectRouteOptions {
     // cookies or identifiers. Unset means the page sends nothing.
     beaconUrl?: string;
   };
+  // Return true when the request is on a host reserved for web links. Every
+  // link on it then sends every device to its web destination with a plain
+  // 302: no launchpad page, no scheme attempt, no store. Don't serve
+  // association files on that host, so no installed app can claim its URLs.
+  // A hook that throws is logged and treated as false.
+  isWebLinkRequest?: (request) => Promise<boolean> | boolean;
 }
 ```
 

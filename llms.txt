@@ -113,6 +113,9 @@ interface ServerOptions {
       // "cta_open") from the page. Unset = the page sends nothing.
       beaconUrl?: string;
     };
+    // True = request is on a host reserved for web links: every device gets a
+    // plain 302 to the web destination. Serve no association files on it.
+    isWebLinkRequest?: (request) => Promise<boolean> | boolean;
   };
 }
 ```

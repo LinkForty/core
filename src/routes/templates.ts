@@ -30,8 +30,6 @@ const createTemplateSchema = z.object({
       languages: z.array(z.string()).optional(),
     }).optional(),
     expiresAfterDays: z.number().optional(),
-    // Links open the website on every device, never the app (lib/app-association.ts)
-    webOnly: z.boolean().optional(),
   }).optional(),
   isDefault: z.boolean().default(false),
 });
@@ -60,8 +58,6 @@ const updateTemplateSchema = z.object({
       languages: z.array(z.string()).optional(),
     }).optional(),
     expiresAfterDays: z.number().optional(),
-    // Links open the website on every device, never the app (lib/app-association.ts)
-    webOnly: z.boolean().optional(),
   }).optional(),
   isDefault: z.boolean().optional(),
 });
