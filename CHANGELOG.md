@@ -1,3 +1,7 @@
+## 1.31.0 (2026-10-08)
+
+* feat(launchpad): official store badges, a linked title, and an app-website link on the header (#69) ([972b12c](https://github.com/LinkForty/core/commit/972b12c)), closes [#69](https://github.com/LinkForty/core/issues/69)
+
 ## <small>1.30.1 (2026-10-08)</small>
 
 * fix(redirect): send App Store and Google Play URLs exactly as configured (#68) ([8d9db4b](https://github.com/LinkForty/core/commit/8d9db4b)), closes [#68](https://github.com/LinkForty/core/issues/68)
