@@ -1,3 +1,7 @@
+## <small>1.30.1 (2026-10-08)</small>
+
+* fix(redirect): send App Store and Google Play URLs exactly as configured (#68) ([8d9db4b](https://github.com/LinkForty/core/commit/8d9db4b)), closes [#68](https://github.com/LinkForty/core/issues/68)
+
 ## 1.30.0 (2026-10-07)
 
 * feat(redirect): isWebLinkRequest hook for hosts reserved for web links; remove web-only templates (# ([474775a](https://github.com/LinkForty/core/commit/474775a)), closes [#65](https://github.com/LinkForty/core/issues/65)
