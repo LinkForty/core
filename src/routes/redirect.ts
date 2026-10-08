@@ -112,6 +112,27 @@ export function pickMobileFallbackUrl(
   return null;
 }
 
+/** Hosts whose URLs are app store listings, not websites. */
+const APP_STORE_HOSTS = new Set(['play.google.com', 'apps.apple.com', 'itunes.apple.com']);
+
+/**
+ * True when `url` is an App Store or Google Play URL.
+ *
+ * A store URL is sent exactly as configured, never decorated like a website.
+ * Google Play identifies the app by its own `?id=`, so appending the link's
+ * deep-link parameters let a parameter named `id` replace the app's id and
+ * Play answered 404. Neither store passes query parameters on to the app, so
+ * nothing is lost by leaving them off: after install, the deep-link data
+ * reaches the app through deferred deep linking, not through the store URL.
+ */
+export function isAppStoreUrl(url: string): boolean {
+  try {
+    return APP_STORE_HOSTS.has(new URL(url).hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The URI-scheme URL that opens this link's content in the app, with the
  * link's deep-link parameters appended as a query string. Shared by the
@@ -734,6 +755,10 @@ export async function redirectRoutes(
      * URL as one who was redirected.
      */
     const decorateWebDestination = (destination: string): string => {
+      // A store listing is not a website: send it exactly as configured. See
+      // isAppStoreUrl() for why decorating it broke Google Play.
+      if (isAppStoreUrl(destination)) return destination;
+
       // For HTTP(S) URLs, add UTM parameters
       let url = buildRedirectUrl(destination, link.utm_parameters) || destination;
 
