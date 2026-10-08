@@ -307,6 +307,43 @@ describe('launchpad page — host hooks', () => {
     expect(res.body).toContain('Download on the App Store');
   });
 
+  it('hands resolveContent the decorated web destination, so a host hero can link its title', async () => {
+    await app.close();
+    const seen: unknown[] = [];
+    app = await build({
+      launchpad: {
+        resolveContent: async (_link, _settings, context) => {
+          seen.push(context);
+          return null;
+        },
+      },
+    });
+    mockDb(
+      linkRow({
+        web_fallback_url: 'https://example.com/e',
+        deep_link_parameters: { id: '42' },
+        org_settings: { launchpad: { desktop: 'always' } },
+      })
+    );
+    const res = await get(app, DESKTOP_UA);
+    expect(res.statusCode).toBe(200);
+    expect(seen).toHaveLength(1);
+    const { webUrl } = seen[0] as { webUrl: string };
+    expect(new URL(webUrl).origin + new URL(webUrl).pathname).toBe('https://example.com/e');
+    expect(new URL(webUrl).searchParams.get('id')).toBe('42');
+  });
+
+  it('links the header to the workspace app website from the settings', async () => {
+    mockDb(
+      linkRow({
+        org_settings: { launchpad: { appName: 'Demo App', appWebsiteUrl: 'https://demo.example' } },
+      })
+    );
+    const res = await get(app, DESKTOP_UA);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('<a class="lp-app-link" data-lp-cta="cta_app_website" href="https://demo.example">');
+  });
+
   it('falls back to the default content when resolveContent throws or returns null', async () => {
     await app.close();
     let calls = 0;

@@ -25,6 +25,7 @@ import {
   shouldServeLaunchpadOnDesktop,
   shouldServeLaunchpadOnMobile,
   type LaunchpadContent,
+  type LaunchpadContentContext,
   type LaunchpadSettings,
 } from '../lib/launchpad.js';
 
@@ -280,11 +281,14 @@ export interface RedirectRouteOptions {
      */
     resolveContent?: (
       link: Record<string, any>,
-      settings: LaunchpadSettings
+      settings: LaunchpadSettings,
+      context: LaunchpadContentContext
     ) => Promise<LaunchpadContent | null> | LaunchpadContent | null;
     /**
      * Endpoint that receives `{ linkId, event }` beacons from the page
-     * (`view`, `cta_ios`, `cta_android`, `cta_open`). Relative or absolute.
+     * (`view`, `cta_ios`, `cta_android`, `cta_open`, `cta_web`, `cta_app_website`).
+     * Relative or absolute. A host that validates the event name should accept
+     * all of them.
      * Unset means the page sends nothing.
      */
     beaconUrl?: string;
@@ -820,7 +824,7 @@ export async function redirectRoutes(
     ) => {
       let content: LaunchpadContent | null = null;
       try {
-        content = (await options.launchpad?.resolveContent?.(link, launchpadSettings)) ?? null;
+        content = (await options.launchpad?.resolveContent?.(link, launchpadSettings, { webUrl: opts.webUrl })) ?? null;
       } catch (err) {
         fastify.log.error({ err, shortCode }, 'Launchpad resolveContent threw; using default content');
       }
@@ -849,6 +853,7 @@ export async function redirectRoutes(
             iosUrl: opts.storeUrls ? opts.storeUrls.iosUrl : iosUrl,
             androidUrl: opts.storeUrls ? opts.storeUrls.androidUrl : androidUrl,
             webUrl: opts.webUrl,
+            appWebsiteUrl: launchpadSettings.appWebsiteUrl ?? null,
             schemeUrl: opts.schemeUrl,
             showQr: opts.showQr,
             nonce,
