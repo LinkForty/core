@@ -751,6 +751,26 @@ export async function redirectRoutes(
         }
       }
 
+      // Forward the visitor's own query parameters (`/abc123?slug=titanic`) so
+      // an installed app opened through the Universal Link / App Link receives
+      // the same values a deferred install gets from the click row — the
+      // base-path-plus-parameters pattern extractLinkParams() describes.
+      // Fill-only: a key the destination or the link's deep-link parameters
+      // already set is never overridden, so a public URL cannot rewrite e.g.
+      // the `id` of a Play Store link.
+      const inboundParams = extractLinkParams(request.query as Record<string, unknown>);
+      if (Object.keys(inboundParams).length > 0) {
+        try {
+          const parsed = new URL(url);
+          Object.entries(inboundParams).forEach(([key, value]) => {
+            if (!parsed.searchParams.has(key)) parsed.searchParams.set(key, value);
+          });
+          url = parsed.toString();
+        } catch {
+          // Non-absolute / unparseable URL — skip forwarding.
+        }
+      }
+
       // When opted in per link (append_click_id), append the originating click id
       // so a downstream analytics tool on the landing page can correlate the
       // landing visit to this exact click. Opt-in (default off), web/HTTPS only —
