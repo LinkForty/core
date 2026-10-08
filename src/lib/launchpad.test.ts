@@ -9,6 +9,7 @@ import {
   shouldServeLaunchpadOnMobile,
   type LaunchpadPageContext,
 } from './launchpad.js';
+import { APP_STORE_BADGE_DATA_URI, GOOGLE_PLAY_BADGE_DATA_URI } from './store-badges.js';
 
 describe('shouldServeLaunchpadOnDesktop', () => {
   /** The full decision table: link mode × workspace mode × whether a destination exists. */
@@ -286,5 +287,121 @@ describe('renderLaunchpadPage', () => {
   it('ignores a background that is not #rrggbb', () => {
     const html = renderLaunchpadPage({ ...base, content: { ...base.content, theme: { backgroundColor: 'url(x)' } } });
     expect(html).not.toContain('--lp-bg: url');
+  });
+});
+
+describe('renderLaunchpadPage — store badges', () => {
+  const base: LaunchpadPageContext = {
+    content: { title: 'A title', description: '', imageUrl: null, theme: {} },
+    linkId: 'link-1',
+    pageUrl: 'https://go.example/abc',
+    iosUrl: 'https://apps.apple.com/app/id1',
+    androidUrl: 'https://play.google.com/store/apps/details?id=demo',
+    schemeUrl: null,
+    showQr: false,
+    nonce: 'n0nce',
+  };
+
+  it('links each official badge to its own store, keeping the click events', () => {
+    const html = renderLaunchpadPage(base);
+    expect(html).toContain(
+      `<a class="lp-badge" data-lp-cta="cta_ios" href="https://apps.apple.com/app/id1"><img src="${APP_STORE_BADGE_DATA_URI}" alt="Download on the App Store"`
+    );
+    expect(html).toContain(
+      `<a class="lp-badge lp-badge-play" data-lp-cta="cta_android" href="https://play.google.com/store/apps/details?id=demo"><img src="${GOOGLE_PLAY_BADGE_DATA_URI}" alt="Get it on Google Play"`
+    );
+    // No text button for a store any more.
+    expect(html).not.toMatch(/class="lp-btn[^"]*" data-lp-cta="cta_(ios|android)"/);
+  });
+
+  it('shows only the stores it was given', () => {
+    const iosOnly = renderLaunchpadPage({ ...base, androidUrl: null });
+    expect(iosOnly).toContain('cta_ios');
+    expect(iosOnly).not.toContain('cta_android');
+  });
+
+  it('keeps "Open in app" as the one primary button beside the badges', () => {
+    const html = renderLaunchpadPage({ ...base, schemeUrl: 'demo://p/1' });
+    expect(html).toContain('class="lp-btn lp-btn-primary" id="lp-open"');
+    expect(html).toContain('data-lp-cta="cta_ios"');
+  });
+
+  it('embeds the unmodified official artwork: Apple SVG and Google PNG', () => {
+    const svg = Buffer.from(APP_STORE_BADGE_DATA_URI.split(',')[1], 'base64').toString('utf8');
+    expect(APP_STORE_BADGE_DATA_URI.startsWith('data:image/svg+xml;base64,')).toBe(true);
+    expect(svg.startsWith('<svg')).toBe(true);
+    expect(svg).toContain('viewBox="0 0 119.66407 40"');
+    const png = Buffer.from(GOOGLE_PLAY_BADGE_DATA_URI.split(',')[1], 'base64');
+    expect(GOOGLE_PLAY_BADGE_DATA_URI.startsWith('data:image/png;base64,')).toBe(true);
+    expect(png.subarray(0, 8)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    expect(png.readUInt32BE(16)).toBe(646);
+    expect(png.readUInt32BE(20)).toBe(250);
+  });
+});
+
+describe('renderLaunchpadPage — the title leads to the web destination', () => {
+  const base: LaunchpadPageContext = {
+    content: { title: 'Spring Classic', description: '', imageUrl: null, theme: {} },
+    linkId: 'link-1',
+    pageUrl: 'https://go.example/abc',
+    iosUrl: null,
+    androidUrl: null,
+    schemeUrl: null,
+    showQr: false,
+    nonce: 'n0nce',
+  };
+
+  it('links the title and keeps "Continue on the web" beside it', () => {
+    const html = renderLaunchpadPage({ ...base, webUrl: 'https://example.com/e?id=1&r=2' });
+    expect(html).toContain('<h1><a data-lp-cta="cta_web" href="https://example.com/e?id=1&amp;r=2">Spring Classic</a></h1>');
+    expect(html).toContain('Continue on the web');
+  });
+
+  it('leaves the title plain when there is no web destination, or an unsafe one', () => {
+    expect(renderLaunchpadPage(base)).toContain('<h1>Spring Classic</h1>');
+    expect(renderLaunchpadPage({ ...base, webUrl: 'javascript:alert(1)' })).toContain('<h1>Spring Classic</h1>');
+  });
+
+  it('leaves a host-drawn hero alone: the host links its own title', () => {
+    const html = renderLaunchpadPage({
+      ...base,
+      webUrl: 'https://example.com/e',
+      content: { ...base.content, heroHtml: '<div class="host-hero">Spring Classic</div>' },
+    });
+    expect(html).toContain('<div class="host-hero">Spring Classic</div>');
+    expect(html).not.toContain('<h1>');
+    expect(html).toContain('Continue on the web');
+  });
+});
+
+describe('renderLaunchpadPage — header links to the app website', () => {
+  const base: LaunchpadPageContext = {
+    content: { title: 't', description: '', imageUrl: null, theme: { appName: 'Demo App', appIconUrl: 'https://cdn.example/icon.png' } },
+    linkId: 'link-1',
+    pageUrl: 'https://go.example/abc',
+    iosUrl: null,
+    androidUrl: null,
+    schemeUrl: null,
+    showQr: false,
+    nonce: 'n0nce',
+  };
+
+  it('wraps the icon and name in a link when a website is set', () => {
+    const html = renderLaunchpadPage({ ...base, appWebsiteUrl: 'https://demo.example' });
+    expect(html).toContain(
+      '<header class="lp-app"><a class="lp-app-link" data-lp-cta="cta_app_website" href="https://demo.example"><img src="https://cdn.example/icon.png"'
+    );
+    expect(html).toContain('<span>Demo App</span></a></header>');
+  });
+
+  it('leaves the header unlinked when no website is set, or an unsafe one', () => {
+    expect(renderLaunchpadPage(base)).not.toContain('class="lp-app-link"');
+    expect(renderLaunchpadPage({ ...base, appWebsiteUrl: 'javascript:alert(1)' })).not.toContain('class="lp-app-link"');
+  });
+
+  it('readLaunchpadSettings keeps an http(s) website and drops anything else', () => {
+    expect(readLaunchpadSettings({ launchpad: { appWebsiteUrl: 'https://demo.example' } }).appWebsiteUrl).toBe('https://demo.example');
+    expect(readLaunchpadSettings({ launchpad: { appWebsiteUrl: 'javascript:alert(1)' } }).appWebsiteUrl).toBeUndefined();
+    expect(readLaunchpadSettings({ launchpad: { appWebsiteUrl: '' } }).appWebsiteUrl).toBeUndefined();
   });
 });

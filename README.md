@@ -241,9 +241,9 @@ Automatically redirects users to the appropriate URL based on device type (iOS/A
 
 **Mobile interstitial:** When a link has `appScheme` configured and a store fallback URL (iOS App Store or Google Play), mobile requests receive a smart interstitial page instead of a raw 302 redirect. The interstitial tries to open the app via URI scheme and falls back to the app store after 1.5 seconds. This handles the case where a 302 to a custom URI scheme fails silently when the app is not installed. URL fragments are preserved through the redirect, enabling patterns like E2E encryption where the decryption key lives in the fragment.
 
-**Launchpad page (desktop):** A link to app-only content has nowhere to send a desktop visitor. When the chain resolves no web destination (link → template → workspace `appConfig`), a desktop request gets a hosted landing page instead of an error: the link's title, description and image (`ogTitle` / `ogDescription` / `ogImageUrl`, falling back to `title` / `description`), the app's icon and name, App Store / Google Play buttons, and a QR code so the visitor can finish on their phone. The page is `noindex`, sent with `Cache-Control: no-store` and a content-security policy that allows no script without a per-response nonce, and it never navigates on its own — no timers, no automatic scheme attempts.
+**Launchpad page (desktop):** A link to app-only content has nowhere to send a desktop visitor. When the chain resolves no web destination (link → template → workspace `appConfig`), a desktop request gets a hosted landing page instead of an error: the link's title, description and image (`ogTitle` / `ogDescription` / `ogImageUrl`, falling back to `title` / `description`), the app's icon and name, the official App Store / Google Play badges (embedded in the page, so it makes no third-party request), and a QR code so the visitor can finish on their phone. The page is `noindex`, sent with `Cache-Control: no-store` and a content-security policy that allows no script without a per-response nonce, and it never navigates on its own — no timers, no automatic scheme attempts.
 
-When the link does have a web destination, the page offers it as a "Continue on the web" link, so a visitor is never trapped. By default it appears **only** where the alternative is nothing; a link that resolves to a destination still gets its 302. Two knobs change that:
+When the link does have a web destination, the page offers it as a "Continue on the web" link, and the title links there too, so a visitor is never trapped. By default it appears **only** where the alternative is nothing; a link that resolves to a destination still gets its 302. Two knobs change that:
 
 - `organizations.settings.launchpad` (per workspace):
 
@@ -254,11 +254,14 @@ When the link does have a web destination, the page offers it as a "Continue on 
       "mobile": "store",               // "store" (default) | "page"
       "appName": "Ride Alert",
       "appIconUrl": "https://cdn.example/icon.png",
+      "appWebsiteUrl": "https://ridealert.example", // optional; the header's icon and name link here
       "accentColor": "#0f766e",           // buttons, the web link, focus rings
       "backgroundColor": "#101418"        // optional; fixes the page's palette (see below)
     }
   }
   ```
+
+  `appWebsiteUrl` is deliberately explicit rather than derived from a link's web fallback, which may be someone else's page (an event listing, a video). Unset, the header is not a link.
 
   Without `backgroundColor` the page follows the visitor's light/dark preference. With one, the background is fixed and the text, surfaces and borders are derived from it — a light or a dark brand color both stay legible, and the visitor's theme no longer changes the page.
 
@@ -378,10 +381,14 @@ interface RedirectRouteOptions {
     // A hook that throws is logged and treated as null — the page never fails
     // because of it. `heroHtml` is inserted unescaped: render it yourself,
     // never from end-user input.
-    resolveContent?: (link, settings) => Promise<LaunchpadContent | null>;
+    // `context.webUrl` is the link's web destination, decorated exactly as
+    // "Continue on the web" uses it (or null), so a hero that draws its own
+    // title can link it the way the default page does.
+    resolveContent?: (link, settings, context: { webUrl: string | null }) => Promise<LaunchpadContent | null>;
     // Endpoint that receives `{ linkId, event }` beacons from the page —
-    // "view" on load, "cta_ios" / "cta_android" / "cta_open" on tap. No
-    // cookies or identifiers. Unset means the page sends nothing.
+    // "view" on load; "cta_ios" / "cta_android" / "cta_open" / "cta_web" /
+    // "cta_app_website" on tap. No cookies or identifiers. Unset means the
+    // page sends nothing. If you validate event names, accept all of these.
     beaconUrl?: string;
   };
   // Return true when the request is on a host reserved for web links. Every

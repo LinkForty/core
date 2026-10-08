@@ -1,5 +1,6 @@
 import { randomBytes } from 'crypto';
 import { escapeHtml, safeHref, safeSchemeHref } from './link-safety.js';
+import { APP_STORE_BADGE_DATA_URI, GOOGLE_PLAY_BADGE_DATA_URI, BADGE_HEIGHT_PX, GOOGLE_BADGE_IMAGE_HEIGHT_PX, GOOGLE_BADGE_CLEAR_SPACE_PX } from './store-badges.js';
 
 /**
  * Launchpad: the page a visitor sees when a link cannot open the app.
@@ -51,6 +52,13 @@ export interface LaunchpadSettings {
   appName?: string;
   /** Absolute https URL of the app icon, shown at 64×64. */
   appIconUrl?: string;
+  /**
+   * The app's own website. When set, the header's icon and name link to it.
+   * Explicit rather than derived from a link's web fallback, which may be a
+   * third-party page (an event listing, a video): a logo that leads off to
+   * someone else's homepage reads as broken. Unset, the header is not a link.
+   */
+  appWebsiteUrl?: string;
   /** `#rrggbb`. Drives the primary button, the web link and focus rings. Anything else is ignored. */
   accentColor?: string;
   /**
@@ -93,6 +101,19 @@ export interface LaunchpadContent {
   theme: LaunchpadTheme;
 }
 
+/**
+ * What the redirect knows about this visit that a `resolveContent` hook may
+ * want when rendering its own hero — passed as the hook's third argument.
+ */
+export interface LaunchpadContentContext {
+  /**
+   * The link's web destination, already decorated (UTM, deep-link parameters,
+   * click id) exactly as "Continue on the web" uses it; null when there is none.
+   * A hook drawing its own title can link it here, as the default page does.
+   */
+  webUrl: string | null;
+}
+
 /** The subset of a `links` row the default content is built from. */
 export interface LaunchpadLinkFields {
   title?: string | null;
@@ -126,11 +147,13 @@ export function readLaunchpadSettings(orgSettings: unknown): LaunchpadSettings {
   const accentColor = asString(r.accentColor, 7);
   const backgroundColor = asString(r.backgroundColor, 7);
   const appIconUrl = asString(r.appIconUrl, 2048);
+  const appWebsiteUrl = asString(r.appWebsiteUrl, 2048);
   return {
     ...(desktop ? { desktop } : {}),
     ...(mobile ? { mobile } : {}),
     ...(asString(r.appName, 60) ? { appName: asString(r.appName, 60) } : {}),
     ...(appIconUrl && safeHref(appIconUrl) ? { appIconUrl } : {}),
+    ...(appWebsiteUrl && safeHref(appWebsiteUrl) ? { appWebsiteUrl } : {}),
     ...(accentColor && HEX_COLOR.test(accentColor) ? { accentColor } : {}),
     ...(backgroundColor && HEX_COLOR.test(backgroundColor) ? { backgroundColor } : {}),
     ...(asString(r.templateId, 64) ? { templateId: asString(r.templateId, 64) } : {}),
@@ -297,10 +320,12 @@ export interface LaunchpadPageContext {
   schemeUrl: string | null;
   /** Show the QR block. Meant for desktop; a phone scanning itself is no use. */
   showQr: boolean;
+  /** `LaunchpadSettings.appWebsiteUrl`: where the header's icon and name link to. */
+  appWebsiteUrl?: string | null;
   nonce: string;
   /**
    * When set, the page reports `view` on load and `cta_ios` / `cta_android` /
-   * `cta_open` / `cta_web` on the matching tap via `navigator.sendBeacon`, as a JSON body
+   * `cta_open` / `cta_web` / `cta_app_website` on the matching tap via `navigator.sendBeacon`, as a JSON body
    * `{ linkId, event }`. No cookies, no identifiers. Absent by default; the
    * endpoint is the host application's to provide.
    */
@@ -324,6 +349,9 @@ const STYLES = `
   .lp-app { display: flex; align-items: center; gap: 0.75rem; min-height: 1rem; }
   .lp-app img { width: 48px; height: 48px; border-radius: 12px; object-fit: cover; background: var(--lp-surface); }
   .lp-app span { font-weight: 600; font-size: 1rem; }
+  .lp-app-link { display: flex; align-items: center; gap: 0.75rem; color: inherit; text-decoration: none; }
+  .lp-app-link:hover span { text-decoration: underline; text-underline-offset: 3px; }
+  .lp-app-link:focus-visible { outline: 2px solid var(--lp-accent); outline-offset: 4px; border-radius: 12px; }
   .lp-hero img { display: block; width: 100%; max-height: 22rem; object-fit: cover; border-radius: 14px; background: var(--lp-surface); margin-bottom: 1rem; }
   .lp-hero h1 { font-size: 1.75rem; line-height: 1.2; margin: 0 0 0.5rem; text-wrap: balance; }
   .lp-hero p { margin: 0; color: var(--lp-muted); font-size: 1.05rem; }
@@ -331,6 +359,14 @@ const STYLES = `
   .lp-btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.8rem 1.25rem; border-radius: 10px; font-size: 0.95rem; font-weight: 600; text-decoration: none; border: 1px solid var(--lp-line); background: var(--lp-surface); color: var(--lp-ink); }
   .lp-btn-primary { background: var(--lp-accent); border-color: var(--lp-accent); color: var(--lp-accent-ink); }
   .lp-btn:focus-visible { outline: 2px solid var(--lp-accent); outline-offset: 2px; }
+  .lp-badge { display: inline-flex; align-items: center; border-radius: 8px; }
+  .lp-badge img { display: block; height: ${BADGE_HEIGHT_PX}px; width: auto; }
+  /* Google's PNG carries its required clear space as transparent margin; pull it in so both badges' visible edges line up. */
+  .lp-badge-play img { height: ${GOOGLE_BADGE_IMAGE_HEIGHT_PX}px; margin: -${GOOGLE_BADGE_CLEAR_SPACE_PX}px; }
+  .lp-badge:focus-visible { outline: 2px solid var(--lp-accent); outline-offset: 2px; }
+  .lp-hero h1 a { color: inherit; text-decoration: none; }
+  .lp-hero h1 a:hover { text-decoration: underline; text-underline-offset: 4px; }
+  .lp-hero h1 a:focus-visible { outline: 2px solid var(--lp-accent); outline-offset: 2px; border-radius: 4px; }
   .lp-web { margin: -0.5rem 0 0; font-size: 0.95rem; }
   .lp-web a { color: var(--lp-accent); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
   .lp-web a:hover { color: var(--lp-ink); }
@@ -398,16 +434,25 @@ export function renderLaunchpadPage(ctx: LaunchpadPageContext): string {
     .filter(Boolean)
     .join('\n');
 
+  const appWebsiteUrl = ctx.appWebsiteUrl && safeHref(ctx.appWebsiteUrl) ? escapeHtml(ctx.appWebsiteUrl) : null;
+  const brand = `${iconUrl ? `<img src="${iconUrl}" alt="" width="48" height="48">` : ''}${
+    theme.appName ? `<span>${escapeHtml(theme.appName)}</span>` : ''
+  }`;
   const header =
     iconUrl || theme.appName
-      ? `<header class="lp-app">${iconUrl ? `<img src="${iconUrl}" alt="" width="48" height="48">` : ''}${
-          theme.appName ? `<span>${escapeHtml(theme.appName)}</span>` : ''
+      ? `<header class="lp-app">${
+          appWebsiteUrl ? `<a class="lp-app-link" data-lp-cta="cta_app_website" href="${appWebsiteUrl}">${brand}</a>` : brand
         }</header>`
       : '';
 
+  const webUrl = ctx.webUrl && safeHref(ctx.webUrl) ? escapeHtml(ctx.webUrl) : null;
+  // The title leads to the web destination too, beside "Continue on the web"
+  // rather than instead of it: the explicit link stays for anyone who would not
+  // think to tap a heading. A host's own hero (heroHtml) draws its own title.
+  const heading = webUrl ? `<a data-lp-cta="cta_web" href="${webUrl}">${title}</a>` : title;
   const hero = content.heroHtml
     ? `<section class="lp-hero">${content.heroHtml}</section>`
-    : `<section class="lp-hero">${imageUrl ? `<img src="${imageUrl}" alt="">` : ''}<h1>${title}</h1>${
+    : `<section class="lp-hero">${imageUrl ? `<img src="${imageUrl}" alt="">` : ''}<h1>${heading}</h1>${
         description ? `<p>${description}</p>` : ''
       }</section>`;
 
@@ -416,16 +461,17 @@ export function renderLaunchpadPage(ctx: LaunchpadPageContext): string {
     schemeUrl
       ? `<a class="lp-btn lp-btn-primary" id="lp-open" data-lp-cta="cta_open" data-scheme="${schemeUrl}" href="${schemeUrl}">Open in app</a>`
       : '',
+    // The official badges (lib/store-badges.ts), unmodified, each linking only
+    // to its own store listing — the one use either company permits.
     iosUrl
-      ? `<a class="lp-btn${schemeUrl ? '' : ' lp-btn-primary'}" data-lp-cta="cta_ios" href="${iosUrl}">Download on the App Store</a>`
+      ? `<a class="lp-badge" data-lp-cta="cta_ios" href="${iosUrl}"><img src="${APP_STORE_BADGE_DATA_URI}" alt="Download on the App Store" height="${BADGE_HEIGHT_PX}"></a>`
       : '',
     androidUrl
-      ? `<a class="lp-btn${schemeUrl || iosUrl ? '' : ' lp-btn-primary'}" data-lp-cta="cta_android" href="${androidUrl}">Get it on Google Play</a>`
+      ? `<a class="lp-badge lp-badge-play" data-lp-cta="cta_android" href="${androidUrl}"><img src="${GOOGLE_PLAY_BADGE_DATA_URI}" alt="Get it on Google Play" height="${GOOGLE_BADGE_IMAGE_HEIGHT_PX}"></a>`
       : '',
   ]
     .filter(Boolean)
     .join('');
-  const webUrl = ctx.webUrl && safeHref(ctx.webUrl) ? escapeHtml(ctx.webUrl) : null;
   const actions = buttons ? `<section class="lp-actions">${buttons}</section>` : '';
   const web = webUrl
     ? `<p class="lp-web"><a data-lp-cta="cta_web" href="${webUrl}">Continue on the web</a></p>`
