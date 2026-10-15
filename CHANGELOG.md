@@ -1,3 +1,7 @@
+## 1.33.0 (2026-10-15)
+
+* feat(links): per-organization short codes for applications that assign organizations (#71) ([e66a259](https://github.com/LinkForty/core/commit/e66a259)), closes [#71](https://github.com/LinkForty/core/issues/71)
+
 ## 1.32.0 (2026-10-15)
 
 * feat(attribution): network-scoped install matching, optional organization scope, organization webhoo ([7bb4bb6](https://github.com/LinkForty/core/commit/7bb4bb6)), closes [#70](https://github.com/LinkForty/core/issues/70)
