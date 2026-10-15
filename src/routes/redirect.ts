@@ -681,6 +681,7 @@ export async function redirectRoutes(
           linkId: link.id,
           shortCode: link.short_code,
           userId: link.user_id,
+          organizationId: link.organization_id ?? undefined,
           ipAddress: ip,
           userAgent,
           country: countryCode || undefined,
@@ -693,6 +694,8 @@ export async function redirectRoutes(
           utmParameters: link.utm_parameters || undefined,
           referer: referrer || undefined,
           language: fpLanguage,
+          linkParams: Object.keys(linkParams).length > 0 ? linkParams : undefined,
+          isBot,
         });
 
         // Trigger webhooks for click_event

@@ -714,6 +714,7 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
           linkId: link.id,
           shortCode: link.short_code,
           userId: link.user_id,
+          organizationId: link.organization_id ?? undefined,
           ipAddress: ip,
           userAgent,
           country: countryCode || undefined,
