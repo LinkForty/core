@@ -296,6 +296,8 @@ POST   /api/webhooks/:id/test?userId=user-uuid
 
 Events: `click_event`, `install_event`, `conversion_event`, `sdk_event`. Payloads are HMAC SHA-256 signed.
 
+Which webhooks hear about a link: one with an `organization_id` receives events for every link in that organization; one without receives events for links created by its `user_id`; one with neither receives events for links that have neither. To keep a delivery log, pass a function to `setWebhookDeliveryLogger()`. It is called with the webhook id, the attempt's result and the payload sent.
+
 ### Mobile SDK Endpoints
 
 ```bash
@@ -371,6 +373,7 @@ interface ServerOptions {
   logger?: boolean;         // Enable Fastify logger (default: true)
   trustProxy?: boolean | number;  // Trust X-Forwarded-For when behind a proxy (default: false)
   redirect?: RedirectRouteOptions;  // See below
+  sdk?: SdkRouteOptions;            // See below
 }
 
 interface RedirectRouteOptions {
@@ -398,7 +401,20 @@ interface RedirectRouteOptions {
   // A hook that throws is logged and treated as false.
   isWebLinkRequest?: (request) => Promise<boolean> | boolean;
 }
+
+interface SdkRouteOptions {
+  // Narrow the clicks an install can be attributed to. A server shared by
+  // several apps resolves the installing app (from the SDK's `appToken`, say)
+  // and returns its organization, so an install only ever matches — and
+  // receives the deep link of — that organization's links. Return null to
+  // match against every click, as when the option is absent. A hook that
+  // throws is logged and treated as null.
+  resolveInstallScope?: (request, body: { appToken?: string }) =>
+    Promise<{ organizationId?: string } | null> | { organizationId?: string } | null;
+}
 ```
+
+Install matching only considers clicks from the installing device's own network (its IPv4 /24 or IPv6 /64), since no other click can reach the confidence threshold, so the attribution window holds however much traffic the server takes. It relies on the `idx_fingerprints_ip` index, which `initializeDatabase()` builds concurrently on first start so click writes are never blocked.
 
 `renderLaunchpadPage()`, `defaultLaunchpadContent()` and `shouldServeLaunchpadOnDesktop()` are exported so a host can render the same page elsewhere (a settings preview, for instance).
 
@@ -536,6 +552,7 @@ Core does not create a `users` table. Authentication and user management are the
 |------------|--------------|----------------------------------|
 | id         | UUID         | Primary key                      |
 | user_id    | UUID         | Optional owner/tenant identifier |
+| organization_id | UUID    | Optional owning organization; receives events for all its links |
 | name       | VARCHAR(255) | Webhook name                     |
 | url        | TEXT         | Delivery URL                     |
 | secret     | VARCHAR(255) | HMAC signing secret              |

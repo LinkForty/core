@@ -66,6 +66,31 @@ export const DEFAULT_ATTRIBUTION_WINDOW_HOURS = 168;
 export const CONFIDENCE_THRESHOLD = 70;
 
 /**
+ * The most a candidate can score without the IP signal. Below the threshold, so
+ * an IP match is required for any attribution — which is what lets
+ * matchInstallToClick fetch only the clicks from the install's own network.
+ * (Across SDK and browser contexts, platform + OS version stand in for the user
+ * agent and carry the same weight.)
+ */
+export const MAX_SCORE_WITHOUT_IP =
+  FINGERPRINT_WEIGHTS.USER_AGENT +
+  FINGERPRINT_WEIGHTS.TIMEZONE +
+  FINGERPRINT_WEIGHTS.LANGUAGE +
+  FINGERPRINT_WEIGHTS.SCREEN_RESOLUTION;
+
+/**
+ * Narrows the clicks an install can be matched against.
+ */
+export interface InstallMatchScope {
+  /**
+   * Only clicks on links owned by this organization. A deployment serving
+   * several apps passes the installing app's organization, so an install can
+   * never be attributed to — or receive the deep link of — another app's link.
+   */
+  organizationId?: string;
+}
+
+/**
  * Generate a fingerprint hash from device data
  * Uses SHA-256 hash of concatenated device attributes
  */
@@ -156,22 +181,61 @@ export function isAttributableIp(ip: string): boolean {
   return false;
 }
 
-function normalizeIP(ip: string): string {
-  if (!ip) return '';
+/**
+ * Expand an IPv6 address to its eight hextets, lowercased and without leading
+ * zeros, so two spellings of the same address compare equal. An embedded IPv4
+ * tail (`64:ff9b::1.2.3.4`) becomes its two hextets. Returns null for anything
+ * that is not an IPv6 address.
+ */
+function expandIPv6(ip: string): string[] | null {
+  let addr = ip.toLowerCase().split('%')[0]; // drop a zone index
 
-  // For IPv4, use first 3 octets (e.g., 192.168.1.x)
-  if (ip.includes('.')) {
-    const parts = ip.split('.');
-    return parts.slice(0, 3).join('.');
+  const lastColon = addr.lastIndexOf(':');
+  const tail = addr.slice(lastColon + 1);
+  if (tail.includes('.')) {
+    const n = ipv4ToInt(tail);
+    if (n === null) return null;
+    addr = `${addr.slice(0, lastColon + 1)}${(n >>> 16).toString(16)}:${(n & 0xffff).toString(16)}`;
   }
 
-  // For IPv6, use first 4 groups (e.g., 2001:0db8:85a3:0000:xxxx)
-  if (ip.includes(':')) {
-    const parts = ip.split(':');
-    return parts.slice(0, 4).join(':');
+  const halves = addr.split('::');
+  if (halves.length > 2) return null;
+
+  const head = halves[0] ? halves[0].split(':') : [];
+  const rest = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+  const missing = 8 - head.length - rest.length;
+  if (halves.length === 2 ? missing < 1 : missing !== 0) return null;
+
+  const groups = [...head, ...Array(missing).fill('0'), ...rest];
+  if (!groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return null;
+
+  return groups.map((g) => parseInt(g, 16).toString(16));
+}
+
+/**
+ * The network an IP belongs to for matching purposes: its /24 for IPv4, its /64
+ * for IPv6 (the prefix a single household or device is normally assigned).
+ * Returned as CIDR text, so the same value both compares two addresses here and
+ * selects candidate clicks in SQL. Null when the address cannot be parsed.
+ */
+export function attributionNetwork(ip: string): string | null {
+  if (!ip) return null;
+  let addr = ip.trim();
+  if (addr.toLowerCase().startsWith('::ffff:') && addr.includes('.')) addr = addr.slice(7);
+
+  if (addr.includes('.') && !addr.includes(':')) {
+    const n = ipv4ToInt(addr);
+    if (n === null) return null;
+    return `${n >>> 24}.${(n >>> 16) & 0xff}.${(n >>> 8) & 0xff}.0/24`;
   }
 
-  return ip;
+  if (addr.includes(':')) {
+    const groups = expandIPv6(addr);
+    if (!groups) return null;
+    return `${groups.slice(0, 4).join(':')}::/64`;
+  }
+
+  return null;
 }
 
 /**
@@ -301,10 +365,10 @@ export function calculateConfidenceScore(
     isAttributableIp(fingerprint1.ipAddress) &&
     isAttributableIp(fingerprint2.ipAddress)
   ) {
-    const ip1 = normalizeIP(fingerprint1.ipAddress);
-    const ip2 = normalizeIP(fingerprint2.ipAddress);
+    const network1 = attributionNetwork(fingerprint1.ipAddress);
+    const network2 = attributionNetwork(fingerprint2.ipAddress);
 
-    if (ip1 === ip2) {
+    if (network1 !== null && network1 === network2) {
       score += FINGERPRINT_WEIGHTS.IP_ADDRESS;
       matchedFactors.push('ip');
     }
@@ -396,13 +460,36 @@ export function calculateConfidenceScore(
  */
 export async function matchInstallToClick(
   installFingerprint: FingerprintData,
-  attributionWindowHours: number = DEFAULT_ATTRIBUTION_WINDOW_HOURS
+  attributionWindowHours: number = DEFAULT_ATTRIBUTION_WINDOW_HOURS,
+  scope: InstallMatchScope = {}
 ): Promise<FingerprintMatch | null> {
+  // No candidate reaches the threshold without matching the install's network
+  // (MAX_SCORE_WITHOUT_IP), so an install from a shared or unparseable address
+  // cannot be attributed, and the only clicks worth scoring are the ones from
+  // its own /24 or /64. Selecting those in SQL keeps every click within the
+  // attribution window in reach, however much traffic the server takes.
+  if (!isAttributableIp(installFingerprint.ipAddress)) {
+    return null;
+  }
+  const network = attributionNetwork(installFingerprint.ipAddress);
+  if (!network) {
+    return null;
+  }
+
   // Query recent click events within maximum possible attribution window (90 days)
   // We'll validate against each link's specific window during matching
   const maxWindowHours = 2160; // 90 days
   const cutoffTime = new Date(Date.now() - maxWindowHours * 60 * 60 * 1000);
 
+  const params: unknown[] = [cutoffTime, network];
+  let scopeFilter = '';
+  if (scope.organizationId) {
+    params.push(scope.organizationId);
+    scopeFilter = `AND l.organization_id = $${params.length}`;
+  }
+
+  // The LIMIT only bounds work for a very busy network (a campus, an office);
+  // it applies after the network filter, so ordinary traffic never reaches it.
   const clicksResult = await db.query(
     `SELECT
        ce.id as click_id,
@@ -418,13 +505,15 @@ export async function matchInstallToClick(
        df.screen_height,
        df.platform,
        df.platform_version
-     FROM click_events ce
-     INNER JOIN device_fingerprints df ON df.click_id = ce.id
+     FROM device_fingerprints df
+     INNER JOIN click_events ce ON ce.id = df.click_id
      INNER JOIN links l ON ce.link_id = l.id
-     WHERE ce.clicked_at >= $1
+     WHERE df.ip_address <<= $2::cidr
+       AND ce.clicked_at >= $1
+       ${scopeFilter}
      ORDER BY ce.clicked_at DESC
      LIMIT 1000`,
-    [cutoffTime]
+    params
   );
 
   if (clicksResult.rows.length === 0) {
@@ -525,7 +614,8 @@ export async function recordInstallEvent(
   fingerprintData: FingerprintData,
   deviceId?: string,
   attributionWindowHours: number = DEFAULT_ATTRIBUTION_WINDOW_HOURS,
-  sdk?: { name?: string | null; version?: string | null }
+  sdk?: { name?: string | null; version?: string | null },
+  scope: InstallMatchScope = {}
 ): Promise<{
   installId: string;
   match: FingerprintMatch | null;
@@ -534,7 +624,7 @@ export async function recordInstallEvent(
   const fingerprintHash = generateFingerprintHash(fingerprintData);
 
   // Attempt to match install to a click
-  const match = await matchInstallToClick(fingerprintData, attributionWindowHours);
+  const match = await matchInstallToClick(fingerprintData, attributionWindowHours, scope);
 
   // Attribution metadata for measurement: install attribution is
   // fingerprint-based, so the method is 'fingerprint' on a match and 'none'
@@ -641,44 +731,28 @@ export async function recordInstallEvent(
 
       // Trigger webhooks for install_event (only if attributed)
       try {
-        // Get the link's user_id for webhook lookup
-        const linkUserResult = await db.query(
-          'SELECT user_id FROM links WHERE id = $1',
-          [match.linkId]
-        );
+        const { findWebhooksForLink, triggerWebhooks } = await import('./webhook.js');
+        const webhooks = await findWebhooksForLink(match.linkId);
 
-        if (linkUserResult.rows.length > 0) {
-          const userId = linkUserResult.rows[0].user_id;
+        if (webhooks.length > 0) {
+          const installEventData = {
+            id: installId,
+            linkId: match.linkId,
+            fingerprintHash,
+            confidenceScore: match.confidenceScore,
+            installedAt: new Date().toISOString(),
+            deepLinkData,
+            ipAddress: fingerprintData.ipAddress,
+            userAgent: fingerprintData.userAgent,
+            platform: fingerprintData.platform,
+          };
 
-          const webhooksResult = await db.query(
-            'SELECT * FROM webhooks WHERE user_id = $1 AND is_active = true',
-            [userId]
+          await triggerWebhooks(
+            webhooks,
+            'install_event',
+            installId,
+            installEventData
           );
-
-          if (webhooksResult.rows.length > 0) {
-            const { triggerWebhooks } = await import('./webhook.js');
-
-            const installEventData = {
-              id: installId,
-              linkId: match.linkId,
-              fingerprintHash,
-              confidenceScore: match.confidenceScore,
-              installedAt: new Date().toISOString(),
-              deepLinkData,
-              ipAddress: fingerprintData.ipAddress,
-              userAgent: fingerprintData.userAgent,
-              platform: fingerprintData.platform,
-            };
-
-            // Trigger webhooks without delivery logging (basic version)
-            // For delivery logging, use @linkforty/cloud premium features
-            await triggerWebhooks(
-              webhooksResult.rows,
-              'install_event',
-              installId,
-              installEventData
-            );
-          }
         }
       } catch (webhookError) {
         console.error(`Error triggering install webhooks: ${webhookError}`);

@@ -415,6 +415,98 @@ describe('matchInstallToClick', () => {
   });
 });
 
+describe('attributionNetwork', () => {
+  it('is the /24 for IPv4', () => {
+    expect(fingerprint.attributionNetwork('24.5.10.100')).toBe('24.5.10.0/24');
+  });
+
+  it('treats an IPv4-mapped IPv6 address as its IPv4 address', () => {
+    expect(fingerprint.attributionNetwork('::ffff:24.5.10.100')).toBe('24.5.10.0/24');
+  });
+
+  it('is the /64 for IPv6, however the address is spelled', () => {
+    const expected = '2001:db8:0:0::/64';
+    expect(fingerprint.attributionNetwork('2001:db8::1')).toBe(expected);
+    expect(fingerprint.attributionNetwork('2001:0DB8:0000:0000:0000:0000:0000:0002')).toBe(expected);
+    expect(fingerprint.attributionNetwork('2001:db8:0:0:abcd::7')).toBe(expected);
+  });
+
+  it('expands an embedded IPv4 tail', () => {
+    expect(fingerprint.attributionNetwork('64:ff9b::1.2.3.4')).toBe('64:ff9b:0:0::/64');
+  });
+
+  it('is null for anything unparseable', () => {
+    expect(fingerprint.attributionNetwork('')).toBeNull();
+    expect(fingerprint.attributionNetwork('not-an-ip')).toBeNull();
+    expect(fingerprint.attributionNetwork('1.2.3')).toBeNull();
+    expect(fingerprint.attributionNetwork('2001::db8::1')).toBeNull();
+    expect(fingerprint.attributionNetwork('1:2:3:4:5:6:7:8:9')).toBeNull();
+  });
+});
+
+describe('calculateConfidenceScore — IPv6 networks', () => {
+  it('matches two spellings of addresses in the same /64', () => {
+    const { matchedFactors } = fingerprint.calculateConfidenceScore(
+      { ...baseFingerprint, ipAddress: '2001:db8:1:2::5' },
+      { ...baseFingerprint, ipAddress: '2001:0db8:0001:0002:ffff:0:0:9' }
+    );
+    expect(matchedFactors).toContain('ip');
+  });
+
+  it('does not match addresses in different /64s', () => {
+    const { matchedFactors } = fingerprint.calculateConfidenceScore(
+      { ...baseFingerprint, ipAddress: '2001:db8:1:2::5' },
+      { ...baseFingerprint, ipAddress: '2001:db8:1:3::5' }
+    );
+    expect(matchedFactors).not.toContain('ip');
+  });
+});
+
+describe('matchInstallToClick — candidate selection', () => {
+  beforeEach(() => {
+    mockDbQuery.mockReset();
+  });
+
+  it('cannot reach the threshold without the IP signal, which is what makes network filtering safe', () => {
+    expect(fingerprint.MAX_SCORE_WITHOUT_IP).toBeLessThan(fingerprint.CONFIDENCE_THRESHOLD);
+
+    // A candidate matching on everything but IP, scored for real.
+    const { score } = fingerprint.calculateConfidenceScore(baseFingerprint, {
+      ...baseFingerprint,
+      ipAddress: '31.13.64.1',
+    });
+    expect(score).toBe(fingerprint.MAX_SCORE_WITHOUT_IP);
+  });
+
+  it('selects only clicks from the install network, newest first', async () => {
+    mockDbQuery.mockResolvedValueOnce({ rows: [] });
+
+    await fingerprint.matchInstallToClick(baseFingerprint);
+
+    const [sql, params] = mockDbQuery.mock.calls[0];
+    expect(sql).toMatch(/df\.ip_address <<= \$2::cidr/);
+    expect(sql).not.toMatch(/organization_id/);
+    expect(params).toEqual([expect.any(Date), '24.5.10.0/24']);
+  });
+
+  it('limits candidates to the scoped organization', async () => {
+    mockDbQuery.mockResolvedValueOnce({ rows: [] });
+
+    await fingerprint.matchInstallToClick(baseFingerprint, undefined, { organizationId: 'org-1' });
+
+    const [sql, params] = mockDbQuery.mock.calls[0];
+    expect(sql).toMatch(/AND l\.organization_id = \$3/);
+    expect(params).toEqual([expect.any(Date), '24.5.10.0/24', 'org-1']);
+  });
+
+  it('does not query at all for an install from a shared address', async () => {
+    for (const ipAddress of ['100.64.1.2', '10.0.0.5', '192.168.1.20', '', 'garbage']) {
+      expect(await fingerprint.matchInstallToClick({ ...baseFingerprint, ipAddress })).toBeNull();
+    }
+    expect(mockDbQuery).not.toHaveBeenCalled();
+  });
+});
+
 describe('recordInstallEvent', () => {
   beforeEach(() => {
     mockDbQuery.mockReset();
@@ -471,5 +563,16 @@ describe('recordInstallEvent', () => {
     const params = mockDbQuery.mock.calls[1][1];
     expect(params[15]).toBeNull(); // sdk_name '' -> null
     expect(params[16]).toBeNull(); // sdk_version undefined -> null
+  });
+
+  it('forwards the match scope to the click query', async () => {
+    mockDbQuery.mockResolvedValueOnce({ rows: [] });
+    mockDbQuery.mockResolvedValueOnce({ rows: [{ id: 'install-scope', deep_link_data: {} }] });
+
+    await fingerprint.recordInstallEvent(baseFingerprint, undefined, undefined, undefined, {
+      organizationId: 'org-9',
+    });
+
+    expect(mockDbQuery.mock.calls[0][1]).toContain('org-9');
   });
 });
