@@ -1,3 +1,7 @@
+## 1.32.0 (2026-10-15)
+
+* feat(attribution): network-scoped install matching, optional organization scope, organization webhoo ([7bb4bb6](https://github.com/LinkForty/core/commit/7bb4bb6)), closes [#70](https://github.com/LinkForty/core/issues/70)
+
 ## 1.31.0 (2026-10-08)
 
 * feat(launchpad): official store badges, a linked title, and an app-website link on the header (#69) ([972b12c](https://github.com/LinkForty/core/commit/972b12c)), closes [#69](https://github.com/LinkForty/core/issues/69)
