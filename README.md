@@ -449,7 +449,9 @@ Core does not create a `users` table. Authentication and user management are the
 
 ### Short codes and URL resolution
 
-Short codes are unique per organization. Links without an organization share one namespace, so a deployment that doesn't use organizations has a single set of codes. Template slugs are unique across the server.
+Every short code is unique across the server. Links created through Core's API have no organization, so they all share one set of codes.
+
+An application that builds on Core and assigns links to organizations (by setting `links.organization_id`) gets one set of codes per organization: two organizations can each have `promo`. Template slugs stay unique across the server, and URLs resolve like this:
 
 - `/{templateSlug}/{shortCode}` resolves to exactly one link.
 - `/{shortCode}` prefers the organization the request belongs to, then a link without a template, then the oldest link with that code.
@@ -470,7 +472,7 @@ The redirect, SDK resolve and preview routes all use it. A resolver that throws 
 |-------------------------|--------------|------------------------------------------|
 | id                      | UUID         | Primary key                              |
 | user_id                 | UUID         | Optional owner/tenant identifier         |
-| short_code              | VARCHAR(20)  | Short code, unique per organization      |
+| short_code              | VARCHAR(20)  | Short code, unique per organization_id   |
 | original_url            | TEXT         | Original URL                             |
 | title                   | VARCHAR(255) | Link title                               |
 | description             | TEXT         | Link description                         |
