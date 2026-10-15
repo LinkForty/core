@@ -46,6 +46,9 @@ async function connectWithRetry(maxRetries: number = 10, baseDelay: number = 100
  */
 export const SCHEMA_INIT_LOCK_KEY = 4977261;
 
+/** Advisory lock key held while building idx_fingerprints_ip. Stable across releases. */
+export const FINGERPRINT_IP_INDEX_LOCK_KEY = 4977262;
+
 // Initialize database schema
 export async function initializeDatabase(options: DatabaseOptions = {}) {
   // Initialize pool
@@ -245,6 +248,12 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       )
+    `);
+
+    // A webhook can belong to an organization, in which case it hears about every
+    // link the organization owns (findWebhooksForLink). Null scopes it to its user.
+    await client.query(`
+      ALTER TABLE webhooks ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE
     `);
 
     // Add organization_id column to links table.
@@ -656,6 +665,7 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
     // Indexes for webhooks
     await client.query('CREATE INDEX IF NOT EXISTS idx_webhooks_user_id ON webhooks(user_id)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_webhooks_active ON webhooks(is_active) WHERE is_active = true');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_webhooks_organization_id ON webhooks(organization_id)');
 
     // Indexes for in-app events
     await client.query('CREATE INDEX IF NOT EXISTS idx_in_app_events_install_id ON in_app_events(install_id)');
@@ -693,5 +703,64 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
         .catch(() => undefined);
     }
     client.release();
+  }
+
+  await ensureFingerprintIpIndex();
+}
+
+/**
+ * Index device_fingerprints by IP, which install matching selects candidate
+ * clicks on (matchInstallToClick).
+ *
+ * Built CONCURRENTLY because the table takes a write on every click and can be
+ * large, and a plain CREATE INDEX would hold those writes
+ * for the length of the build. That rules out the schema lock above: a
+ * concurrent build waits for every older snapshot to finish, including that of
+ * another instance blocked on the lock, which would wait on us in turn.
+ *
+ * A concurrent build that fails leaves an invalid index behind, which IF NOT
+ * EXISTS would then skip forever, so an invalid one is dropped and rebuilt. A
+ * build in progress also reads as invalid, hence the try-lock: only one instance
+ * ever works on the index, and the others move on rather than wait. Failure is
+ * logged, not thrown: matching is correct without the index, only slower.
+ */
+async function ensureFingerprintIpIndex(): Promise<void> {
+  let client: pg.PoolClient | undefined;
+  let lockHeld = false;
+
+  try {
+    client = await db.connect();
+    const lock = await client.query('SELECT pg_try_advisory_lock($1) AS acquired', [FINGERPRINT_IP_INDEX_LOCK_KEY]);
+    lockHeld = lock.rows[0]?.acquired === true;
+    if (!lockHeld) {
+      return;
+    }
+
+    const existing = await client.query(
+      `SELECT i.indisvalid
+       FROM pg_class c
+       INNER JOIN pg_index i ON i.indexrelid = c.oid
+       WHERE c.relname = 'idx_fingerprints_ip'`
+    );
+    if (existing.rows[0]?.indisvalid) {
+      return;
+    }
+    if (existing.rows[0]) {
+      await client.query('DROP INDEX CONCURRENTLY IF EXISTS idx_fingerprints_ip');
+    }
+    await client.query(
+      'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_fingerprints_ip ON device_fingerprints(ip_address)'
+    );
+  } catch (error) {
+    console.error('Could not build idx_fingerprints_ip; install matching will be slower:', error);
+  } finally {
+    if (client) {
+      if (lockHeld) {
+        await client
+          .query('SELECT pg_advisory_unlock($1)', [FINGERPRINT_IP_INDEX_LOCK_KEY])
+          .catch(() => undefined);
+      }
+      client.release();
+    }
   }
 }

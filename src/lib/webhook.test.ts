@@ -1,10 +1,20 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
+
+vi.mock('./database.js', () => ({
+  db: {
+    query: vi.fn(),
+  },
+}));
+
 import {
   generateWebhookSignature,
   generateWebhookSecret,
   deliverWebhook,
   triggerWebhooks,
+  findWebhooksForLink,
+  setWebhookDeliveryLogger,
 } from './webhook.js';
+import { db } from './database.js';
 import type { Webhook, WebhookPayload } from '../types/index.js';
 
 // Helper to build a Webhook fixture
@@ -353,17 +363,51 @@ describe('triggerWebhooks', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
-  it('calls logDelivery with webhookId and result', async () => {
+  it('calls logDelivery with webhookId, result and the payload sent', async () => {
     const mockFetch = vi.fn().mockResolvedValue(mockResponse(true, 200, 'OK'));
     vi.stubGlobal('fetch', mockFetch);
 
     const logDelivery = vi.fn().mockResolvedValue(undefined);
     const webhook = makeWebhook({ id: 'wh-log' });
 
-    triggerWebhooks([webhook], 'click_event', 'evt-3', {}, logDelivery);
+    triggerWebhooks([webhook], 'click_event', 'evt-3', { foo: 'bar' }, logDelivery);
     await vi.runAllTimersAsync();
 
-    expect(logDelivery).toHaveBeenCalledWith('wh-log', expect.objectContaining({ success: true }));
+    expect(logDelivery).toHaveBeenCalledWith(
+      'wh-log',
+      expect.objectContaining({ success: true }),
+      expect.objectContaining({ event: 'click_event', event_id: 'evt-3', data: { foo: 'bar' } })
+    );
+  });
+
+  it('falls back to the logger set with setWebhookDeliveryLogger', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(mockResponse(true, 200, 'OK'));
+    vi.stubGlobal('fetch', mockFetch);
+
+    const logger = vi.fn().mockResolvedValue(undefined);
+    setWebhookDeliveryLogger(logger);
+    try {
+      triggerWebhooks([makeWebhook({ id: 'wh-default' })], 'click_event', 'evt-4', {});
+      await vi.runAllTimersAsync();
+    } finally {
+      setWebhookDeliveryLogger(undefined);
+    }
+
+    expect(logger).toHaveBeenCalledWith('wh-default', expect.objectContaining({ success: true }), expect.any(Object));
+  });
+
+  it('does not log when no logger is set', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(mockResponse(true, 200, 'OK'));
+    vi.stubGlobal('fetch', mockFetch);
+
+    const logger = vi.fn().mockResolvedValue(undefined);
+    setWebhookDeliveryLogger(logger);
+    setWebhookDeliveryLogger(undefined);
+
+    triggerWebhooks([makeWebhook()], 'click_event', 'evt-5', {});
+    await vi.runAllTimersAsync();
+
+    expect(logger).not.toHaveBeenCalled();
   });
 
   it('includes the timestamp in the payload', async () => {
@@ -376,5 +420,31 @@ describe('triggerWebhooks', () => {
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(body.timestamp).toBeDefined();
     expect(new Date(body.timestamp).toISOString()).toBe(body.timestamp);
+  });
+});
+
+describe('findWebhooksForLink', () => {
+  const mockDbQuery = db.query as Mock;
+
+  beforeEach(() => {
+    mockDbQuery.mockReset();
+  });
+
+  it('looks webhooks up through the link, by organization or else by user', async () => {
+    const rows = [makeWebhook({ id: 'wh-org', organization_id: 'org-1' })];
+    mockDbQuery.mockResolvedValueOnce({ rows });
+
+    const result = await findWebhooksForLink('link-1');
+
+    expect(result).toEqual(rows);
+    const [sql, params] = mockDbQuery.mock.calls[0];
+    expect(params).toEqual(['link-1']);
+    // An organization's webhook hears every link in the organization...
+    expect(sql).toMatch(/w\.organization_id IS NOT NULL AND w\.organization_id = l\.organization_id/);
+    // ...one without an organization only its own user's links...
+    expect(sql).toMatch(/w\.organization_id IS NULL AND w\.user_id = l\.user_id/);
+    // ...and an unowned one (no accounts) only unowned links.
+    expect(sql).toMatch(/w\.user_id IS NULL\s+AND l\.user_id IS NULL AND l\.organization_id IS NULL/);
+    expect(sql).toMatch(/w\.is_active = true/);
   });
 });

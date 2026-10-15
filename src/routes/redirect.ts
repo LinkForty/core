@@ -689,13 +689,10 @@ export async function redirectRoutes(
 
         // Trigger webhooks for click_event
         try {
-          const webhooksResult = await db.query(
-            'SELECT * FROM webhooks WHERE user_id = $1 AND is_active = true',
-            [link.user_id]
-          );
+          const { findWebhooksForLink, triggerWebhooks } = await import('../lib/webhook.js');
+          const webhooks = await findWebhooksForLink(link.id);
 
-          if (webhooksResult.rows.length > 0) {
-            const { triggerWebhooks } = await import('../lib/webhook.js');
+          if (webhooks.length > 0) {
 
             const clickEventData = {
               id: clickId,
@@ -718,10 +715,8 @@ export async function redirectRoutes(
               referrer,
             };
 
-            // Trigger webhooks without delivery logging (basic version)
-            // For delivery logging, use @linkforty/cloud premium features
             await triggerWebhooks(
-              webhooksResult.rows,
+              webhooks,
               'click_event',
               clickId,
               clickEventData

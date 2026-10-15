@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from '../lib/database.js';
 import { getClientIp } from '../lib/client-ip.js';
@@ -7,9 +7,10 @@ import {
   generateFingerprintHash,
   storeFingerprintForClick,
   type FingerprintData,
+  type InstallMatchScope,
 } from '../lib/fingerprint.js';
 import { toDeepLinkPayload } from '../lib/deep-link-payload.js';
-import { triggerWebhooks } from '../lib/webhook.js';
+import { findWebhooksForLink, triggerWebhooks } from '../lib/webhook.js';
 import { evaluateLinkSafety, createOwnerSuspensionSelect } from '../lib/link-safety.js';
 import { parseUserAgent, getLocationFromIP, detectDevice } from '../lib/utils.js';
 import { emitClickEvent } from '../lib/event-emitter.js';
@@ -68,11 +69,25 @@ async function recoverInstall(
   return existing.rows[0] ?? null;
 }
 
+export interface SdkRouteOptions {
+  /**
+   * Narrow the clicks an install may be attributed to. A deployment serving
+   * several apps resolves the installing app — typically from `appToken` — and
+   * returns its organization, so the install can only match that app's links.
+   * Return null to match against every click, which is also what happens when
+   * the option is absent. A throw is logged and treated as null.
+   */
+  resolveInstallScope?: (
+    request: FastifyRequest,
+    body: { appToken?: string }
+  ) => Promise<InstallMatchScope | null> | InstallMatchScope | null;
+}
+
 /**
  * SDK Routes - Mobile SDK endpoints for deferred deep linking
  * These endpoints are used by the mobile SDKs to report installs and retrieve attribution data
  */
-export async function sdkRoutes(fastify: FastifyInstance) {
+export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptions = {}) {
   /**
    * POST /api/sdk/v1/install
    * Report app installation and retrieve deferred deep link data
@@ -136,12 +151,22 @@ export async function sdkRoutes(fastify: FastifyInstance) {
       platformVersion: body.platformVersion,
     };
 
+    let scope: InstallMatchScope = {};
+    if (options.resolveInstallScope) {
+      try {
+        scope = (await options.resolveInstallScope(request, { appToken: body.appToken })) ?? {};
+      } catch (error) {
+        fastify.log.warn({ err: error }, 'resolveInstallScope failed; matching unscoped');
+      }
+    }
+
     try {
       const result = await recordInstallEvent(
         fingerprintData,
         body.deviceId,
         body.attributionWindowHours,
-        { name: body.sdkName, version: body.sdkVersion }
+        { name: body.sdkName, version: body.sdkVersion },
+        scope
       );
 
       return reply.status(200).send({
@@ -407,16 +432,9 @@ export async function sdkRoutes(fastify: FastifyInstance) {
 
       // Trigger webhooks if install was attributed to a link
       if (install.link_id) {
-        // Query webhooks for the user who owns the link
-        const webhooksResult = await db.query(
-          `SELECT w.*
-           FROM webhooks w
-           INNER JOIN links l ON l.user_id = w.user_id
-           WHERE l.id = $1 AND w.is_active = true`,
-          [install.link_id]
-        );
+        const webhooks = await findWebhooksForLink(install.link_id);
 
-        if (webhooksResult.rows.length > 0) {
+        if (webhooks.length > 0) {
           const eventData = {
             eventId,
             installId: body.installId,
@@ -430,7 +448,7 @@ export async function sdkRoutes(fastify: FastifyInstance) {
           setImmediate(async () => {
             // Trigger conversion_event webhooks (attributed installs only)
             triggerWebhooks(
-              webhooksResult.rows,
+              webhooks,
               'conversion_event',
               eventId,
               eventData
@@ -440,7 +458,7 @@ export async function sdkRoutes(fastify: FastifyInstance) {
 
             // Trigger sdk_event webhooks (all SDK-tracked events)
             triggerWebhooks(
-              webhooksResult.rows,
+              webhooks,
               'sdk_event',
               eventId,
               eventData
@@ -705,12 +723,9 @@ export async function sdkRoutes(fastify: FastifyInstance) {
 
         // Trigger webhooks for click_event
         try {
-          const webhooksResult = await db.query(
-            'SELECT * FROM webhooks WHERE user_id = $1 AND is_active = true',
-            [link.user_id]
-          );
+          const webhooks = await findWebhooksForLink(link.id);
 
-          if (webhooksResult.rows.length > 0) {
+          if (webhooks.length > 0) {
             const clickEventData = {
               id: clickId,
               linkId: link.id,
@@ -730,7 +745,7 @@ export async function sdkRoutes(fastify: FastifyInstance) {
             };
 
             await triggerWebhooks(
-              webhooksResult.rows,
+              webhooks,
               'click_event',
               clickId,
               clickEventData

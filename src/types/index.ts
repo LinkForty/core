@@ -195,7 +195,9 @@ export type WebhookEvent = 'click_event' | 'install_event' | 'conversion_event' 
  */
 export interface Webhook {
   id: string;
-  user_id: string;
+  user_id: string | null;
+  /** Set when the webhook belongs to an organization rather than a single user. */
+  organization_id?: string | null;
   name: string;
   url: string;
   secret: string;

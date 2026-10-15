@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { db } from './database.js';
 import type { Webhook, WebhookPayload, WebhookDeliveryResult, WebhookEvent } from '../types/index.js';
 
 /**
@@ -134,6 +135,51 @@ export async function deliverWebhook(
 }
 
 /**
+ * Records each delivery attempt, for a deployment that keeps a delivery log.
+ * Receives the payload as sent, so the log can show what the endpoint got.
+ */
+export type WebhookDeliveryLogger = (
+  webhookId: string,
+  result: WebhookDeliveryResult,
+  payload: WebhookPayload
+) => Promise<void>;
+
+let defaultDeliveryLogger: WebhookDeliveryLogger | undefined;
+
+/**
+ * Set the logger used for every delivery the server triggers on its own —
+ * clicks, installs and SDK events — when the caller passes none. Pass undefined
+ * to stop logging.
+ */
+export function setWebhookDeliveryLogger(logger: WebhookDeliveryLogger | undefined): void {
+  defaultDeliveryLogger = logger;
+}
+
+/**
+ * The active webhooks that should hear about events on a link.
+ *
+ * A webhook that belongs to an organization receives events for every link in
+ * that organization, whoever created the link. A webhook without one belongs to
+ * the user who created it and receives events for that user's links. A webhook
+ * with neither — the API used without accounts — receives events for links that
+ * have neither too.
+ */
+export async function findWebhooksForLink(linkId: string): Promise<Webhook[]> {
+  const result = await db.query(
+    `SELECT w.*
+     FROM links l
+     INNER JOIN webhooks w
+       ON (w.organization_id IS NOT NULL AND w.organization_id = l.organization_id)
+       OR (w.organization_id IS NULL AND w.user_id = l.user_id)
+       OR (w.organization_id IS NULL AND w.user_id IS NULL
+           AND l.user_id IS NULL AND l.organization_id IS NULL)
+     WHERE l.id = $1 AND w.is_active = true`,
+    [linkId]
+  );
+  return result.rows;
+}
+
+/**
  * Trigger webhooks for a specific event (fire and forget)
  */
 export async function triggerWebhooks(
@@ -141,7 +187,7 @@ export async function triggerWebhooks(
   event: WebhookEvent,
   eventId: string,
   data: any,
-  logDelivery?: (webhookId: string, result: WebhookDeliveryResult) => Promise<void>
+  logDelivery: WebhookDeliveryLogger | undefined = defaultDeliveryLogger
 ): Promise<void> {
   // Create webhook payload
   const payload: WebhookPayload = {
@@ -166,7 +212,7 @@ export async function triggerWebhooks(
       const result = await deliverWebhook(
         webhook,
         payload,
-        logDelivery ? (result) => logDelivery(webhook.id, result) : undefined
+        logDelivery ? (result) => logDelivery(webhook.id, result, payload) : undefined
       );
 
       if (!result.success) {
