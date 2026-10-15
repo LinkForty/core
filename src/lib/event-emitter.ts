@@ -45,6 +45,10 @@ export interface ClickEventData {
   // Additional metadata
   referer?: string;
   language?: string;
+  /** Query parameters the click arrived with, other than UTM and LinkForty's own. */
+  linkParams?: Record<string, string>;
+  /** Whether the click was classified as a bot or link previewer. */
+  isBot?: boolean;
 }
 
 /**
