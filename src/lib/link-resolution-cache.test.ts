@@ -43,4 +43,10 @@ describe('invalidateLinkResolutionCache', () => {
     await expect(invalidateLinkResolutionCache({ del } as any, 'abc')).resolves.toBeUndefined();
     expect(del).toHaveBeenCalledTimes(1);
   });
+
+  it("also clears the code's entry under its organization", async () => {
+    const del = vi.fn().mockResolvedValue(1);
+    await invalidateLinkResolutionCache({ del }, 'abc', 'mytemplate', 'org-1');
+    expect(del).toHaveBeenCalledWith('link:abc', 'link:mytemplate:abc', 'link:@org-1:abc');
+  });
 });

@@ -1,5 +1,6 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest } from 'fastify';
 import { db } from '../lib/database.js';
+import { resolveLinkScope, bareCodeOrderBy } from '../lib/link-lookup.js';
 
 /**
  * User-agents that get the Open Graph preview page instead of a redirect.
@@ -183,6 +184,39 @@ function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (m) => map[m]);
 }
 
+/**
+ * The active link a preview URL names, resolved the same way as the redirect
+ * (lib/link-lookup.ts).
+ */
+async function findPreviewLink(
+  request: FastifyRequest,
+  shortCode: string,
+  templateSlug?: string
+): Promise<any | null> {
+  if (templateSlug) {
+    const result = await db.query(
+      `SELECT l.* FROM links l
+       INNER JOIN link_templates t ON t.id = l.template_id
+       WHERE l.short_code = $1 AND t.slug = $2 AND l.is_active = true
+       AND (l.expires_at IS NULL OR l.expires_at > NOW())
+       LIMIT 1`,
+      [shortCode, templateSlug]
+    );
+    return result.rows[0] ?? null;
+  }
+
+  const scope = await resolveLinkScope(request);
+  const result = await db.query(
+    `SELECT l.* FROM links l
+     WHERE l.short_code = $1 AND l.is_active = true
+     AND (l.expires_at IS NULL OR l.expires_at > NOW())
+     ${bareCodeOrderBy(scope ? '$2' : undefined)}
+     LIMIT 1`,
+    scope ? [shortCode, scope] : [shortCode]
+  );
+  return result.rows[0] ?? null;
+}
+
 export async function previewRoutes(fastify: FastifyInstance) {
   /**
    * GET /:shortCode/preview
@@ -196,19 +230,12 @@ export async function previewRoutes(fastify: FastifyInstance) {
       : 'https://link.forty';
 
     try {
-      // Lookup link by short code
-      const result = await db.query(
-        `SELECT * FROM links
-         WHERE short_code = $1 AND is_active = true
-         AND (expires_at IS NULL OR expires_at > NOW())`,
-        [shortCode]
-      );
+      const link = await findPreviewLink(request, shortCode);
 
-      if (result.rows.length === 0) {
+      if (!link) {
         return reply.status(404).send('Link not found');
       }
 
-      const link = result.rows[0];
       const shortUrl = `${baseUrl}/${shortCode}`;
 
       // Return HTML with OG tags and auto-redirect
@@ -242,7 +269,10 @@ export async function previewRoutes(fastify: FastifyInstance) {
     }
 
     const userAgent = request.headers['user-agent'] || '';
-    const shortCode = path.split('/').pop() || '';
+    // `/{shortCode}` or `/{templateSlug}/{shortCode}`
+    const segments = path.split('/').filter(Boolean);
+    const shortCode = segments[segments.length - 1] || '';
+    const templateSlug = segments.length >= 2 ? segments[segments.length - 2] : undefined;
     const baseUrl = request.headers.host
       ? `${request.protocol}://${request.headers.host}`
       : 'https://link.forty';
@@ -250,16 +280,10 @@ export async function previewRoutes(fastify: FastifyInstance) {
     // If it's a social scraper, return OG preview HTML
     if (isSocialScraper(userAgent)) {
       try {
-        const result = await db.query(
-          `SELECT * FROM links
-           WHERE short_code = $1 AND is_active = true
-           AND (expires_at IS NULL OR expires_at > NOW())`,
-          [shortCode]
-        );
+        const link = await findPreviewLink(request, shortCode, templateSlug);
 
-        if (result.rows.length > 0) {
-          const link = result.rows[0];
-          const shortUrl = `${baseUrl}/${shortCode}`;
+        if (link) {
+          const shortUrl = templateSlug ? `${baseUrl}/${templateSlug}/${shortCode}` : `${baseUrl}/${shortCode}`;
 
           // Return HTML with OG tags, no auto-redirect for bots
           const html = generatePreviewHTML(link, shortUrl, false);

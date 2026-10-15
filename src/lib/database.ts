@@ -130,7 +130,7 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
       CREATE TABLE IF NOT EXISTS links (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID,
-        short_code VARCHAR(20) UNIQUE NOT NULL,
+        short_code VARCHAR(20) NOT NULL,
         original_url TEXT NOT NULL,
         title VARCHAR(255),
         description TEXT,
@@ -273,6 +273,37 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
         END IF;
       END $$;
     `);
+
+    // Short codes are unique per organization; links without one share a
+    // single namespace (lib/link-lookup.ts describes how URLs resolve).
+    // The per-organization index is created before any single-column unique
+    // constraint on short_code is dropped, so there is never a moment without
+    // one. idx_links_short_code_lookup serves lookups by code alone.
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_links_org_short_code
+      ON links ((COALESCE(organization_id, '00000000-0000-0000-0000-000000000000'::uuid)), short_code)
+    `);
+    await client.query('CREATE INDEX IF NOT EXISTS idx_links_short_code_lookup ON links(short_code)');
+    await client.query(`
+      DO $$
+      DECLARE
+        c record;
+      BEGIN
+        FOR c IN
+          SELECT con.conname
+          FROM pg_constraint con
+          WHERE con.conrelid = 'links'::regclass
+            AND con.contype = 'u'
+            AND con.conkey = ARRAY[(
+              SELECT attnum FROM pg_attribute
+              WHERE attrelid = 'links'::regclass AND attname = 'short_code'
+            )]::smallint[]
+        LOOP
+          EXECUTE format('ALTER TABLE links DROP CONSTRAINT %I', c.conname);
+        END LOOP;
+      END $$;
+    `);
+    await client.query('DROP INDEX IF EXISTS idx_links_short_code');
 
     // Add template_id column to links table
     await client.query(`
@@ -640,7 +671,6 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
     `);
 
     // Create indexes for performance
-    await client.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_links_short_code ON links(short_code)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_links_user_id ON links(user_id)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_links_created_at ON links(created_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_clicks_link_id ON click_events(link_id)');
