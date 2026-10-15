@@ -297,9 +297,9 @@ export async function linkRoutes(fastify: FastifyInstance) {
     const oldRow = oldLinkResult.rows[0];
     const oldTemplateSlug = await getTemplateSlug(oldRow?.template_id);
     const newTemplateSlug = await getTemplateSlug(link.template_id);
-    await invalidateLinkResolutionCache(fastify.redis, link.short_code, oldTemplateSlug);
+    await invalidateLinkResolutionCache(fastify.redis, link.short_code, oldTemplateSlug, link.organization_id);
     if (newTemplateSlug !== oldTemplateSlug) {
-      await invalidateLinkResolutionCache(fastify.redis, link.short_code, newTemplateSlug);
+      await invalidateLinkResolutionCache(fastify.redis, link.short_code, newTemplateSlug, link.organization_id);
     }
 
     return {
@@ -420,12 +420,12 @@ export async function linkRoutes(fastify: FastifyInstance) {
     let result;
     if (userId) {
       result = await db.query(
-        'DELETE FROM links WHERE id = $1 AND user_id = $2 RETURNING id, short_code, template_id',
+        'DELETE FROM links WHERE id = $1 AND user_id = $2 RETURNING id, short_code, template_id, organization_id',
         [id, userId]
       );
     } else {
       result = await db.query(
-        'DELETE FROM links WHERE id = $1 RETURNING id, short_code, template_id',
+        'DELETE FROM links WHERE id = $1 RETURNING id, short_code, template_id, organization_id',
         [id]
       );
     }
@@ -436,7 +436,7 @@ export async function linkRoutes(fastify: FastifyInstance) {
 
     const deleted = result.rows[0];
     const templateSlug = await getTemplateSlug(deleted.template_id);
-    await invalidateLinkResolutionCache(fastify.redis, deleted.short_code, templateSlug);
+    await invalidateLinkResolutionCache(fastify.redis, deleted.short_code, templateSlug, deleted.organization_id);
 
     return { success: true };
   });

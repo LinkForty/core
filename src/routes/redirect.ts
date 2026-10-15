@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { db } from '../lib/database.js';
+import { resolveLinkScope, bareCodeOrderBy, linkCacheKey, isCacheableResolution } from '../lib/link-lookup.js';
 import { getClientIp } from '../lib/client-ip.js';
 import { parseUserAgent, getLocationFromIP, buildRedirectUrl, detectDevice, resolveClickUtms, extractLinkParams } from '../lib/utils.js';
 import { storeFingerprintForClick, type FingerprintData } from '../lib/fingerprint.js';
@@ -342,8 +343,12 @@ export async function redirectRoutes(
   async function handleRedirect(request: any, reply: any, shortCode: string, templateSlug?: string) {
     let linkData: string | null = null;
 
-    // Build cache key (include template if present)
-    const cacheKey = templateSlug ? `link:${templateSlug}:${shortCode}` : `link:${shortCode}`;
+    // A template URL names its link outright; a bare code is resolved for the
+    // organization the request belongs to (lib/link-lookup.ts).
+    const scope = templateSlug
+      ? null
+      : await resolveLinkScope(request, (error) => fastify.log.warn({ err: error }, 'Link scope resolver failed'));
+    const cacheKey = linkCacheKey(shortCode, templateSlug, scope);
 
     // Try to get link from cache if Redis is available
     if (fastify.redis) {
@@ -373,6 +378,7 @@ export async function redirectRoutes(
           WHERE l.short_code = $1 AND t.slug = $2
           AND (l.is_active = true OR l.disabled_at IS NOT NULL)
           AND (l.expires_at IS NULL OR l.expires_at > NOW())
+          LIMIT 1
         `;
         params = [shortCode, templateSlug];
       } else {
@@ -387,8 +393,10 @@ export async function redirectRoutes(
           WHERE l.short_code = $1
           AND (l.is_active = true OR l.disabled_at IS NOT NULL)
           AND (l.expires_at IS NULL OR l.expires_at > NOW())
+          ${bareCodeOrderBy(scope ? '$2' : undefined)}
+          LIMIT 1
         `;
-        params = [shortCode];
+        params = scope ? [shortCode, scope] : [shortCode];
       }
 
       const result = await db.query(query, params);
@@ -400,7 +408,7 @@ export async function redirectRoutes(
       linkData = JSON.stringify(result.rows[0]);
 
       // Cache for 5 minutes if Redis is available
-      if (fastify.redis) {
+      if (fastify.redis && isCacheableResolution(result.rows[0], templateSlug, scope)) {
         try {
           await fastify.redis.setex(cacheKey, 300, linkData);
         } catch (error) {

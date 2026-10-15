@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from '../lib/database.js';
+import { resolveLinkScope, bareCodeOrderBy, linkCacheKey, isCacheableResolution } from '../lib/link-lookup.js';
 import { getClientIp } from '../lib/client-ip.js';
 import {
   recordInstallEvent,
@@ -542,8 +543,11 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
   async function handleResolve(request: any, reply: any, shortCode: string, templateSlug?: string) {
     let linkData: string | null = null;
 
-    // Build cache key (same pattern as redirect.ts)
-    const cacheKey = templateSlug ? `link:${templateSlug}:${shortCode}` : `link:${shortCode}`;
+    // Same resolution and cache keys as redirect.ts (lib/link-lookup.ts).
+    const scope = templateSlug
+      ? null
+      : await resolveLinkScope(request, (error) => fastify.log.warn({ err: error }, 'Link scope resolver failed'));
+    const cacheKey = linkCacheKey(shortCode, templateSlug, scope);
 
     // Try Redis cache first
     if (fastify.redis) {
@@ -569,6 +573,7 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
           WHERE l.short_code = $1 AND t.slug = $2
           AND l.is_active = true
           AND (l.expires_at IS NULL OR l.expires_at > NOW())
+          LIMIT 1
         `;
         params = [shortCode, templateSlug];
       } else {
@@ -580,8 +585,10 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
           LEFT JOIN organizations o ON l.organization_id = o.id
           WHERE l.short_code = $1 AND l.is_active = true
           AND (l.expires_at IS NULL OR l.expires_at > NOW())
+          ${bareCodeOrderBy(scope ? '$2' : undefined)}
+          LIMIT 1
         `;
-        params = [shortCode];
+        params = scope ? [shortCode, scope] : [shortCode];
       }
 
       const result = await db.query(query, params);
@@ -593,7 +600,7 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
       linkData = JSON.stringify(result.rows[0]);
 
       // Cache for 5 minutes
-      if (fastify.redis) {
+      if (fastify.redis && isCacheableResolution(result.rows[0], templateSlug, scope)) {
         try {
           await fastify.redis.setex(cacheKey, 300, linkData);
         } catch (error) {

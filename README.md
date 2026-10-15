@@ -447,13 +447,30 @@ SHORTLINK_DOMAIN=yourdomain.com
 
 Core does not create a `users` table. Authentication and user management are the consumer's responsibility. The `user_id` column on `links` and `webhooks` is optional (nullable, no foreign key) — use it for multi-tenant scoping when your auth layer provides a user identity.
 
+### Short codes and URL resolution
+
+Short codes are unique per organization. Links without an organization share one namespace, so a deployment that doesn't use organizations has a single set of codes. Template slugs are unique across the server.
+
+- `/{templateSlug}/{shortCode}` resolves to exactly one link.
+- `/{shortCode}` prefers the organization the request belongs to, then a link without a template, then the oldest link with that code.
+
+To tell Core which organization a request belongs to, for example by custom domain, register a resolver:
+
+```typescript
+import { setLinkScopeResolver } from '@linkforty/core';
+
+setLinkScopeResolver(async (request) => organizationIdForHost(request.headers.host) ?? null);
+```
+
+The redirect, SDK resolve and preview routes all use it. A resolver that throws is logged and treated as null.
+
 ### Links Table
 
 | Column                  | Type         | Description                              |
 |-------------------------|--------------|------------------------------------------|
 | id                      | UUID         | Primary key                              |
 | user_id                 | UUID         | Optional owner/tenant identifier         |
-| short_code              | VARCHAR(20)  | Unique short code                        |
+| short_code              | VARCHAR(20)  | Short code, unique per organization      |
 | original_url            | TEXT         | Original URL                             |
 | title                   | VARCHAR(255) | Link title                               |
 | description             | TEXT         | Link description                         |
