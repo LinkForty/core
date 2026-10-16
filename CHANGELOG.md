@@ -1,3 +1,7 @@
+## 1.35.0 (2026-10-16)
+
+* feat(portable): export and import LinkForty bundles (#73) ([172f415](https://github.com/LinkForty/core/commit/172f415)), closes [#73](https://github.com/LinkForty/core/issues/73)
+
 ## 1.34.0 (2026-10-16)
 
 * feat(events): click events carry the organization, query parameters and bot flag (#72) ([6b370d9](https://github.com/LinkForty/core/commit/6b370d9)), closes [#72](https://github.com/LinkForty/core/issues/72)
