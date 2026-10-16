@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { SCHEMA_INIT_LOCK_KEY, db, initializeDatabase } from './database.js';
 
 /**
@@ -90,4 +90,40 @@ describe.skipIf(!ADMIN_URL)('initializeDatabase schema lock', () => {
       await probe.end();
     }
   }, 30_000);
+});
+
+describe.skipIf(!ADMIN_URL)('idle connection errors', () => {
+  const scratchName = `lf_core_idle_error_${Date.now()}`;
+  let admin: pg.Client;
+
+  beforeAll(async () => {
+    admin = new pg.Client({ connectionString: ADMIN_URL });
+    await admin.connect();
+    await admin.query(`CREATE DATABASE ${scratchName}`);
+  }, 30_000);
+
+  afterAll(async () => {
+    await db?.end().catch(() => undefined);
+    await admin.query(`DROP DATABASE IF EXISTS ${scratchName} WITH (FORCE)`);
+    await admin.end();
+  }, 30_000);
+
+  it('keeps the process alive when the server closes an idle connection, and serves the next query', async () => {
+    const url = new URL(ADMIN_URL as string);
+    url.pathname = `/${scratchName}`;
+    await initializeDatabase({ url: url.toString(), pool: { min: 1, max: 2 } });
+    await db.query('SELECT 1');
+    expect(db.idleCount).toBeGreaterThan(0);
+
+    // No listener of the test's own: an unhandled pool error here would fail
+    // the run (and exit a server).
+    await admin.query(
+      `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()`,
+      [scratchName]
+    );
+    // The pool drops each closed connection once it has reported the error.
+    await vi.waitFor(() => expect(db.totalCount).toBe(0), { timeout: 10_000 });
+
+    expect((await db.query('SELECT 1 AS ok')).rows[0].ok).toBe(1);
+  }, 60_000);
 });

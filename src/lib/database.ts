@@ -59,6 +59,14 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
     max: options.pool?.max || 10,
   });
 
+  // An idle connection can be closed under the pool at any time: a database
+  // restart or failover, a connection limit, an administrator. The pool reports
+  // it here and replaces the connection on next use. Without a listener Node
+  // treats the event as an uncaught error and exits the process.
+  db.on('error', (error) => {
+    console.error('Database connection lost while idle; it will be replaced:', error.message);
+  });
+
   const client = await connectWithRetry();
 
   // Serialise schema initialisation across processes.
