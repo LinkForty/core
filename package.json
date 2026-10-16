@@ -4,6 +4,9 @@
   "type": "module",
   "description": "Open-source deeplink management engine with device detection and analytics",
   "main": "dist/index.js",
+  "bin": {
+    "linkforty": "dist/cli.js"
+  },
   "types": "dist/index.d.ts",
   "license": "AGPL-3.0-only",
   "repository": {
