@@ -1,3 +1,7 @@
+## 1.34.0 (2026-10-16)
+
+* feat(events): click events carry the organization, query parameters and bot flag (#72) ([6b370d9](https://github.com/LinkForty/core/commit/6b370d9)), closes [#72](https://github.com/LinkForty/core/issues/72)
+
 ## 1.33.0 (2026-10-15)
 
 * feat(links): per-organization short codes for applications that assign organizations (#71) ([e66a259](https://github.com/LinkForty/core/commit/e66a259)), closes [#71](https://github.com/LinkForty/core/issues/71)
