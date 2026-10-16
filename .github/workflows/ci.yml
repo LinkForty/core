@@ -71,20 +71,6 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Generate coverage report
-        if: matrix.node == '20'
-        run: npm test -- --coverage
-
-      - name: Upload coverage reports to Codecov
-        if: matrix.node == '20'
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage/lcov.info
-          fail_ci_if_error: false
-          flags: unittests
-          name: codecov-umbrella
-
   test-with-database:
     name: Test (with database)
     runs-on: ubuntu-latest
@@ -122,12 +108,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests against Postgres
+      # Coverage comes from this job because it is the only run where every
+      # test executes: the database-backed suites skip themselves elsewhere.
+      - name: Run tests against Postgres, with coverage
         env:
           # The suite creates and drops a scratch database, so this user needs
           # CREATEDB. The default superuser has it.
           DATABASE_URL: postgresql://linkforty:linkforty@localhost:5432/linkforty
-        run: npm test
+        run: npm test -- --coverage
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          fail_ci_if_error: false
+          flags: unittests
+          name: codecov-umbrella
 
   build:
     name: Build Package

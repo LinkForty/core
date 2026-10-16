@@ -83,6 +83,7 @@ export * from './lib/database.js';
 export * from './lib/fingerprint.js';
 export * from './lib/webhook.js';
 export * from './lib/link-lookup.js';
+export * from './lib/portable/index.js';
 export * from './lib/link-safety.js';
 export * from './lib/launchpad.js';
 export * from './lib/event-emitter.js';
