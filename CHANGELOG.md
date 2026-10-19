@@ -1,3 +1,7 @@
+## <small>1.35.1 (2026-10-19)</small>
+
+* fix(fingerprint): normalize the language and bound device fields before storage (#74) ([c457612](https://github.com/LinkForty/core/commit/c457612)), closes [#74](https://github.com/LinkForty/core/issues/74)
+
 ## 1.35.0 (2026-10-16)
 
 * feat(portable): export and import LinkForty bundles (#73) ([172f415](https://github.com/LinkForty/core/commit/172f415)), closes [#73](https://github.com/LinkForty/core/issues/73)
