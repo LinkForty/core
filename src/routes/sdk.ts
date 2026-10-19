@@ -17,6 +17,12 @@ import { parseUserAgent, getLocationFromIP, detectDevice } from '../lib/utils.js
 import { emitClickEvent } from '../lib/event-emitter.js';
 import { classifyBot, edgeBotSignal } from '../lib/bot-detection.js';
 
+/** SDK name or version: cut to the 50 characters stored, never rejected. Empty → undefined. */
+const sdkMetadataField = z
+  .string()
+  .optional()
+  .transform((value) => value?.trim().slice(0, 50) || undefined);
+
 /**
  * An event arrived for an install this server does not have. Put the install
  * back rather than refusing the event.
@@ -124,11 +130,11 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
       platformVersion: z.string().optional(),
       deviceId: z.string().optional(),
       attributionWindowHours: z.number().optional(),
-      // SDK identity for health/version diagnostics. Free-form by
+      // SDK identity for version-health diagnostics. Free-form by
       // design: a consumer tolerates/normalizes non-semver versions — we never
       // reject a request over this metadata. Empty → null.
-      sdkName: z.string().max(50).optional(),
-      sdkVersion: z.string().max(50).optional(),
+      sdkName: sdkMetadataField,
+      sdkVersion: sdkMetadataField,
       // Public app token shipped in SDK app bundles to scope organic
       // installs to the right org in multi-tenant deployments. A multi-tenant
       // host reads it to route the install to the correct tenant; self-hosted
@@ -328,8 +334,8 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
       // SDK identity for version-health diagnostics. Free-form by
       // design: a consumer tolerates/normalizes non-semver versions — we never
       // reject a request over this metadata. Empty → null.
-      sdkName: z.string().max(50).optional(),
-      sdkVersion: z.string().max(50).optional(),
+      sdkName: sdkMetadataField,
+      sdkVersion: sdkMetadataField,
     });
 
     const body = schema.parse(request.body);

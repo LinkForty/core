@@ -111,6 +111,93 @@ export function generateFingerprintHash(data: FingerprintData): string {
 }
 
 /**
+ * Column sizes of the fingerprint fields in `device_fingerprints` and
+ * `install_events`. Values arrive from devices and browsers, so they are
+ * bounded here rather than trusted to fit.
+ */
+const MAX_TIMEZONE_LENGTH = 100;
+const MAX_PLATFORM_LENGTH = 50;
+const MAX_PLATFORM_VERSION_LENGTH = 50;
+const MAX_DEVICE_ID_LENGTH = 255;
+const MAX_SDK_FIELD_LENGTH = 50;
+const MAX_SCREEN_DIMENSION = 100_000;
+
+/**
+ * Reduce a locale identifier to `language` or `language-REGION`.
+ *
+ * Platforms report locales in several shapes: BCP 47 tags with script and
+ * extension subtags (`en-ES-u-fw-mon-mu-celsius`, `zh-Hans-CN`), ICU
+ * identifiers with keywords (`en_GB@rg=eszzzz`), and POSIX names
+ * (`en_US.UTF-8`). Matching compares only the language, and storage holds at
+ * most ten characters, so everything after the region is dropped:
+ *
+ *   en-ES-u-fw-mon-mu-celsius → en-ES
+ *   en_GB@rg=eszzzz           → en-GB
+ *   zh-Hans-CN                → zh-CN
+ *   es-419                    → es-419
+ *
+ * Returns undefined for anything that does not start with a 2–3 letter
+ * language subtag (including the `*` wildcard of an Accept-Language header).
+ */
+export function normalizeLanguageTag(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const subtags = value.trim().split(/[@.]/)[0].split(/[-_]/);
+  const language = subtags[0];
+  if (!/^[a-z]{2,3}$/i.test(language)) return undefined;
+
+  let region: string | undefined;
+  for (const subtag of subtags.slice(1)) {
+    // A single-character subtag starts an extension or private-use section.
+    if (subtag.length <= 1) break;
+    if (/^[a-z]{2}$/i.test(subtag) || /^\d{3}$/.test(subtag)) {
+      region = subtag.toUpperCase();
+      break;
+    }
+  }
+  return region ? `${language.toLowerCase()}-${region}` : language.toLowerCase();
+}
+
+/** A string cut to `max` characters, or undefined when it is not a non-empty string. */
+function boundString(value: unknown, max: number): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, max) : undefined;
+}
+
+/** A positive whole number of pixels, or undefined. */
+function boundScreenDimension(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+  const rounded = Math.round(value);
+  return rounded > 0 && rounded <= MAX_SCREEN_DIMENSION ? rounded : undefined;
+}
+
+/**
+ * Fingerprint data with every field in a shape its column accepts: the
+ * language normalized, text cut to the column size, and screen dimensions
+ * whole numbers. Applied before hashing, matching and storage, so an unusual
+ * value from a device never fails the request that carries it.
+ */
+export function normalizeFingerprintData(data: FingerprintData): FingerprintData {
+  return {
+    ipAddress: data.ipAddress,
+    userAgent: typeof data.userAgent === 'string' ? data.userAgent : '',
+    timezone: boundString(data.timezone, MAX_TIMEZONE_LENGTH),
+    language: normalizeLanguageTag(data.language),
+    screenWidth: boundScreenDimension(data.screenWidth),
+    screenHeight: boundScreenDimension(data.screenHeight),
+    platform: boundString(data.platform, MAX_PLATFORM_LENGTH),
+    platformVersion: boundString(data.platformVersion, MAX_PLATFORM_VERSION_LENGTH),
+  };
+}
+
+/** A whole number of hours that fits the column, or the default. */
+function normalizeAttributionWindowHours(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_ATTRIBUTION_WINDOW_HOURS;
+  const hours = Math.round(value);
+  return hours > 0 && hours <= 2_147_483_647 ? hours : DEFAULT_ATTRIBUTION_WINDOW_HOURS;
+}
+
+/**
  * Normalize IP address for comparison
  * Handles IPv4 and IPv6, removes subnet variations
  */
@@ -575,8 +662,9 @@ export async function matchInstallToClick(
  */
 export async function storeFingerprintForClick(
   clickId: string,
-  fingerprintData: FingerprintData
+  input: FingerprintData
 ): Promise<void> {
+  const fingerprintData = normalizeFingerprintData(input);
   const fingerprintHash = generateFingerprintHash(fingerprintData);
 
   await db.query(
@@ -611,9 +699,9 @@ export async function storeFingerprintForClick(
  * Record an install event and attempt to match it to a click
  */
 export async function recordInstallEvent(
-  fingerprintData: FingerprintData,
+  input: FingerprintData,
   deviceId?: string,
-  attributionWindowHours: number = DEFAULT_ATTRIBUTION_WINDOW_HOURS,
+  requestedWindowHours: number = DEFAULT_ATTRIBUTION_WINDOW_HOURS,
   sdk?: { name?: string | null; version?: string | null },
   scope: InstallMatchScope = {}
 ): Promise<{
@@ -621,6 +709,8 @@ export async function recordInstallEvent(
   match: FingerprintMatch | null;
   deepLinkData: DeepLinkPayload | null;
 }> {
+  const fingerprintData = normalizeFingerprintData(input);
+  const attributionWindowHours = normalizeAttributionWindowHours(requestedWindowHours);
   const fingerprintHash = generateFingerprintHash(fingerprintData);
 
   // Attempt to match install to a click
@@ -672,10 +762,10 @@ export async function recordInstallEvent(
       fingerprintData.screenHeight || null,
       fingerprintData.platform || null,
       fingerprintData.platformVersion || null,
-      deviceId || null,
+      boundString(deviceId, MAX_DEVICE_ID_LENGTH) ?? null,
       match ? JSON.stringify({}) : JSON.stringify({}), // Will be populated from link data
-      sdk?.name || null,
-      sdk?.version || null,
+      boundString(sdk?.name, MAX_SDK_FIELD_LENGTH) ?? null,
+      boundString(sdk?.version, MAX_SDK_FIELD_LENGTH) ?? null,
       attributionMethod,
       matchedFactors,
     ]

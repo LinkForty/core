@@ -576,3 +576,133 @@ describe('recordInstallEvent', () => {
     expect(mockDbQuery.mock.calls[0][1]).toContain('org-9');
   });
 });
+
+describe('normalizeLanguageTag', () => {
+  it.each([
+    ['en-US', 'en-US'],
+    ['en', 'en'],
+    ['EN-us', 'en-US'],
+    ['es-419', 'es-419'],
+    // Android toLanguageTag() with regional preferences
+    ['en-ES-u-fw-mon-mu-celsius', 'en-ES'],
+    ['de-DE-u-mu-fahrenhe', 'de-DE'],
+    // iOS Locale.identifier
+    ['en_US', 'en-US'],
+    ['en_GB@rg=eszzzz', 'en-GB'],
+    ['en_US@calendar=japanese', 'en-US'],
+    ['en@rg=eszzzz', 'en'],
+    // Script subtags
+    ['zh-Hans-CN', 'zh-CN'],
+    ['zh_Hant_TW', 'zh-TW'],
+    ['zh-Hans', 'zh'],
+    ['az-Latn-AZ', 'az-AZ'],
+    // POSIX
+    ['en_US.UTF-8', 'en-US'],
+    // Three-letter language, variant subtag, private use
+    ['fil-PH', 'fil-PH'],
+    ['ca-ES-valencia', 'ca-ES'],
+    ['en-x-private', 'en'],
+    ['  fr-FR  ', 'fr-FR'],
+  ])('%s → %s', (input, expected) => {
+    expect(fingerprint.normalizeLanguageTag(input)).toBe(expected);
+  });
+
+  it.each([['*'], [''], ['1234'], ['english-US'], ['-US']])('rejects %j', (input) => {
+    expect(fingerprint.normalizeLanguageTag(input)).toBeUndefined();
+  });
+
+  it('rejects non-strings', () => {
+    expect(fingerprint.normalizeLanguageTag(undefined)).toBeUndefined();
+    expect(fingerprint.normalizeLanguageTag(['en-US'])).toBeUndefined();
+    expect(fingerprint.normalizeLanguageTag(42)).toBeUndefined();
+  });
+
+  it('never exceeds the 10-character column', () => {
+    const long = 'en-ES-u-fw-mon-mu-celsius-x-' + 'a'.repeat(200);
+    expect(fingerprint.normalizeLanguageTag(long)!.length).toBeLessThanOrEqual(10);
+  });
+});
+
+describe('normalizeFingerprintData', () => {
+  it('leaves an ordinary fingerprint unchanged', () => {
+    expect(fingerprint.normalizeFingerprintData(baseFingerprint)).toEqual(baseFingerprint);
+  });
+
+  it('bounds every text field to its column and drops unusable numbers', () => {
+    const result = fingerprint.normalizeFingerprintData({
+      ...baseFingerprint,
+      timezone: 'T'.repeat(150),
+      language: 'en-ES-u-fw-mon-mu-celsius',
+      platform: 'P'.repeat(80),
+      platformVersion: 'V'.repeat(80),
+      screenWidth: 1080.6,
+      screenHeight: 99_999_999_999,
+    });
+    expect(result.timezone).toHaveLength(100);
+    expect(result.language).toBe('en-ES');
+    expect(result.platform).toHaveLength(50);
+    expect(result.platformVersion).toHaveLength(50);
+    expect(result.screenWidth).toBe(1081);
+    expect(result.screenHeight).toBeUndefined();
+  });
+
+  it('drops query values that arrived as arrays', () => {
+    const result = fingerprint.normalizeFingerprintData({
+      ...baseFingerprint,
+      timezone: ['UTC', 'UTC'] as unknown as string,
+      language: ['en', 'fr'] as unknown as string,
+    });
+    expect(result.timezone).toBeUndefined();
+    expect(result.language).toBeUndefined();
+  });
+});
+
+describe('storage of fingerprint fields', () => {
+  beforeEach(() => {
+    mockDbQuery.mockReset();
+  });
+
+  it('stores a click fingerprint with the language reduced to language-region', async () => {
+    mockDbQuery.mockResolvedValueOnce({ rows: [] });
+
+    await fingerprint.storeFingerprintForClick('click-1', {
+      ...baseFingerprint,
+      language: 'en-ES-u-fw-mon-mu-celsius',
+    });
+
+    const params = mockDbQuery.mock.calls[0][1];
+    expect(params[5]).toBe('en-ES'); // language/$6
+    expect(params[1]).toBe(
+      fingerprint.generateFingerprintHash({ ...baseFingerprint, language: 'en-ES' })
+    );
+  });
+
+  it('records an install whose locale carries extensions and keywords', async () => {
+    mockDbQuery.mockResolvedValueOnce({ rows: [] }); // matchInstallToClick -> no match
+    mockDbQuery.mockResolvedValueOnce({ rows: [{ id: 'install-locale', deep_link_data: {} }] });
+
+    await fingerprint.recordInstallEvent(
+      { ...baseFingerprint, language: 'en_GB@rg=eszzzz', screenWidth: 393.5 },
+      'd'.repeat(400),
+      12.4,
+      { name: 'n'.repeat(80), version: ' 2.0.0 ' }
+    );
+
+    const params = mockDbQuery.mock.calls[1][1];
+    expect(params[4]).toBe(12); // attribution_window_hours/$5
+    expect(params[8]).toBe('en-GB'); // language/$9
+    expect(params[9]).toBe(394); // screen_width/$10
+    expect(params[13]).toHaveLength(255); // device_id/$14
+    expect(params[15]).toHaveLength(50); // sdk_name/$16
+    expect(params[16]).toBe('2.0.0'); // sdk_version/$17
+  });
+
+  it('falls back to the default window for an unusable attribution window', async () => {
+    mockDbQuery.mockResolvedValueOnce({ rows: [] });
+    mockDbQuery.mockResolvedValueOnce({ rows: [{ id: 'install-window', deep_link_data: {} }] });
+
+    await fingerprint.recordInstallEvent(baseFingerprint, undefined, -5);
+
+    expect(mockDbQuery.mock.calls[1][1][4]).toBe(fingerprint.DEFAULT_ATTRIBUTION_WINDOW_HOURS);
+  });
+});
