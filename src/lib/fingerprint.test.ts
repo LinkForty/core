@@ -309,6 +309,75 @@ describe('calculateConfidenceScore - deferred install (SDK vs browser)', () => {
     expect(score).toBeLessThan(fingerprint.CONFIDENCE_THRESHOLD);
   });
 
+  describe('Safari on iOS 26 and later, which reports iOS 18 in its user agent', () => {
+    // Safari 26 on iOS 26.2. No timezone or screen: a plain redirect click.
+    const frozenClick = {
+      ipAddress: '103.28.14.77',
+      userAgent:
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1',
+      language: 'en-US',
+      platform: 'ios',
+      platformVersion: '18.7',
+    };
+    const install26 = {
+      ...sdkInstall,
+      userAgent: 'MNC Play/1.0.0 iOS/26.2',
+      platformVersion: '26.2',
+      language: 'en-US',
+    };
+
+    it('matches the version of an SDK reporting iOS 26', () => {
+      const { score, matchedFactors } = fingerprint.calculateConfidenceScore(install26, frozenClick);
+
+      expect(matchedFactors).toEqual(['ip', 'platform', 'platform_version', 'language']);
+      expect(score).toBe(80);
+    });
+
+    it('matches whichever side the click is on', () => {
+      const { matchedFactors } = fingerprint.calculateConfidenceScore(frozenClick, install26);
+      expect(matchedFactors).toContain('platform_version');
+    });
+
+    it('still matches an SDK reporting iOS 18', () => {
+      const install18 = { ...install26, userAgent: 'MNC Play/1.0.0 iOS/18.7', platformVersion: '18.7' };
+
+      const { matchedFactors } = fingerprint.calculateConfidenceScore(install18, frozenClick);
+      expect(matchedFactors).toContain('platform_version');
+    });
+
+    it('does not match an SDK reporting an iOS version below 18', () => {
+      const install17 = { ...install26, userAgent: 'MNC Play/1.0.0 iOS/17.5', platformVersion: '17.5' };
+
+      const { matchedFactors } = fingerprint.calculateConfidenceScore(install17, frozenClick);
+      expect(matchedFactors).not.toContain('platform_version');
+    });
+
+    it('does not let an older browser version match a newer SDK', () => {
+      const click17 = {
+        ...frozenClick,
+        userAgent: safariClick.userAgent,
+        platformVersion: '17.5',
+      };
+
+      const { matchedFactors } = fingerprint.calculateConfidenceScore(install26, click17);
+      expect(matchedFactors).not.toContain('platform_version');
+    });
+
+    it('leaves Android versions compared exactly', () => {
+      const chromeClick = {
+        ...frozenClick,
+        userAgent:
+          'Mozilla/5.0 (Linux; Android 18; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        platform: 'android',
+        platformVersion: '18',
+      };
+      const android19 = { ...install26, userAgent: 'MNC Play/1.0.0 Android/19', platform: 'Android', platformVersion: '19' };
+
+      const { matchedFactors } = fingerprint.calculateConfidenceScore(android19, chromeClick);
+      expect(matchedFactors).not.toContain('platform_version');
+    });
+  });
+
   it('still requires exact screen equality between two browsers', () => {
     const a = { ...safariClick, screenWidth: 800, screenHeight: 600 };
     const b = { ...safariClick, screenWidth: 1200, screenHeight: 900 };

@@ -400,6 +400,23 @@ function majorVersion(value?: string): string {
 }
 
 /**
+ * The iOS major version Safari reports in its user agent on iOS 26 and later.
+ * WebKit froze the OS token at 18 (18_6, then 18_7) and intends to keep it there,
+ * so a browser on iOS that says 18 may be running any version from 18 up.
+ */
+const FROZEN_IOS_BROWSER_MAJOR = 18;
+
+/**
+ * Whether a browser's iOS major version is consistent with the one an SDK
+ * reports. Equal versions match; a browser reporting the frozen major also
+ * matches an SDK reporting that major or later.
+ */
+function iosVersionsMatch(browserMajor: string, sdkMajor: string): boolean {
+  if (browserMajor === sdkMajor) return true;
+  return Number(browserMajor) === FROZEN_IOS_BROWSER_MAJOR && Number(sdkMajor) >= FROZEN_IOS_BROWSER_MAJOR;
+}
+
+/**
  * Whether two screen sizes describe the same display.
  *
  * Browsers report CSS pixels while the SDKs report native pixels, so across
@@ -487,8 +504,12 @@ export function calculateConfidenceScore(
 
       const version1 = majorVersion(sdk1 ? sdk1.version : fingerprint1.platformVersion);
       const version2 = majorVersion(sdk2 ? sdk2.version : fingerprint2.platformVersion);
+      const versionsMatch =
+        crossContext && platform1 === 'ios'
+          ? iosVersionsMatch(sdk1 ? version2 : version1, sdk1 ? version1 : version2)
+          : version1 === version2;
 
-      if (version1 && version1 === version2) {
+      if (version1 && version2 && versionsMatch) {
         score += CROSS_CONTEXT_WEIGHTS.PLATFORM_VERSION;
         matchedFactors.push('platform_version');
       }
