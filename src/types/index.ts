@@ -69,6 +69,10 @@ export interface Link {
   /** Launchpad page override: 'inherit' (workspace setting), 'on', or 'off'. */
   launchpad_mode?: 'inherit' | 'on' | 'off';
   attribution_window_hours?: number;
+  /** Install attribution window in minutes; replaces the hours when set. */
+  attribution_window_minutes?: number | null;
+  /** A click hands this link to one install only. */
+  one_install_per_click?: boolean;
   is_active: boolean;
   expires_at?: string;
   created_at: string;
@@ -144,6 +148,9 @@ export interface CreateLinkRequest {
   ogImageUrl?: string;
   ogType?: string;
   attributionWindowHours?: number;
+  /** 5–129600. Send this or attributionWindowHours, not both. */
+  attributionWindowMinutes?: number;
+  oneInstallPerClick?: boolean;
   customCode?: string;
   expiresAt?: string;
 }

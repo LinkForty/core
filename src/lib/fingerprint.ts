@@ -31,6 +31,8 @@ export interface FingerprintMatch {
    * none.
    */
   linkParams?: Record<string, string> | null;
+  /** The link hands a click to one install only (`links.one_install_per_click`). */
+  oneInstallPerClick?: boolean;
 }
 
 /**
@@ -570,12 +572,16 @@ export function calculateConfidenceScore(
  * Match an install event to potential click events via probabilistic fingerprinting
  * Returns the best match above confidence threshold within attribution window
  *
- * Note: Uses link-specific attribution windows - each link can have its own window
+ * Each link has its own window: `attribution_window_minutes` when set, else
+ * `attribution_window_hours`. A click on a link with `one_install_per_click`
+ * is skipped once an install has been matched to it. `excludeClickIds` skips
+ * clicks the caller has already ruled out.
  */
 export async function matchInstallToClick(
   installFingerprint: FingerprintData,
   attributionWindowHours: number = DEFAULT_ATTRIBUTION_WINDOW_HOURS,
-  scope: InstallMatchScope = {}
+  scope: InstallMatchScope = {},
+  excludeClickIds: string[] = []
 ): Promise<FingerprintMatch | null> {
   if (scope.matchNothing) {
     return null;
@@ -594,20 +600,23 @@ export async function matchInstallToClick(
     return null;
   }
 
-  // Query recent click events within maximum possible attribution window (90 days)
-  // We'll validate against each link's specific window during matching
-  const maxWindowHours = 2160; // 90 days
-  const cutoffTime = new Date(Date.now() - maxWindowHours * 60 * 60 * 1000);
-
-  const params: unknown[] = [cutoffTime, network];
+  const params: unknown[] = [network];
   let scopeFilter = '';
   if (scope.organizationId) {
     params.push(scope.organizationId);
     scopeFilter = `AND l.organization_id = $${params.length}`;
   }
+  let excludeFilter = '';
+  if (excludeClickIds.length > 0) {
+    params.push(excludeClickIds);
+    excludeFilter = `AND ce.id <> ALL($${params.length}::uuid[])`;
+  }
 
   // Only links that would still open now can hand an install their data: an
   // expired, inactive or disabled link matches nothing, as it resolves nothing.
+  // Each link's window is applied here, on the database clock that stamped the
+  // click, so a window of a few minutes means what it says. The 90-day bound is
+  // the longest window a link can have.
   // The LIMIT only bounds work for a very busy network (a campus, an office);
   // it applies after the network filter, so ordinary traffic never reaches it.
   const clicksResult = await db.query(
@@ -616,7 +625,7 @@ export async function matchInstallToClick(
        ce.link_id,
        ce.clicked_at,
        ce.link_params,
-       l.attribution_window_hours,
+       l.one_install_per_click,
        df.ip_address,
        df.user_agent,
        df.timezone,
@@ -628,12 +637,18 @@ export async function matchInstallToClick(
      FROM device_fingerprints df
      INNER JOIN click_events ce ON ce.id = df.click_id
      INNER JOIN links l ON ce.link_id = l.id
-     WHERE df.ip_address <<= $2::cidr
-       AND ce.clicked_at >= $1
+     WHERE df.ip_address <<= $1::cidr
+       AND ce.clicked_at >= NOW() - INTERVAL '90 days'
+       AND ce.clicked_at >= NOW() - make_interval(mins => COALESCE(
+             l.attribution_window_minutes,
+             COALESCE(NULLIF(l.attribution_window_hours, 0), ${DEFAULT_ATTRIBUTION_WINDOW_HOURS}) * 60
+           ))
        AND l.is_active = true
        AND l.disabled_at IS NULL
        AND (l.expires_at IS NULL OR l.expires_at > NOW())
+       AND (l.one_install_per_click = false OR ce.install_matched_at IS NULL)
        ${scopeFilter}
+       ${excludeFilter}
      ORDER BY ce.clicked_at DESC
      LIMIT 1000`,
     params
@@ -643,23 +658,11 @@ export async function matchInstallToClick(
     return null;
   }
 
-  const installTime = new Date();
-
   // Calculate confidence score for each potential match
   let bestMatch: FingerprintMatch | null = null;
   let highestScore = 0;
 
   for (const row of clicksResult.rows) {
-    // Check if click is within the link's specific attribution window
-    const linkWindowHours = row.attribution_window_hours || DEFAULT_ATTRIBUTION_WINDOW_HOURS;
-    const clickTime = new Date(row.clicked_at);
-    const timeDiffHours = (installTime.getTime() - clickTime.getTime()) / (1000 * 60 * 60);
-
-    if (timeDiffHours > linkWindowHours) {
-      // Click is too old for this link's attribution window, skip it
-      continue;
-    }
-
     const clickFingerprint: FingerprintData = {
       ipAddress: row.ip_address,
       userAgent: row.user_agent,
@@ -686,11 +689,45 @@ export async function matchInstallToClick(
         matchedFactors,
         clickedAt: new Date(row.clicked_at),
         linkParams: row.link_params ?? null,
+        oneInstallPerClick: row.one_install_per_click === true,
       };
     }
   }
 
   return bestMatch;
+}
+
+/** How many times an install looks again after losing a click to another install. */
+const MAX_CLAIM_ATTEMPTS = 3;
+
+/**
+ * Match an install and record the click as matched. A click on a link with
+ * `one_install_per_click` goes to whichever install records it first; an
+ * install that loses it looks again without that click.
+ */
+async function matchAndClaimClick(
+  installFingerprint: FingerprintData,
+  attributionWindowHours: number,
+  scope: InstallMatchScope
+): Promise<FingerprintMatch | null> {
+  const taken: string[] = [];
+  for (let attempt = 0; attempt < MAX_CLAIM_ATTEMPTS; attempt++) {
+    const match = await matchInstallToClick(installFingerprint, attributionWindowHours, scope, taken);
+    if (!match) {
+      return null;
+    }
+    const claimed = await db.query(
+      `UPDATE click_events SET install_matched_at = NOW()
+       WHERE id = $1 AND install_matched_at IS NULL
+       RETURNING id`,
+      [match.clickId]
+    );
+    if (claimed.rowCount || !match.oneInstallPerClick) {
+      return match;
+    }
+    taken.push(match.clickId);
+  }
+  return null;
 }
 
 /**
@@ -750,7 +787,7 @@ export async function recordInstallEvent(
   const fingerprintHash = generateFingerprintHash(fingerprintData);
 
   // Attempt to match install to a click
-  const match = await matchInstallToClick(fingerprintData, attributionWindowHours, scope);
+  const match = await matchAndClaimClick(fingerprintData, attributionWindowHours, scope);
 
   // Attribution metadata for measurement: install attribution is
   // fingerprint-based, so the method is 'fingerprint' on a match and 'none'

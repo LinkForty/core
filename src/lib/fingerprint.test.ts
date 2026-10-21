@@ -457,30 +457,22 @@ describe('matchInstallToClick', () => {
     expect(result?.matchedFactors).toEqual(expect.arrayContaining(['ip', 'user_agent', 'timezone', 'language', 'screen']));
   });
 
-  it('skips clicks that are outside the attribution window', async () => {
-    const oldClickTime = new Date('2024-01-01T00:00:00Z');
+  it("applies each link's window, in minutes when set, on the database clock", async () => {
+    mockDbQuery.mockResolvedValueOnce({ rows: [] });
 
-    mockDbQuery.mockResolvedValueOnce({
-      rows: [
-        {
-          click_id: 'click-old',
-          link_id: 'link-old',
-          clicked_at: oldClickTime.toISOString(),
-          attribution_window_hours: 1,
-          ip_address: baseFingerprint.ipAddress,
-          user_agent: baseFingerprint.userAgent,
-          timezone: baseFingerprint.timezone,
-          language: baseFingerprint.language,
-          screen_width: baseFingerprint.screenWidth,
-          screen_height: baseFingerprint.screenHeight,
-          platform: baseFingerprint.platform,
-          platform_version: baseFingerprint.platformVersion,
-        },
-      ],
-    });
+    await fingerprint.matchInstallToClick(baseFingerprint);
 
-    const result = await fingerprint.matchInstallToClick(baseFingerprint);
-    expect(result).toBeNull();
+    const [sql] = mockDbQuery.mock.calls[0];
+    expect(sql).toMatch(/ce\.clicked_at >= NOW\(\) - make_interval\(mins => COALESCE\(\s*l\.attribution_window_minutes,/);
+    expect(sql).toMatch(/COALESCE\(NULLIF\(l\.attribution_window_hours, 0\), 168\) \* 60/);
+  });
+
+  it('skips a matched click on a link that hands a click to one install only', async () => {
+    mockDbQuery.mockResolvedValueOnce({ rows: [] });
+
+    await fingerprint.matchInstallToClick(baseFingerprint);
+
+    expect(mockDbQuery.mock.calls[0][0]).toMatch(/AND \(l\.one_install_per_click = false OR ce\.install_matched_at IS NULL\)/);
   });
 });
 
@@ -553,9 +545,10 @@ describe('matchInstallToClick — candidate selection', () => {
     await fingerprint.matchInstallToClick(baseFingerprint);
 
     const [sql, params] = mockDbQuery.mock.calls[0];
-    expect(sql).toMatch(/df\.ip_address <<= \$2::cidr/);
+    expect(sql).toMatch(/df\.ip_address <<= \$1::cidr/);
+    expect(sql).toMatch(/ORDER BY ce\.clicked_at DESC/);
     expect(sql).not.toMatch(/organization_id/);
-    expect(params).toEqual([expect.any(Date), '24.5.10.0/24']);
+    expect(params).toEqual(['24.5.10.0/24']);
   });
 
   it('limits candidates to the scoped organization', async () => {
@@ -564,8 +557,18 @@ describe('matchInstallToClick — candidate selection', () => {
     await fingerprint.matchInstallToClick(baseFingerprint, undefined, { organizationId: 'org-1' });
 
     const [sql, params] = mockDbQuery.mock.calls[0];
-    expect(sql).toMatch(/AND l\.organization_id = \$3/);
-    expect(params).toEqual([expect.any(Date), '24.5.10.0/24', 'org-1']);
+    expect(sql).toMatch(/AND l\.organization_id = \$2/);
+    expect(params).toEqual(['24.5.10.0/24', 'org-1']);
+  });
+
+  it('leaves out the clicks it is told to skip', async () => {
+    mockDbQuery.mockResolvedValueOnce({ rows: [] });
+
+    await fingerprint.matchInstallToClick(baseFingerprint, undefined, {}, ['click-1']);
+
+    const [sql, params] = mockDbQuery.mock.calls[0];
+    expect(sql).toMatch(/AND ce\.id <> ALL\(\$2::uuid\[\]\)/);
+    expect(params).toEqual(['24.5.10.0/24', ['click-1']]);
   });
 
   it('matches nothing, without querying, when the scope says so', async () => {
@@ -648,6 +651,65 @@ describe('recordInstallEvent', () => {
     });
 
     expect(mockDbQuery.mock.calls[0][1]).toContain('org-9');
+  });
+});
+
+describe('recordInstallEvent — matching a click once', () => {
+  const clickRow = (clickId: string, oneInstallPerClick: boolean) => ({
+    click_id: clickId,
+    link_id: 'link-1',
+    clicked_at: new Date().toISOString(),
+    link_params: null,
+    one_install_per_click: oneInstallPerClick,
+    ip_address: baseFingerprint.ipAddress,
+    user_agent: baseFingerprint.userAgent,
+    timezone: baseFingerprint.timezone,
+    language: baseFingerprint.language,
+    screen_width: baseFingerprint.screenWidth,
+    screen_height: baseFingerprint.screenHeight,
+    platform: baseFingerprint.platform,
+    platform_version: baseFingerprint.platformVersion,
+  });
+
+  beforeEach(() => {
+    mockDbQuery.mockReset();
+    mockDbQuery.mockResolvedValue({ rows: [], rowCount: 0 });
+  });
+
+  it('records the click as matched', async () => {
+    mockDbQuery.mockResolvedValueOnce({ rows: [clickRow('click-1', false)] });
+    mockDbQuery.mockResolvedValueOnce({ rows: [{ id: 'click-1' }], rowCount: 1 });
+    mockDbQuery.mockResolvedValueOnce({ rows: [{ id: 'install-1', deep_link_data: {} }] });
+
+    const result = await fingerprint.recordInstallEvent(baseFingerprint);
+
+    expect(result.match?.clickId).toBe('click-1');
+    const [sql, params] = mockDbQuery.mock.calls[1];
+    expect(sql).toMatch(/UPDATE click_events SET install_matched_at = NOW\(\)\s+WHERE id = \$1 AND install_matched_at IS NULL/);
+    expect(params).toEqual(['click-1']);
+  });
+
+  it('still matches a click another install matched first, when the link allows it', async () => {
+    mockDbQuery.mockResolvedValueOnce({ rows: [clickRow('click-1', false)] });
+    mockDbQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    mockDbQuery.mockResolvedValueOnce({ rows: [{ id: 'install-2', deep_link_data: {} }] });
+
+    const result = await fingerprint.recordInstallEvent(baseFingerprint);
+
+    expect(result.match?.clickId).toBe('click-1');
+  });
+
+  it('looks again without a one-install click that another install took first', async () => {
+    mockDbQuery.mockResolvedValueOnce({ rows: [clickRow('click-1', true)] });
+    mockDbQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    mockDbQuery.mockResolvedValueOnce({ rows: [] });
+    mockDbQuery.mockResolvedValueOnce({ rows: [{ id: 'install-3', deep_link_data: {} }] });
+
+    const result = await fingerprint.recordInstallEvent(baseFingerprint);
+
+    expect(result.match).toBeNull();
+    expect(result.installId).toBe('install-3');
+    expect(mockDbQuery.mock.calls[2][1]).toEqual(['24.5.10.0/24', ['click-1']]);
   });
 });
 
