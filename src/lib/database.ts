@@ -49,6 +49,9 @@ export const SCHEMA_INIT_LOCK_KEY = 4977261;
 /** Advisory lock key held while building idx_fingerprints_ip. Stable across releases. */
 export const FINGERPRINT_IP_INDEX_LOCK_KEY = 4977262;
 
+/** Advisory lock key held while building idx_in_app_events_client_event. Stable across releases. */
+export const CLIENT_EVENT_INDEX_LOCK_KEY = 4977263;
+
 // Initialize database schema
 export async function initializeDatabase(options: DatabaseOptions = {}) {
   // Initialize pool
@@ -678,6 +681,18 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
       END $$;
     `);
 
+    // The SDK's id for an event, the same on every retry of it, so a repeat is
+    // recognized instead of stored twice. Null for events from SDKs that don't
+    // send one. Unique per install via idx_in_app_events_client_event.
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='in_app_events' AND column_name='client_event_id') THEN
+          ALTER TABLE in_app_events ADD COLUMN client_event_id UUID;
+        END IF;
+      END $$;
+    `);
+
     // Create indexes for performance
     await client.query('CREATE INDEX IF NOT EXISTS idx_links_user_id ON links(user_id)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_links_created_at ON links(created_at DESC)');
@@ -743,16 +758,31 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
     client.release();
   }
 
-  await ensureFingerprintIpIndex();
+  await ensureConcurrentIndex(
+    'idx_fingerprints_ip',
+    'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_fingerprints_ip ON device_fingerprints(ip_address)',
+    FINGERPRINT_IP_INDEX_LOCK_KEY,
+    'install matching will be slower'
+  );
+  await ensureConcurrentIndex(
+    'idx_in_app_events_client_event',
+    `CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_in_app_events_client_event
+       ON in_app_events(install_id, client_event_id) WHERE client_event_id IS NOT NULL`,
+    CLIENT_EVENT_INDEX_LOCK_KEY,
+    'an event arriving twice at the same moment may be stored twice'
+  );
 }
 
 /**
- * Index device_fingerprints by IP, which install matching selects candidate
- * clicks on (matchInstallToClick).
+ * Build an index on a table that takes writes all the time:
+ * - idx_fingerprints_ip: device_fingerprints by IP, which install matching
+ *   selects candidate clicks on (matchInstallToClick); a write on every click.
+ * - idx_in_app_events_client_event: one event per install and client event id;
+ *   a write on every in-app event. The event endpoint looks a repeat up before
+ *   inserting, so the index only settles two copies arriving at once.
  *
- * Built CONCURRENTLY because the table takes a write on every click and can be
- * large, and a plain CREATE INDEX would hold those writes
- * for the length of the build. That rules out the schema lock above: a
+ * Built CONCURRENTLY because these tables can be large, and a plain CREATE
+ * INDEX would hold their writes for the length of the build. That rules out the schema lock above: a
  * concurrent build waits for every older snapshot to finish, including that of
  * another instance blocked on the lock, which would wait on us in turn.
  *
@@ -760,15 +790,21 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
  * EXISTS would then skip forever, so an invalid one is dropped and rebuilt. A
  * build in progress also reads as invalid, hence the try-lock: only one instance
  * ever works on the index, and the others move on rather than wait. Failure is
- * logged, not thrown: matching is correct without the index, only slower.
+ * logged, not thrown: both work without their index, with the cost named in
+ * `withoutIndex`.
  */
-async function ensureFingerprintIpIndex(): Promise<void> {
+async function ensureConcurrentIndex(
+  name: string,
+  createSql: string,
+  lockKey: number,
+  withoutIndex: string
+): Promise<void> {
   let client: pg.PoolClient | undefined;
   let lockHeld = false;
 
   try {
     client = await db.connect();
-    const lock = await client.query('SELECT pg_try_advisory_lock($1) AS acquired', [FINGERPRINT_IP_INDEX_LOCK_KEY]);
+    const lock = await client.query('SELECT pg_try_advisory_lock($1) AS acquired', [lockKey]);
     lockHeld = lock.rows[0]?.acquired === true;
     if (!lockHeld) {
       return;
@@ -778,24 +814,23 @@ async function ensureFingerprintIpIndex(): Promise<void> {
       `SELECT i.indisvalid
        FROM pg_class c
        INNER JOIN pg_index i ON i.indexrelid = c.oid
-       WHERE c.relname = 'idx_fingerprints_ip'`
+       WHERE c.relname = $1`,
+      [name]
     );
     if (existing.rows[0]?.indisvalid) {
       return;
     }
     if (existing.rows[0]) {
-      await client.query('DROP INDEX CONCURRENTLY IF EXISTS idx_fingerprints_ip');
+      await client.query(`DROP INDEX CONCURRENTLY IF EXISTS ${name}`);
     }
-    await client.query(
-      'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_fingerprints_ip ON device_fingerprints(ip_address)'
-    );
+    await client.query(createSql);
   } catch (error) {
-    console.error('Could not build idx_fingerprints_ip; install matching will be slower:', error);
+    console.error(`Could not build ${name}; ${withoutIndex}:`, error);
   } finally {
     if (client) {
       if (lockHeld) {
         await client
-          .query('SELECT pg_advisory_unlock($1)', [FINGERPRINT_IP_INDEX_LOCK_KEY])
+          .query('SELECT pg_advisory_unlock($1)', [lockKey])
           .catch(() => undefined);
       }
       client.release();

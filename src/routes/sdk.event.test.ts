@@ -60,7 +60,7 @@ describe('POST /api/sdk/v1/event — last-click attribution stamp', () => {
     const insertCall = mockQuery.mock.calls[1];
     expect(insertCall[0]).toMatch(/INSERT INTO in_app_events/);
     expect(insertCall[0]).toMatch(/attributed_link_id/);
-    // params: install, name, dataJson, ts, link, click, openedAt, session
+    // params: install, name, dataJson, ts, link, click, openedAt, session, sdk name/version, client event id
     expect(insertCall[1]).toEqual([
       INSTALL_ID,
       'add_to_cart',
@@ -72,6 +72,7 @@ describe('POST /api/sdk/v1/event — last-click attribution stamp', () => {
       SESSION_ID,
       'react-native',
       '1.4.0',
+      null,
     ]);
 
     await app.close();
@@ -123,6 +124,7 @@ describe('POST /api/sdk/v1/event — last-click attribution stamp', () => {
       SESSION_ID,
       'react-native',
       '1.4.0',
+      null,
     ]);
 
     await app.close();
@@ -260,6 +262,89 @@ describe('POST /api/sdk/v1/event — an install the server no longer has', () =>
     expect(mockQuery.mock.calls).toHaveLength(2);
     expect(mockQuery.mock.calls[1][0]).toMatch(/INSERT INTO in_app_events/);
 
+    await app.close();
+  });
+});
+
+describe('POST /api/sdk/v1/event — a repeat of an event already stored', () => {
+  const CLIENT_EVENT_ID = '66666666-6666-4666-8666-666666666666';
+  const event = { installId: INSTALL_ID, eventName: 'purchase', clientEventId: CLIENT_EVENT_ID };
+
+  beforeEach(() => {
+    mockQuery.mockReset();
+  });
+
+  it('stores a first event with its client event id', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: INSTALL_ID, link_id: null }] }); // install
+    mockQuery.mockResolvedValueOnce({ rows: [] }); // no stored repeat
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: EVENT_ID }] }); // INSERT
+
+    const app = await buildApp();
+    const res = await app.inject({ method: 'POST', url: '/api/sdk/v1/event', payload: event });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ eventId: EVENT_ID, acknowledged: true });
+    const insert = mockQuery.mock.calls[2];
+    expect(insert[0]).toMatch(/INSERT INTO in_app_events/);
+    expect((insert[1] as unknown[]).at(-1)).toBe(CLIENT_EVENT_ID);
+    await app.close();
+  });
+
+  it('answers a repeat with the stored event and records nothing', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: INSTALL_ID, link_id: LINK_ID }] }); // install, attributed
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: EVENT_ID }] }); // stored repeat
+
+    const app = await buildApp();
+    const res = await app.inject({ method: 'POST', url: '/api/sdk/v1/event', payload: event });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ eventId: EVENT_ID, acknowledged: true, duplicate: true });
+    expect(mockQuery.mock.calls.some(([sql]) => /INSERT INTO in_app_events/.test(String(sql)))).toBe(false);
+    expect(mockQuery.mock.calls.some(([sql]) => /webhooks/i.test(String(sql)))).toBe(false);
+    await app.close();
+  });
+
+  it('answers the second of two copies arriving at once as a repeat', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: INSTALL_ID, link_id: null }] }); // install
+    mockQuery.mockResolvedValueOnce({ rows: [] }); // not stored yet
+    mockQuery.mockRejectedValueOnce(
+      Object.assign(new Error('duplicate key'), { code: '23505', constraint: 'idx_in_app_events_client_event' })
+    ); // the other copy won the INSERT
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: EVENT_ID }] }); // stored by the other copy
+
+    const app = await buildApp();
+    const res = await app.inject({ method: 'POST', url: '/api/sdk/v1/event', payload: event });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ eventId: EVENT_ID, acknowledged: true, duplicate: true });
+    await app.close();
+  });
+
+  it('does not look for a repeat when the event has no client event id', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: INSTALL_ID, link_id: null }] }); // install
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: EVENT_ID }] }); // INSERT
+
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sdk/v1/event',
+      payload: { installId: INSTALL_ID, eventName: 'purchase' },
+    });
+
+    expect(res.json()).toEqual({ eventId: EVENT_ID, acknowledged: true });
+    expect(mockQuery.mock.calls.some(([sql]) => /client_event_id = \$2/.test(String(sql)))).toBe(false);
+    await app.close();
+  });
+
+  it('rejects a client event id that is not a UUID', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sdk/v1/event',
+      payload: { ...event, clientEventId: 'not-a-uuid' },
+    });
+
+    expect(res.statusCode).not.toBe(200);
     await app.close();
   });
 });
