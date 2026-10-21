@@ -198,6 +198,7 @@ export const BUNDLE_TABLES: Readonly<Record<string, TableRule>> = {
       session_id: p('sessionId'),
       sdk_name: p('sdkName'),
       sdk_version: p('sdkVersion'),
+      client_event_id: p('clientEventId'),
       created_at: p('createdAt'),
     },
   },

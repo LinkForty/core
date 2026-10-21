@@ -331,6 +331,9 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
       attributedClickId: z.string().uuid().optional(),
       linkOpenedAt: z.string().datetime().optional(),
       sessionId: z.string().uuid().optional(),
+      // The SDK's id for this event, the same on every retry of it. A repeat is
+      // answered with the stored event and not recorded again.
+      clientEventId: z.string().uuid().optional(),
       // SDK identity for version-health diagnostics. Free-form by
       // design: a consumer tolerates/normalizes non-semver versions — we never
       // reject a request over this metadata. Empty → null.
@@ -339,6 +342,20 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
     });
 
     const body = schema.parse(request.body);
+
+    /** The stored event this request repeats, if it carries a client event id already recorded. */
+    const storedRepeat = async (): Promise<string | null> => {
+      if (!body.clientEventId) return null;
+      const existing = await db.query(
+        `SELECT id FROM in_app_events WHERE install_id = $1 AND client_event_id = $2 LIMIT 1`,
+        [body.installId, body.clientEventId]
+      );
+      return existing.rows[0]?.id ?? null;
+    };
+
+    /** A repeat is acknowledged with the stored event's id; no webhook fires for it again. */
+    const repeatReply = (eventId: string) =>
+      reply.status(200).send({ eventId, acknowledged: true, duplicate: true });
 
     try {
       // The install this event belongs to, recovered if we no longer have it.
@@ -358,6 +375,10 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
           action: 'reregister',
         });
       }
+
+      const repeatOf = await storedRepeat();
+      if (repeatOf) return repeatReply(repeatOf);
+
       const eventTimestamp = body.timestamp || new Date().toISOString();
       const eventDataJson = JSON.stringify(body.eventData || {});
 
@@ -369,8 +390,8 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
           `INSERT INTO in_app_events
              (install_id, event_name, event_data, event_timestamp,
               attributed_link_id, attributed_click_id, attributed_at, session_id,
-              sdk_name, sdk_version)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+              sdk_name, sdk_version, client_event_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            RETURNING id`,
           [
             body.installId,
@@ -383,9 +404,16 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
             body.sessionId ?? null,
             body.sdkName || null,
             body.sdkVersion || null,
+            body.clientEventId ?? null,
           ]
         );
       } catch (insertError: any) {
+        // Two copies of one event arriving at once: the unique index stored the
+        // first, so this one is the repeat.
+        if (insertError?.code === '23505' && String(insertError?.constraint ?? '') === 'idx_in_app_events_client_event') {
+          const stored = await storedRepeat();
+          if (stored) return repeatReply(stored);
+        }
         // Only a stale/unknown *attributed link* FK is recoverable here: record
         // the event without link attribution rather than losing it. Any other
         // 23503 — e.g. install_id's FK lost to a concurrent install delete — is a
@@ -406,8 +434,8 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
             `INSERT INTO in_app_events
                (install_id, event_name, event_data, event_timestamp,
                 attributed_click_id, attributed_at, session_id,
-                sdk_name, sdk_version)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                sdk_name, sdk_version, client_event_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
              RETURNING id`,
             [
               body.installId,
@@ -419,6 +447,7 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
               body.sessionId ?? null,
               body.sdkName || null,
               body.sdkVersion || null,
+              body.clientEventId ?? null,
             ]
           );
         } else {
