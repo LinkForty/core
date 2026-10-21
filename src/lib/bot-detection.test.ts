@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { classifyBot, edgeBotSignal } from './bot-detection.js';
+import { classifyBot, edgeBotSignal, isSdkRequest } from './bot-detection.js';
 
 const CHROME = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 
@@ -26,9 +26,33 @@ describe('classifyBot', () => {
     expect(classifyBot('Googlebot/2.1', 'GET', false)).toEqual({ isBot: true, reason: 'ua' });
   });
 
+  it('does not flag an SDK request by its HTTP library user-agent', () => {
+    expect(classifyBot('okhttp/4.12.0', 'GET')).toEqual({ isBot: true, reason: 'ua' });
+    expect(classifyBot('okhttp/4.12.0', 'GET', undefined, true)).toEqual({ isBot: false, reason: null });
+    expect(classifyBot('okhttp/5.5.0', 'GET', undefined, true).isBot).toBe(false);
+  });
+
+  it('still applies the method and edge signals to SDK requests', () => {
+    expect(classifyBot('okhttp/4.12.0', 'HEAD', undefined, true)).toEqual({ isBot: true, reason: 'method' });
+    expect(classifyBot('okhttp/4.12.0', 'GET', true, true)).toEqual({ isBot: true, reason: 'edge' });
+  });
+
   it('handles a missing/empty user-agent', () => {
     expect(classifyBot(undefined, 'GET')).toEqual({ isBot: false, reason: null });
     expect(classifyBot('', 'GET').isBot).toBe(false);
+  });
+});
+
+describe('isSdkRequest', () => {
+  it('is true when X-LinkForty-SDK names an SDK', () => {
+    expect(isSdkRequest({ 'x-linkforty-sdk': 'android/1.4.0' })).toBe(true);
+    expect(isSdkRequest({ 'x-linkforty-sdk': ['react-native/1.6.2'] })).toBe(true);
+  });
+
+  it('is false when the header is missing or empty', () => {
+    expect(isSdkRequest({})).toBe(false);
+    expect(isSdkRequest({ 'x-linkforty-sdk': '' })).toBe(false);
+    expect(isSdkRequest({ 'x-linkforty-sdk': '  ' })).toBe(false);
   });
 });
 
