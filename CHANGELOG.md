@@ -1,3 +1,7 @@
+## 1.37.0 (2026-10-21)
+
+* feat(sdk): resolve only the app's own links when the SDK names its app (#79) ([c8ad934](https://github.com/LinkForty/core/commit/c8ad934)), closes [#79](https://github.com/LinkForty/core/issues/79)
+
 ## 1.36.0 (2026-10-21)
 
 * feat(sdk): store an event once however many times the SDK sends it (#78) ([9b9126c](https://github.com/LinkForty/core/commit/9b9126c)), closes [#78](https://github.com/LinkForty/core/issues/78)
