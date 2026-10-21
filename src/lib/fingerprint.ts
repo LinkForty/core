@@ -88,6 +88,12 @@ export interface InstallMatchScope {
    * never be attributed to — or receive the deep link of — another app's link.
    */
   organizationId?: string;
+  /**
+   * Match no click: the install is recorded as organic. A deployment serving
+   * several apps returns this when it cannot tell which app is installing, so
+   * the install is never attributed to another app's link.
+   */
+  matchNothing?: boolean;
 }
 
 /**
@@ -571,6 +577,10 @@ export async function matchInstallToClick(
   attributionWindowHours: number = DEFAULT_ATTRIBUTION_WINDOW_HOURS,
   scope: InstallMatchScope = {}
 ): Promise<FingerprintMatch | null> {
+  if (scope.matchNothing) {
+    return null;
+  }
+
   // No candidate reaches the threshold without matching the install's network
   // (MAX_SCORE_WITHOUT_IP), so an install from a shared or unparseable address
   // cannot be attributed, and the only clicks worth scoring are the ones from

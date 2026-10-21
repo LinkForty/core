@@ -63,3 +63,56 @@ describe('POST /api/sdk/v1/install — device values', () => {
     expect(mockQuery.mock.calls[0][1][15]).toHaveLength(50);
   });
 });
+
+describe('POST /api/sdk/v1/install — install scope', () => {
+  // A public address, so the route looks for candidate clicks unless the scope
+  // rules it out.
+  const remoteAddress = '24.5.10.7';
+
+  beforeEach(() => {
+    mockQuery.mockReset();
+    mockQuery.mockImplementation(async (sql: string) =>
+      /INSERT INTO install_events/.test(sql) ? { rows: [{ id: 'install-1', deep_link_data: {} }] } : { rows: [] }
+    );
+  });
+
+  async function installWith(resolveInstallScope: () => unknown) {
+    const app = Fastify();
+    await app.register(sdkRoutes, { resolveInstallScope: resolveInstallScope as any });
+    await app.ready();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sdk/v1/install',
+      payload: { ...installBody, appToken: 'token-1' },
+      remoteAddress,
+    });
+    expect(res.statusCode).toBe(200);
+    return { body: res.json(), sql: mockQuery.mock.calls.map(([q]) => String(q)) };
+  }
+
+  const searchesClicks = (sql: string[]) => sql.some((q) => /FROM device_fingerprints/.test(q));
+
+  it('searches the scoped organization when the hook names one', async () => {
+    const { sql } = await installWith(() => ({ organizationId: 'org-1' }));
+    expect(searchesClicks(sql)).toBe(true);
+  });
+
+  it('searches every click when the hook returns null', async () => {
+    const { sql } = await installWith(() => null);
+    expect(searchesClicks(sql)).toBe(true);
+  });
+
+  it('records an organic install without searching when the hook says match nothing', async () => {
+    const { body, sql } = await installWith(() => ({ matchNothing: true }));
+    expect(body).toMatchObject({ installId: 'install-1', attributed: false, deepLinkData: null });
+    expect(searchesClicks(sql)).toBe(false);
+  });
+
+  it('records an organic install without searching when the hook throws', async () => {
+    const { body, sql } = await installWith(() => {
+      throw new Error('scope lookup failed');
+    });
+    expect(body).toMatchObject({ installId: 'install-1', attributed: false, deepLinkData: null });
+    expect(searchesClicks(sql)).toBe(false);
+  });
+});
