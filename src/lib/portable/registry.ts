@@ -167,6 +167,7 @@ export const BUNDLE_TABLES: Readonly<Record<string, TableRule>> = {
       confidence_score: p('confidenceScore'),
       attribution_method: p('attributionMethod'),
       matched_factors: p('matchedFactors'),
+      competing_links: p('competingLinks'),
       installed_at: p('installedAt'),
       first_open_at: p('firstOpenAt'),
       deep_link_retrieved: p('deepLinkRetrieved'),

@@ -33,6 +33,12 @@ export interface FingerprintMatch {
   linkParams?: Record<string, string> | null;
   /** The link hands a click to one install only (`links.one_install_per_click`). */
   oneInstallPerClick?: boolean;
+  /**
+   * How many other links also had a click from the install's network that
+   * reached the threshold. 0 means no other link was in contention; more means
+   * another device's tap could have been the one that led to this install.
+   */
+  competingLinks: number;
 }
 
 /**
@@ -661,6 +667,7 @@ export async function matchInstallToClick(
   // Calculate confidence score for each potential match
   let bestMatch: FingerprintMatch | null = null;
   let highestScore = 0;
+  const qualifyingLinks = new Set<string>();
 
   for (const row of clicksResult.rows) {
     const clickFingerprint: FingerprintData = {
@@ -679,6 +686,10 @@ export async function matchInstallToClick(
       clickFingerprint
     );
 
+    if (score >= CONFIDENCE_THRESHOLD) {
+      qualifyingLinks.add(row.link_id);
+    }
+
     // Track the best match
     if (score > highestScore && score >= CONFIDENCE_THRESHOLD) {
       highestScore = score;
@@ -690,10 +701,14 @@ export async function matchInstallToClick(
         clickedAt: new Date(row.clicked_at),
         linkParams: row.link_params ?? null,
         oneInstallPerClick: row.one_install_per_click === true,
+        competingLinks: 0,
       };
     }
   }
 
+  if (bestMatch) {
+    bestMatch.competingLinks = qualifyingLinks.size - 1;
+  }
   return bestMatch;
 }
 
@@ -780,6 +795,8 @@ export async function recordInstallEvent(
 ): Promise<{
   installId: string;
   match: FingerprintMatch | null;
+  /** 'fingerprint' when matched to a click, else 'none'. */
+  attributionMethod: 'fingerprint' | 'none';
   deepLinkData: DeepLinkPayload | null;
 }> {
   const fingerprintData = normalizeFingerprintData(input);
@@ -818,8 +835,9 @@ export async function recordInstallEvent(
       sdk_name,
       sdk_version,
       attribution_method,
-      matched_factors
-    ) VALUES ($1, $2, $3, $4, NOW(), NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+      matched_factors,
+      competing_links
+    ) VALUES ($1, $2, $3, $4, NOW(), NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
     RETURNING id, deep_link_data`,
     [
       match?.linkId || null,
@@ -841,6 +859,7 @@ export async function recordInstallEvent(
       boundString(sdk?.version, MAX_SDK_FIELD_LENGTH) ?? null,
       attributionMethod,
       matchedFactors,
+      match?.competingLinks ?? null,
     ]
   );
 
@@ -879,6 +898,8 @@ export async function recordInstallEvent(
         isDeferred: true,
         confidenceScore: match.confidenceScore,
         matchedFactors: match.matchedFactors,
+        attributionMethod,
+        competingLinks: match.competingLinks,
         linkParams: match.linkParams,
         legacyInstallKeys: true,
       });
@@ -926,6 +947,7 @@ export async function recordInstallEvent(
   return {
     installId,
     match,
+    attributionMethod,
     deepLinkData,
   };
 }

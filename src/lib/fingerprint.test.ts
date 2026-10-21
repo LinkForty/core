@@ -623,12 +623,13 @@ describe('recordInstallEvent', () => {
     expect(sql).toMatch(/INSERT INTO install_events/);
     expect(sql).toMatch(/sdk_name/);
     expect(sql).toMatch(/sdk_version/);
-    // sdk_name/$16, sdk_version/$17, then attribution_method/$18, matched_factors/$19
-    expect(params).toHaveLength(19);
+    // sdk_name/$16, sdk_version/$17, then attribution_method/$18, matched_factors/$19, competing_links/$20
+    expect(params).toHaveLength(20);
     expect(params[15]).toBe('react-native'); // sdk_name
     expect(params[16]).toBe('1.4.0');        // sdk_version
     expect(params[17]).toBe('none');         // attribution_method (no fingerprint match)
     expect(params[18]).toBeNull();           // matched_factors (no match)
+    expect(params[19]).toBeNull();           // competing_links (no match)
   });
 
   it('stores null sdk on the install row when the metadata is absent or empty', async () => {
@@ -651,6 +652,56 @@ describe('recordInstallEvent', () => {
     });
 
     expect(mockDbQuery.mock.calls[0][1]).toContain('org-9');
+  });
+});
+
+describe('matchInstallToClick — competing links', () => {
+  const row = (clickId: string, linkId: string, overrides: Record<string, unknown> = {}) => ({
+    click_id: clickId,
+    link_id: linkId,
+    clicked_at: new Date().toISOString(),
+    link_params: null,
+    one_install_per_click: false,
+    ip_address: baseFingerprint.ipAddress,
+    user_agent: baseFingerprint.userAgent,
+    timezone: baseFingerprint.timezone,
+    language: baseFingerprint.language,
+    screen_width: baseFingerprint.screenWidth,
+    screen_height: baseFingerprint.screenHeight,
+    platform: baseFingerprint.platform,
+    platform_version: baseFingerprint.platformVersion,
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    mockDbQuery.mockReset();
+  });
+
+  it('is 0 when only one link has a qualifying click', async () => {
+    mockDbQuery.mockResolvedValueOnce({ rows: [row('c1', 'link-a'), row('c2', 'link-a')] });
+    expect((await fingerprint.matchInstallToClick(baseFingerprint))?.competingLinks).toBe(0);
+  });
+
+  it('counts the other links with a qualifying click', async () => {
+    mockDbQuery.mockResolvedValueOnce({
+      rows: [row('c1', 'link-a'), row('c2', 'link-b'), row('c3', 'link-c'), row('c4', 'link-b')],
+    });
+    const match = await fingerprint.matchInstallToClick(baseFingerprint);
+    expect(match?.linkId).toBe('link-a');
+    expect(match?.competingLinks).toBe(2);
+  });
+
+  it('leaves out clicks below the threshold', async () => {
+    // Network only: below the threshold.
+    const weak = row('c2', 'link-b', {
+      user_agent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/537.36',
+      timezone: 'Asia/Tokyo',
+      language: 'ja-JP',
+      screen_width: 720,
+      screen_height: 1280,
+    });
+    mockDbQuery.mockResolvedValueOnce({ rows: [row('c1', 'link-a'), weak] });
+    expect((await fingerprint.matchInstallToClick(baseFingerprint))?.competingLinks).toBe(0);
   });
 });
 
@@ -684,6 +735,8 @@ describe('recordInstallEvent — matching a click once', () => {
     const result = await fingerprint.recordInstallEvent(baseFingerprint);
 
     expect(result.match?.clickId).toBe('click-1');
+    expect(result.attributionMethod).toBe('fingerprint');
+    expect(mockDbQuery.mock.calls[2][1][19]).toBe(0); // competing_links
     const [sql, params] = mockDbQuery.mock.calls[1];
     expect(sql).toMatch(/UPDATE click_events SET install_matched_at = NOW\(\)\s+WHERE id = \$1 AND install_matched_at IS NULL/);
     expect(params).toEqual(['click-1']);

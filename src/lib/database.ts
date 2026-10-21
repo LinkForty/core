@@ -631,6 +631,12 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
       ALTER TABLE click_events ADD COLUMN IF NOT EXISTS install_matched_at TIMESTAMP
     `);
 
+    // install_events.competing_links: how many other links also had a
+    // qualifying click when the install was matched (null when not matched).
+    await client.query(`
+      ALTER TABLE install_events ADD COLUMN IF NOT EXISTS competing_links INTEGER
+    `);
+
     // Attribution metadata on install_events: how the install was
     // attributed ('fingerprint' | 'none') and which fingerprint signals matched.
     // Makes attribution quality measurable. Backward compatible (NULL until set).

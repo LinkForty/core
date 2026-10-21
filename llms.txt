@@ -540,6 +540,8 @@ Response:
   "attributed": true,
   "confidenceScore": 85,
   "matchedFactors": ["ip", "user_agent", "timezone", "language", "screen"],
+  "attributionMethod": "fingerprint",
+  "competingLinks": 0,
   "deepLinkData": {
     "shortCode": "abc123",
     "originalUrl": "https://example.com/product/789",

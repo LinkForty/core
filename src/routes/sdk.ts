@@ -124,7 +124,13 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
    * - attributed: Boolean indicating if install was matched to a click
    * - confidenceScore: Confidence score (0-100) if matched
    * - matchedFactors: Array of matched fingerprint factors
-   * - deepLinkData: Deep link data if matched (shortCode, URLs, UTM params, etc.)
+   * - attributionMethod: How the install was matched: 'fingerprint', or 'none' (organic)
+   * - competingLinks: How many other links also had a click from the install's
+   *   network that reached the threshold. 0 when nothing else was in contention;
+   *   above 0, another device's tap may have led to this install. An app can
+   *   treat that as unverified, e.g. confirm before acting on a sign-in link.
+   * - deepLinkData: Deep link data if matched (shortCode, URLs, UTM params,
+   *   confidenceScore, matchedFactors, attributionMethod, competingLinks, etc.)
    */
   fastify.post('/api/sdk/v1/install', async (request, reply) => {
     const schema = z.object({
@@ -192,6 +198,8 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
         attributed: result.match !== null,
         confidenceScore: result.match?.confidenceScore || 0,
         matchedFactors: result.match?.matchedFactors || [],
+        attributionMethod: result.attributionMethod,
+        competingLinks: result.match?.competingLinks ?? 0,
         deepLinkData: result.deepLinkData,
         ...(body.ipAddress != null && { clientReportedIp: body.ipAddress }),
       });

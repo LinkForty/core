@@ -338,6 +338,10 @@ Canonical field names for cross-SDK data models. SDKs should use platform-approp
 | appScheme | string | No | App URI scheme (e.g., `myapp`) |
 | clickedAt | datetime | No | When the link was clicked (ISO 8601) |
 | linkId | string | No | Link UUID from the backend |
+| confidenceScore | number | No | Deferred only: match confidence (0-100) |
+| matchedFactors | string[] | No | Deferred only: which fingerprint factors matched |
+| attributionMethod | string | No | Deferred only: how the install was matched (`fingerprint`) |
+| competingLinks | number | No | Deferred only: how many other links had a qualifying click from the install's network. 0 means no other link was in contention |
 
 ### InstallResponse
 
@@ -347,7 +351,11 @@ Canonical field names for cross-SDK data models. SDKs should use platform-approp
 | attributed | boolean | Yes | Whether install was matched to a click |
 | confidenceScore | number | Yes | Match confidence (0-100) |
 | matchedFactors | string[] | Yes | Which fingerprint factors matched |
+| attributionMethod | string | No | `fingerprint` when matched, `none` when organic |
+| competingLinks | number | No | How many other links had a click from the install's network that also reached the threshold. 0 when nothing else was in contention, or when organic |
 | deepLinkData | DeepLinkData | No | Link data if attributed (null/empty if organic) |
+
+SDKs pass `confidenceScore`, `matchedFactors`, `attributionMethod` and `competingLinks` to the app with the deferred deep link. An app acting on a sensitive link (a sign-in or a gift) can treat `competingLinks > 0` as unverified, for example by asking the user to confirm.
 
 ### CreateLinkOptions
 
