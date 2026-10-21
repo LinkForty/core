@@ -93,6 +93,8 @@ export const BUNDLE_TABLES: Readonly<Record<string, TableRule>> = {
       utm_parameters: p('utmParameters'),
       targeting_rules: p('targetingRules'),
       attribution_window_hours: p('attributionWindowHours'),
+      attribution_window_minutes: p('attributionWindowMinutes'),
+      one_install_per_click: p('oneInstallPerClick'),
       append_click_id: p('appendClickId'),
       og_title: p('ogTitle'),
       og_description: p('ogDescription'),
@@ -133,6 +135,7 @@ export const BUNDLE_TABLES: Readonly<Record<string, TableRule>> = {
       link_params: p('linkParams'),
       is_bot: p('isBot'),
       bot_reason: p('botReason'),
+      install_matched_at: p('installMatchedAt'),
     },
   },
   device_fingerprints: {

@@ -58,12 +58,35 @@ const createLinkSchema = z.object({
     .min(1, 'Attribution window must be at least 1 hour')
     .max(2160, 'Attribution window must be at most 2160 hours (90 days)')
     .optional(),
+  // The window in minutes, for windows under an hour; replaces the hours when
+  // set. Send one or the other.
+  attributionWindowMinutes: z.number()
+    .int('Attribution window must be an integer')
+    .min(5, 'Attribution window must be at least 5 minutes')
+    .max(129600, 'Attribution window must be at most 129600 minutes (90 days)')
+    .optional(),
+  // A click hands this link to one install only; a second install from the
+  // same click is organic.
+  oneInstallPerClick: z.boolean().optional(),
   expiresAt: z.string().datetime().optional(),
 });
 
 const updateLinkSchema = createLinkSchema.partial().extend({
   isActive: z.boolean().optional(),
 }).omit({ userId: true });
+
+function oneWindowUnit(
+  data: { attributionWindowHours?: number; attributionWindowMinutes?: number },
+  ctx: z.RefinementCtx
+) {
+  if (data.attributionWindowHours !== undefined && data.attributionWindowMinutes !== undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['attributionWindowMinutes'],
+      message: 'Send attributionWindowHours or attributionWindowMinutes, not both',
+    });
+  }
+}
 
 export async function linkRoutes(fastify: FastifyInstance) {
   // Get all links (optionally filtered by userId)
@@ -160,7 +183,7 @@ export async function linkRoutes(fastify: FastifyInstance) {
 
   // Create link
   fastify.post('/api/links', async (request) => {
-    const data = createLinkSchema.parse(request.body);
+    const data = createLinkSchema.superRefine(oneWindowUnit).parse(request.body);
 
     // Generate short code
     let shortCode = data.customCode || generateShortCode();
@@ -192,8 +215,9 @@ export async function linkRoutes(fastify: FastifyInstance) {
         app_scheme, ios_universal_link, android_app_link, deep_link_path, deep_link_parameters,
         utm_parameters, targeting_rules,
         og_title, og_description, og_image_url, og_type,
-        attribution_window_hours, expires_at, launchpad_mode
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+        attribution_window_hours, expires_at, launchpad_mode,
+        attribution_window_minutes, one_install_per_click
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
          RETURNING *`,
       [
         data.userId || null,
@@ -219,6 +243,8 @@ export async function linkRoutes(fastify: FastifyInstance) {
         data.attributionWindowHours || 168, // Default 7 days
         data.expiresAt || null,
         data.launchpadMode || 'inherit',
+        data.attributionWindowMinutes ?? null,
+        data.oneInstallPerClick ?? false,
       ]
     );
 
@@ -240,7 +266,7 @@ export async function linkRoutes(fastify: FastifyInstance) {
     const { id } = request.params;
     const { userId } = request.query;
 
-    const data = updateLinkSchema.parse(request.body);
+    const data = updateLinkSchema.superRefine(oneWindowUnit).parse(request.body);
 
     // Capture current identifiers for cache invalidation after the update
     const oldLinkResult = await db.query(
@@ -252,6 +278,11 @@ export async function linkRoutes(fastify: FastifyInstance) {
     const updates: string[] = [];
     const values: any[] = [];
     let paramIndex = 1;
+
+    // A window given in hours replaces one given in minutes.
+    if (data.attributionWindowHours !== undefined) {
+      updates.push('attribution_window_minutes = NULL');
+    }
 
     Object.entries(data).forEach(([key, value]) => {
       if (value !== undefined) {
@@ -369,8 +400,9 @@ export async function linkRoutes(fastify: FastifyInstance) {
         app_scheme, ios_universal_link, android_app_link, deep_link_path, deep_link_parameters,
         utm_parameters, targeting_rules,
         og_title, og_description, og_image_url, og_type,
-        attribution_window_hours, expires_at, launchpad_mode
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+        attribution_window_hours, expires_at, launchpad_mode,
+        attribution_window_minutes, one_install_per_click
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
          RETURNING *`,
       [
         link.user_id,
@@ -396,6 +428,8 @@ export async function linkRoutes(fastify: FastifyInstance) {
         link.attribution_window_hours,
         link.expires_at,
         link.launchpad_mode || 'inherit',
+        link.attribution_window_minutes ?? null,
+        link.one_install_per_click ?? false,
       ]
     );
 

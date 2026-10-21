@@ -197,6 +197,8 @@ interface Link {
 
   // Lifecycle
   attribution_window_hours?: number;   // Default: 168 (7 days)
+  attribution_window_minutes?: number | null; // Replaces the hours when set
+  one_install_per_click?: boolean;     // Default: false
   is_active: boolean;
   expires_at?: string;
   created_at: string;
@@ -244,6 +246,8 @@ interface CreateLinkRequest {
   ogType?: string;
   launchpadMode?: 'inherit' | 'on' | 'off';
   attributionWindowHours?: number;     // 1-2160
+  attributionWindowMinutes?: number;   // 5-129600; send this or attributionWindowHours, not both
+  oneInstallPerClick?: boolean;        // A click is matched to one install only
   customCode?: string;                 // Custom short code (auto-generated if omitted)
   expiresAt?: string;                  // ISO 8601 datetime
 }

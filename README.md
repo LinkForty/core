@@ -169,6 +169,12 @@ Content-Type: application/json
 
 All fields except `originalUrl` are optional.
 
+Install attribution settings, per link:
+
+- `attributionWindowHours` (1–2160, default 168): how long after a click an install can still be matched to it.
+- `attributionWindowMinutes` (5–129600): the same window in minutes, for windows under an hour. Send one or the other; when set it replaces the hours, and updating the link with `attributionWindowHours` clears it.
+- `oneInstallPerClick` (default `false`): a click is matched to one install only. A second install that would have matched the same click is matched to another click, or recorded as organic. Suited to single-use links, such as sign-in links.
+
 #### Get All Links
 
 ```bash
@@ -492,6 +498,8 @@ The redirect, SDK resolve and preview routes all use it. A resolver that throws 
 | og_type                 | VARCHAR(50)  | Open Graph type (default: "website")     |
 | launchpad_mode          | VARCHAR(10)  | Launchpad page: inherit / on / off       |
 | attribution_window_hours| INTEGER      | Install attribution window (default: 168)|
+| attribution_window_minutes| INTEGER    | Window in minutes; replaces the hours when set |
+| one_install_per_click   | BOOLEAN      | A click matches one install only (default: false) |
 | is_active               | BOOLEAN      | Active status                            |
 | expires_at              | TIMESTAMP    | Expiration date                          |
 | created_at              | TIMESTAMP    | Creation timestamp                       |

@@ -615,6 +615,22 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
       END $$;
     `);
 
+    // Per-link install matching:
+    // - links.attribution_window_minutes: the window in minutes, for windows
+    //   under an hour. When set it replaces attribution_window_hours.
+    // - links.one_install_per_click: a click hands its link to one install only.
+    // - click_events.install_matched_at: when an install was first matched to
+    //   the click. Nullable with no default, so adding it is catalog-only.
+    await client.query(`
+      ALTER TABLE links ADD COLUMN IF NOT EXISTS attribution_window_minutes INTEGER
+    `);
+    await client.query(`
+      ALTER TABLE links ADD COLUMN IF NOT EXISTS one_install_per_click BOOLEAN NOT NULL DEFAULT false
+    `);
+    await client.query(`
+      ALTER TABLE click_events ADD COLUMN IF NOT EXISTS install_matched_at TIMESTAMP
+    `);
+
     // Attribution metadata on install_events: how the install was
     // attributed ('fingerprint' | 'none') and which fingerprint signals matched.
     // Makes attribution quality measurable. Backward compatible (NULL until set).
