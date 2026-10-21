@@ -15,7 +15,7 @@ import { findWebhooksForLink, triggerWebhooks } from '../lib/webhook.js';
 import { evaluateLinkSafety, createOwnerSuspensionSelect } from '../lib/link-safety.js';
 import { parseUserAgent, getLocationFromIP, detectDevice } from '../lib/utils.js';
 import { emitClickEvent } from '../lib/event-emitter.js';
-import { classifyBot, edgeBotSignal } from '../lib/bot-detection.js';
+import { classifyBot, edgeBotSignal, isSdkRequest } from '../lib/bot-detection.js';
 
 /** SDK name or version: cut to the 50 characters stored, never rejected. Empty → undefined. */
 const sdkMetadataField = z
@@ -653,11 +653,14 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
         const { platform, platformVersion } = parseUserAgent(userAgent);
         const { countryCode, countryName, region, city, latitude, longitude, timezone } = getLocationFromIP(ip);
 
-        // Classify bots at ingestion; persisted for consistent reads.
+        // Classify bots at ingestion; persisted for consistent reads. An SDK
+        // resolving a link is the app opening it for whoever tapped it, so its
+        // HTTP library's user agent is not a bot signal.
         const { isBot, reason: botReason } = classifyBot(
           userAgent,
           request.method,
-          edgeBotSignal(request.headers['x-lf-bot'])
+          edgeBotSignal(request.headers['x-lf-bot']),
+          isSdkRequest(request.headers)
         );
 
         // Extract fingerprint data from query params (sent by SDK)

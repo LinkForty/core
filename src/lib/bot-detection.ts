@@ -16,6 +16,9 @@ import { isbot } from 'isbot';
  *   2. method — HEAD / OPTIONS requests are link probes/prefetch, never a human
  *              opening a link.
  *   3. ua    — the `isbot` user-agent database (crawlers, scrapers, monitors).
+ *              Skipped for SDK requests: an SDK's user agent is the app's HTTP
+ *              library (`okhttp/…` on Android), which `isbot` lists as a client
+ *              library, and it says nothing about who opened the link.
  */
 export type BotReason = 'edge' | 'method' | 'ua';
 
@@ -29,12 +32,23 @@ const NON_HUMAN_METHODS = new Set(['HEAD', 'OPTIONS']);
 export function classifyBot(
   userAgent: string | undefined,
   method: string | undefined,
-  edgeIsBot?: boolean
+  edgeIsBot?: boolean,
+  sdkRequest?: boolean
 ): BotClassification {
   if (edgeIsBot === true) return { isBot: true, reason: 'edge' };
   if (method && NON_HUMAN_METHODS.has(method.toUpperCase())) return { isBot: true, reason: 'method' };
-  if (isbot(userAgent ?? '')) return { isBot: true, reason: 'ua' };
+  if (!sdkRequest && isbot(userAgent ?? '')) return { isBot: true, reason: 'ua' };
   return { isBot: false, reason: null };
+}
+
+/**
+ * Whether a request comes from a LinkForty SDK, which names itself in the
+ * `X-LinkForty-SDK` header (`android/1.4.0`, `react-native/1.6.2`) on every request.
+ */
+export function isSdkRequest(headers: Record<string, string | string[] | undefined>): boolean {
+  const value = headers['x-linkforty-sdk'];
+  const first = Array.isArray(value) ? value[0] : value;
+  return typeof first === 'string' && first.trim() !== '';
 }
 
 /**
