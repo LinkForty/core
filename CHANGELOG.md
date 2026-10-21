@@ -1,3 +1,7 @@
+## <small>1.35.3 (2026-10-21)</small>
+
+* fix(sdk): count a link an app opens through the SDK as a human click (#77) ([2e06e4f](https://github.com/LinkForty/core/commit/2e06e4f)), closes [#77](https://github.com/LinkForty/core/issues/77)
+
 ## <small>1.35.2 (2026-10-21)</small>
 
 * fix(fingerprint): match Safari's frozen iOS 18 version against newer iOS SDK installs (#76) ([b8a9324](https://github.com/LinkForty/core/commit/b8a9324)), closes [#76](https://github.com/LinkForty/core/issues/76)
