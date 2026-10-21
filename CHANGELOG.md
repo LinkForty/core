@@ -1,3 +1,7 @@
+## 1.39.0 (2026-10-21)
+
+* feat(attribution): install windows in minutes, and links that match a click to one install only (#82 ([1beee83](https://github.com/LinkForty/core/commit/1beee83)), closes [#82](https://github.com/LinkForty/core/issues/82)
+
 ## 1.38.0 (2026-10-21)
 
 * feat(sdk): let the install scope match nothing, and match nothing when it fails (#81) ([6bc71bc](https://github.com/LinkForty/core/commit/6bc71bc)), closes [#81](https://github.com/LinkForty/core/issues/81)
