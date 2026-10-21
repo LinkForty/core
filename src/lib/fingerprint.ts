@@ -596,6 +596,8 @@ export async function matchInstallToClick(
     scopeFilter = `AND l.organization_id = $${params.length}`;
   }
 
+  // Only links that would still open now can hand an install their data: an
+  // expired, inactive or disabled link matches nothing, as it resolves nothing.
   // The LIMIT only bounds work for a very busy network (a campus, an office);
   // it applies after the network filter, so ordinary traffic never reaches it.
   const clicksResult = await db.query(
@@ -618,6 +620,9 @@ export async function matchInstallToClick(
      INNER JOIN links l ON ce.link_id = l.id
      WHERE df.ip_address <<= $2::cidr
        AND ce.clicked_at >= $1
+       AND l.is_active = true
+       AND l.disabled_at IS NULL
+       AND (l.expires_at IS NULL OR l.expires_at > NOW())
        ${scopeFilter}
      ORDER BY ce.clicked_at DESC
      LIMIT 1000`,
