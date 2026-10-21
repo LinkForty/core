@@ -39,6 +39,10 @@ export interface DeepLinkPayloadOptions {
   confidenceScore?: number | null;
   /** Which fingerprint factors matched, deferred opens only. */
   matchedFactors?: string[] | null;
+  /** How the install was matched to the click, deferred opens only. */
+  attributionMethod?: string | null;
+  /** Other links with a click that also qualified, deferred opens only. */
+  competingLinks?: number | null;
   /**
    * Emit the pre-1.22 install keys (`originalUrl`, `webFallbackUrl`,
    * `targetingRules`, `deepLinkParameters`) alongside the canonical ones.
@@ -73,6 +77,8 @@ export interface DeepLinkPayload {
   isDeferred: boolean;
   confidenceScore?: number;
   matchedFactors?: string[];
+  attributionMethod?: string;
+  competingLinks?: number;
   // Legacy install-only aliases; see `legacyInstallKeys`.
   originalUrl?: string | null;
   webFallbackUrl?: string | null;
@@ -166,6 +172,12 @@ export function toDeepLinkPayload(
   }
   if (options.matchedFactors != null) {
     payload.matchedFactors = options.matchedFactors;
+  }
+  if (options.attributionMethod != null) {
+    payload.attributionMethod = options.attributionMethod;
+  }
+  if (options.competingLinks != null) {
+    payload.competingLinks = options.competingLinks;
   }
 
   if (options.legacyInstallKeys) {

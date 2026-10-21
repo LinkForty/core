@@ -28,6 +28,8 @@ function installPayload(row: DeepLinkLinkRow = link) {
     isDeferred: true,
     confidenceScore: 85,
     matchedFactors: ['userAgent', 'timezone'],
+    attributionMethod: 'fingerprint',
+    competingLinks: 0,
     legacyInstallKeys: true,
   });
 }
@@ -76,11 +78,16 @@ describe('toDeepLinkPayload', () => {
     expect(deferred.isDeferred).toBe(true);
     expect(deferred.confidenceScore).toBe(85);
     expect(deferred.matchedFactors).toEqual(['userAgent', 'timezone']);
+    expect(deferred.attributionMethod).toBe('fingerprint');
+    // Zero is reported, not dropped: it is the answer an app checks for.
+    expect(deferred.competingLinks).toBe(0);
 
     const direct = resolvePayload();
     expect(direct.isDeferred).toBe(false);
     expect('confidenceScore' in direct).toBe(false);
     expect('matchedFactors' in direct).toBe(false);
+    expect('attributionMethod' in direct).toBe(false);
+    expect('competingLinks' in direct).toBe(false);
   });
 
   it('reports a zero confidence score rather than dropping it', () => {
