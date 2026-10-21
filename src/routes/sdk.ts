@@ -83,6 +83,10 @@ export interface SdkRouteOptions {
    * returns its organization, so the install can only match that app's links.
    * Return null to match against every click, which is also what happens when
    * the option is absent. A throw is logged and treated as null.
+   *
+   * Also applied to link resolution: an SDK names its app in the
+   * `X-LinkForty-App-Token` header, and a resolve for an app whose organization
+   * this returns only answers with that organization's links.
    */
   resolveInstallScope?: (
     request: FastifyRequest,
@@ -575,13 +579,31 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
       fastify.log.info('SDK resolve: owner restriction supported (organizations.suspended_at present)'),
   });
 
+  /** The organization of the app an SDK request names in X-LinkForty-App-Token, or null. */
+  async function appOrganization(request: any): Promise<string | null> {
+    const header = request.headers['x-linkforty-app-token'];
+    const appToken = (Array.isArray(header) ? header[0] : header)?.trim();
+    if (!appToken || !options.resolveInstallScope) return null;
+    try {
+      return (await options.resolveInstallScope(request, { appToken }))?.organizationId ?? null;
+    } catch (error) {
+      fastify.log.warn({ err: error }, 'resolveInstallScope failed; resolving unscoped');
+      return null;
+    }
+  }
+
   async function handleResolve(request: any, reply: any, shortCode: string, templateSlug?: string) {
     let linkData: string | null = null;
+
+    // An app that names itself only resolves its own organization's links; a
+    // code another organization owns is answered as unknown.
+    const appScope = await appOrganization(request);
 
     // Same resolution and cache keys as redirect.ts (lib/link-lookup.ts).
     const scope = templateSlug
       ? null
-      : await resolveLinkScope(request, (error) => fastify.log.warn({ err: error }, 'Link scope resolver failed'));
+      : appScope ??
+        (await resolveLinkScope(request, (error) => fastify.log.warn({ err: error }, 'Link scope resolver failed')));
     const cacheKey = linkCacheKey(shortCode, templateSlug, scope);
 
     // Try Redis cache first
@@ -645,6 +667,11 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
     }
 
     const link = JSON.parse(linkData);
+
+    if (appScope && link.organization_id !== appScope) {
+      // Same response as an unknown short code, and no click recorded.
+      return reply.status(404).send({ error: 'Link not found' });
+    }
 
     /**
      * Same safety gate the redirect applies, evaluated after the cache read so it
