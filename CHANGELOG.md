@@ -1,3 +1,7 @@
+## 1.40.0 (2026-10-21)
+
+* feat(attribution): report how an install was matched and how many other links were in contention (#8 ([1d8e1d1](https://github.com/LinkForty/core/commit/1d8e1d1)), closes [#83](https://github.com/LinkForty/core/issues/83)
+
 ## 1.39.0 (2026-10-21)
 
 * feat(attribution): install windows in minutes, and links that match a click to one install only (#82 ([1beee83](https://github.com/LinkForty/core/commit/1beee83)), closes [#82](https://github.com/LinkForty/core/issues/82)
