@@ -1,3 +1,8 @@
+## <small>1.35.2 (2026-10-21)</small>
+
+* fix(fingerprint): match Safari's frozen iOS 18 version against newer iOS SDK installs (#76) ([b8a9324](https://github.com/LinkForty/core/commit/b8a9324)), closes [#76](https://github.com/LinkForty/core/issues/76)
+* test(sdk): store any device-reported value through the real schema (#75) ([ba1382e](https://github.com/LinkForty/core/commit/ba1382e)), closes [#75](https://github.com/LinkForty/core/issues/75)
+
 ## <small>1.35.1 (2026-10-19)</small>
 
 * fix(fingerprint): normalize the language and bound device fields before storage (#74) ([c457612](https://github.com/LinkForty/core/commit/c457612)), closes [#74](https://github.com/LinkForty/core/issues/74)
