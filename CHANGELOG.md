@@ -1,3 +1,7 @@
+## 1.36.0 (2026-10-21)
+
+* feat(sdk): store an event once however many times the SDK sends it (#78) ([9b9126c](https://github.com/LinkForty/core/commit/9b9126c)), closes [#78](https://github.com/LinkForty/core/issues/78)
+
 ## <small>1.35.3 (2026-10-21)</small>
 
 * fix(sdk): count a link an app opens through the SDK as a human click (#77) ([2e06e4f](https://github.com/LinkForty/core/commit/2e06e4f)), closes [#77](https://github.com/LinkForty/core/issues/77)
