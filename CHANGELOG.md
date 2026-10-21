@@ -1,3 +1,8 @@
+## 1.38.0 (2026-10-21)
+
+* feat(sdk): let the install scope match nothing, and match nothing when it fails (#81) ([6bc71bc](https://github.com/LinkForty/core/commit/6bc71bc)), closes [#81](https://github.com/LinkForty/core/issues/81)
+* fix(attribution): match installs only to links that still open (#80) ([20c35f8](https://github.com/LinkForty/core/commit/20c35f8)), closes [#80](https://github.com/LinkForty/core/issues/80)
+
 ## 1.37.0 (2026-10-21)
 
 * feat(sdk): resolve only the app's own links when the SDK names its app (#79) ([c8ad934](https://github.com/LinkForty/core/commit/c8ad934)), closes [#79](https://github.com/LinkForty/core/issues/79)
