@@ -568,6 +568,11 @@ describe('matchInstallToClick — candidate selection', () => {
     expect(params).toEqual([expect.any(Date), '24.5.10.0/24', 'org-1']);
   });
 
+  it('matches nothing, without querying, when the scope says so', async () => {
+    expect(await fingerprint.matchInstallToClick(baseFingerprint, undefined, { matchNothing: true })).toBeNull();
+    expect(mockDbQuery).not.toHaveBeenCalled();
+  });
+
   it('does not query at all for an install from a shared address', async () => {
     for (const ipAddress of ['100.64.1.2', '10.0.0.5', '192.168.1.20', '', 'garbage']) {
       expect(await fingerprint.matchInstallToClick({ ...baseFingerprint, ipAddress })).toBeNull();

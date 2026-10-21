@@ -82,11 +82,15 @@ export interface SdkRouteOptions {
    * several apps resolves the installing app — typically from `appToken` — and
    * returns its organization, so the install can only match that app's links.
    * Return null to match against every click, which is also what happens when
-   * the option is absent. A throw is logged and treated as null.
+   * the option is absent. Return `{ matchNothing: true }` to record the install
+   * as organic, for an app the deployment cannot place. A throw is logged and
+   * treated as `{ matchNothing: true }`.
    *
    * Also applied to link resolution: an SDK names its app in the
    * `X-LinkForty-App-Token` header, and a resolve for an app whose organization
-   * this returns only answers with that organization's links.
+   * this returns only answers with that organization's links. Any other result,
+   * or a throw, leaves resolution unscoped: a short code is public, and resolves
+   * without a token too.
    */
   resolveInstallScope?: (
     request: FastifyRequest,
@@ -167,7 +171,10 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
       try {
         scope = (await options.resolveInstallScope(request, { appToken: body.appToken })) ?? {};
       } catch (error) {
-        fastify.log.warn({ err: error }, 'resolveInstallScope failed; matching unscoped');
+        // A scope that cannot be worked out matches nothing, rather than every
+        // organization's clicks.
+        fastify.log.warn({ err: error }, 'resolveInstallScope failed; matching nothing');
+        scope = { matchNothing: true };
       }
     }
 
