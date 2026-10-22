@@ -904,6 +904,18 @@ describe('clickIdFromInstallReferrer', () => {
     expect(fingerprint.clickIdFromInstallReferrer(`utm_source=poster&lf_click=${CLICK}&utm_medium=print`)).toBe(CLICK);
   });
 
+  it('reads a referrer passed on still encoded, or inside the Play URL', () => {
+    expect(fingerprint.clickIdFromInstallReferrer(`lf_click%3D${CLICK}%26utm_source%3Dposter`)).toBe(CLICK);
+    expect(fingerprint.clickIdFromInstallReferrer(`lf_click%253D${CLICK}`)).toBe(CLICK);
+    expect(
+      fingerprint.clickIdFromInstallReferrer(
+        `https://play.google.com/store/apps/details?id=com.example.app&referrer=lf_click%3D${CLICK}`
+      )
+    ).toBe(CLICK);
+    expect(fingerprint.clickIdFromInstallReferrer(`market://details?id=com.example.app&referrer=lf_click%3D${CLICK}`)).toBe(CLICK);
+    expect(fingerprint.clickIdFromInstallReferrer(` lf_click=${CLICK} `)).toBe(CLICK);
+  });
+
   it('returns null when there is no usable click id', () => {
     for (const referrer of [
       undefined,
@@ -914,6 +926,10 @@ describe('clickIdFromInstallReferrer', () => {
       'lf_click=not-a-uuid',
       `lf_click=${CLICK}'--`,
       `lf_click=${CLICK}&${'x'.repeat(1100)}`,
+      'utm_source%3Dgoogle-play%26utm_medium%3Dorganic',
+      '%E0%A4%A',
+      'https://play.google.com/store/apps/details?id=com.example.app',
+      'not a url: lf_click',
     ]) {
       expect(fingerprint.clickIdFromInstallReferrer(referrer)).toBeNull();
     }

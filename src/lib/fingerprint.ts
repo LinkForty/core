@@ -103,13 +103,45 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 /**
  * The click id in a Google Play install referrer (`lf_click=<id>&…`), or null
  * when there is none.
+ *
+ * Play returns the referrer decoded, but it is read in the shapes an app or a
+ * wrapper library may pass it on in: still URL-encoded (`lf_click%3D<id>`,
+ * once or twice), or as the whole Play URL with the referrer in its
+ * `referrer` parameter.
  */
 export function clickIdFromInstallReferrer(referrer: unknown): string | null {
   if (typeof referrer !== 'string' || referrer.length === 0 || referrer.length > MAX_INSTALL_REFERRER_LENGTH) {
     return null;
   }
-  const clickId = new URLSearchParams(referrer).get(INSTALL_REFERRER_CLICK_KEY)?.trim();
-  return clickId && UUID_PATTERN.test(clickId) ? clickId : null;
+  let candidate = referrer.trim();
+  for (let pass = 0; pass < 3; pass++) {
+    const clickId = new URLSearchParams(candidate).get(INSTALL_REFERRER_CLICK_KEY)?.trim();
+    if (clickId) {
+      return UUID_PATTERN.test(clickId) ? clickId : null;
+    }
+    const next = unwrapInstallReferrer(candidate);
+    if (next === null || next === candidate) {
+      return null;
+    }
+    candidate = next;
+  }
+  return null;
+}
+
+/** One layer off a referrer: the `referrer` of a Play URL, or one URL decoding. */
+function unwrapInstallReferrer(value: string): string | null {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) {
+    try {
+      return new URL(value).searchParams.get('referrer');
+    } catch {
+      return null;
+    }
+  }
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
 }
 
 /**
