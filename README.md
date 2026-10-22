@@ -49,7 +49,7 @@
 - **UTM Parameters** - Built-in support for UTM campaign tracking 
 - **Targeting Rules** - Filter by country, device, and language before redirecting 
 - **QR Code Generation** - Generate QR codes (PNG/SVG) for any link 
-- **Deferred Deep Linking** - Probabilistic fingerprint matching for install attribution 
+- **Deferred Deep Linking** - Install attribution by Google Play install referrer on Android (the redirect puts the click id in the Play listing's `referrer`), and by probabilistic fingerprint matching 
 - **Webhooks** - Event-driven integrations with HMAC-signed payloads and retry logic 
 - **Smart App Opening** - Mobile clicks serve an interstitial that tries the app via URI scheme, falls back to the App Store / Play Store. Preserves URL fragments for E2E encryption keys 
 - **OG Preview Pages** - Social media scraper detection with Open Graph meta tags 

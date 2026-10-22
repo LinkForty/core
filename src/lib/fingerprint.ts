@@ -87,6 +87,32 @@ export const MAX_SCORE_WITHOUT_IP =
   FINGERPRINT_WEIGHTS.SCREEN_RESOLUTION;
 
 /**
+ * The key, inside a Google Play `referrer`, that carries the click id. The
+ * redirect adds it to every Play listing it sends an Android visitor to.
+ */
+export const INSTALL_REFERRER_CLICK_KEY = 'lf_click';
+
+/** How an install was attributed. */
+export type AttributionMethod = 'install_referrer' | 'fingerprint' | 'none';
+
+/** The longest install referrer read; Play's are far shorter. */
+const MAX_INSTALL_REFERRER_LENGTH = 1024;
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The click id in a Google Play install referrer (`lf_click=<id>&…`), or null
+ * when there is none.
+ */
+export function clickIdFromInstallReferrer(referrer: unknown): string | null {
+  if (typeof referrer !== 'string' || referrer.length === 0 || referrer.length > MAX_INSTALL_REFERRER_LENGTH) {
+    return null;
+  }
+  const clickId = new URLSearchParams(referrer).get(INSTALL_REFERRER_CLICK_KEY)?.trim();
+  return clickId && UUID_PATTERN.test(clickId) ? clickId : null;
+}
+
+/**
  * Narrows the clicks an install can be matched against.
  */
 export interface InstallMatchScope {
@@ -746,6 +772,81 @@ async function matchAndClaimClick(
 }
 
 /**
+ * Match an install to the click its install referrer names, and record the
+ * click as matched.
+ *
+ * The click is matched under the same rules as a fingerprint match: in scope,
+ * on a link that would still open, within the link's window, and not already
+ * used on a link that hands a click to one install only. A referrer is exact,
+ * so a click that exists but fails those rules gives no match at all, rather
+ * than a guess at another click: `{ match: null }`. A click id this server
+ * never issued is `undefined`, and the install falls back to its fingerprint.
+ */
+async function matchReferrerClick(
+  clickId: string,
+  scope: InstallMatchScope
+): Promise<{ match: FingerprintMatch | null } | undefined> {
+  const params: unknown[] = [clickId];
+  let scopeCondition = 'true';
+  if (scope.organizationId) {
+    params.push(scope.organizationId);
+    scopeCondition = `l.organization_id = $${params.length}`;
+  }
+
+  const result = await db.query(
+    `SELECT
+       ce.id AS click_id,
+       ce.link_id,
+       ce.clicked_at,
+       ce.link_params,
+       l.one_install_per_click,
+       (${scopeCondition}
+         AND ce.clicked_at >= NOW() - make_interval(mins => COALESCE(
+               l.attribution_window_minutes,
+               COALESCE(NULLIF(l.attribution_window_hours, 0), ${DEFAULT_ATTRIBUTION_WINDOW_HOURS}) * 60
+             ))
+         AND l.is_active = true
+         AND l.disabled_at IS NULL
+         AND (l.expires_at IS NULL OR l.expires_at > NOW())
+       ) AS eligible
+     FROM click_events ce
+     INNER JOIN links l ON ce.link_id = l.id
+     WHERE ce.id = $1`,
+    params
+  );
+  const row = result.rows[0];
+  if (!row) {
+    return undefined;
+  }
+  if (row.eligible !== true) {
+    return { match: null };
+  }
+
+  const claimed = await db.query(
+    `UPDATE click_events SET install_matched_at = NOW()
+     WHERE id = $1 AND install_matched_at IS NULL
+     RETURNING id`,
+    [clickId]
+  );
+  if (!claimed.rowCount && row.one_install_per_click === true) {
+    return { match: null };
+  }
+
+  return {
+    match: {
+      clickId: row.click_id,
+      linkId: row.link_id,
+      confidenceScore: 100,
+      matchedFactors: ['install_referrer'],
+      clickedAt: new Date(row.clicked_at),
+      linkParams: row.link_params ?? null,
+      oneInstallPerClick: row.one_install_per_click === true,
+      competingLinks: 0,
+    },
+  };
+}
+
+/**
  * Store device fingerprint for a click event
  */
 export async function storeFingerprintForClick(
@@ -791,25 +892,35 @@ export async function recordInstallEvent(
   deviceId?: string,
   requestedWindowHours: number = DEFAULT_ATTRIBUTION_WINDOW_HOURS,
   sdk?: { name?: string | null; version?: string | null },
-  scope: InstallMatchScope = {}
+  scope: InstallMatchScope = {},
+  installReferrer?: string
 ): Promise<{
   installId: string;
   match: FingerprintMatch | null;
-  /** 'fingerprint' when matched to a click, else 'none'. */
-  attributionMethod: 'fingerprint' | 'none';
+  /**
+   * 'install_referrer' when the Play install referrer named the click,
+   * 'fingerprint' when the device signals matched one, else 'none'.
+   */
+  attributionMethod: AttributionMethod;
   deepLinkData: DeepLinkPayload | null;
 }> {
   const fingerprintData = normalizeFingerprintData(input);
   const attributionWindowHours = normalizeAttributionWindowHours(requestedWindowHours);
   const fingerprintHash = generateFingerprintHash(fingerprintData);
 
-  // Attempt to match install to a click
-  const match = await matchAndClaimClick(fingerprintData, attributionWindowHours, scope);
-
-  // Attribution metadata for measurement: install attribution is
-  // fingerprint-based, so the method is 'fingerprint' on a match and 'none'
-  // (organic) otherwise; matched_factors records which signals matched.
-  const attributionMethod = match ? 'fingerprint' : 'none';
+  // A click named by the install referrer decides the match; without one, the
+  // install is matched on its fingerprint.
+  let match: FingerprintMatch | null;
+  let attributionMethod: AttributionMethod;
+  const referrerClickId = scope.matchNothing ? null : clickIdFromInstallReferrer(installReferrer);
+  const referred = referrerClickId ? await matchReferrerClick(referrerClickId, scope) : undefined;
+  if (referred) {
+    match = referred.match;
+    attributionMethod = match ? 'install_referrer' : 'none';
+  } else {
+    match = await matchAndClaimClick(fingerprintData, attributionWindowHours, scope);
+    attributionMethod = match ? 'fingerprint' : 'none';
+  }
   const matchedFactors = match?.matchedFactors ?? null;
 
   // Insert install event

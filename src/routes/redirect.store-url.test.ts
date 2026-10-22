@@ -1,10 +1,12 @@
 /**
- * Store URLs leave the redirect exactly as configured.
+ * Store URLs are not decorated like websites.
  *
  * The destination decorator adds UTM tags, deep-link parameters and the
  * opt-in click id — right for a website, wrong for a store listing. Google
  * Play identifies the app by `?id=`, so a deep-link parameter named `id`
  * replaced it and Play answered 404 to every Android visitor sent to install.
+ * The one thing a Play listing gains, for an Android visitor, is the click id
+ * in its `referrer`, which Play hands to the installed app.
  *
  * The app-open guard cases matter as much as the fix: an in-app browser must
  * still be sent to the web fallback (where a Universal Link / App Link gets a
@@ -15,7 +17,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { redirectRoutes, isAppStoreUrl } from './redirect.js';
+import { redirectRoutes, isAppStoreUrl, withPlayInstallReferrer } from './redirect.js';
 
 const query = vi.fn();
 vi.mock('../lib/database.js', () => ({
@@ -95,12 +97,33 @@ afterEach(async () => {
   await app.close();
 });
 
+/** The click id the redirect wrote to click_events. */
+function insertedClickId(): string | undefined {
+  const insert = query.mock.calls.find(([sql]) => /INSERT INTO click_events/i.test(String(sql)));
+  return (insert?.[1] as unknown[] | undefined)?.[0] as string | undefined;
+}
+
+/** `location` as a Play URL: its app id, and its referrer's keys. */
+function playParts(location: unknown) {
+  const url = new URL(String(location));
+  return {
+    base: `${url.origin}${url.pathname}`,
+    keys: [...url.searchParams.keys()].sort(),
+    id: url.searchParams.get('id'),
+    referrer: new URLSearchParams(url.searchParams.get('referrer') ?? ''),
+  };
+}
+
 describe('store URLs are sent exactly as configured', () => {
-  it('Android Chrome → the Play URL untouched, so a deep-link `id` cannot replace the app id', async () => {
+  it('Android Chrome → the Play URL with only the click id added, so a deep-link `id` cannot replace the app id', async () => {
     mockDb(linkRow({ web_fallback_url: WEB }));
     const res = await get(app, ANDROID_CHROME_UA);
     expect(res.statusCode).toBe(302);
-    expect(res.headers.location).toBe(PLAY);
+    const play = playParts(res.headers.location);
+    expect(play.base).toBe('https://play.google.com/store/apps/details');
+    expect(play.keys).toEqual(['id', 'referrer']);
+    expect(play.id).toBe('com.example.app');
+    expect([...play.referrer.keys()]).toEqual(['lf_click']);
   });
 
   it('iOS Safari → the App Store URL untouched', async () => {
@@ -111,9 +134,96 @@ describe('store URLs are sent exactly as configured', () => {
   });
 
   it('a store URL configured as the web fallback is not decorated either', async () => {
+    mockDb(linkRow({ ios_app_store_url: null, android_app_store_url: null, web_fallback_url: PLAY }));
+    const res = await get(app, IPHONE_UA);
+    expect(res.headers.location).toBe(PLAY);
+  });
+});
+
+describe('the Play install referrer carries the click id', () => {
+  it('is the id of the click the redirect records', async () => {
+    mockDb(linkRow());
+    const res = await get(app, ANDROID_CHROME_UA);
+    await new Promise((r) => setImmediate(r));
+    const clickId = playParts(res.headers.location).referrer.get('lf_click');
+    expect(clickId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(insertedClickId()).toBe(clickId);
+  });
+
+  it('is added to a Play URL configured as the web fallback', async () => {
     mockDb(linkRow({ android_app_store_url: null, web_fallback_url: PLAY }));
     const res = await get(app, ANDROID_CHROME_UA);
-    expect(res.headers.location).toBe(PLAY);
+    const play = playParts(res.headers.location);
+    expect(play.id).toBe('com.example.app');
+    expect(play.referrer.get('lf_click')).toBeTruthy();
+  });
+
+  it('keeps the keys of a referrer the Play URL already carries', async () => {
+    mockDb(linkRow({ android_app_store_url: `${PLAY}&referrer=utm_source%3Dposter` }));
+    const res = await get(app, ANDROID_CHROME_UA);
+    const { referrer } = playParts(res.headers.location);
+    expect(referrer.get('utm_source')).toBe('poster');
+    expect(referrer.get('lf_click')).toBeTruthy();
+  });
+
+  it('is the scheme interstitial\'s store fallback on Android', async () => {
+    mockDb(linkRow({ app_scheme: 'example', deep_link_path: '/e/42' }));
+    const res = await get(app, ANDROID_CHROME_UA);
+    expect(res.statusCode).toBe(200);
+    const fallback = /id="store-btn" href="([^"]+)"/.exec(res.body)?.[1].replace(/&amp;/g, '&');
+    expect(playParts(fallback).referrer.get('lf_click')).toBeTruthy();
+  });
+
+  it('is the launchpad page\'s Google Play button on Android', async () => {
+    mockDb(linkRow({ org_settings: { launchpad: { mobile: 'page' } } }));
+    const res = await get(app, ANDROID_CHROME_UA);
+    expect(res.statusCode).toBe(200);
+    const button = /data-lp-cta="cta_android" href="([^"]+)"/.exec(res.body)?.[1].replace(/&amp;/g, '&');
+    expect(playParts(button).referrer.get('lf_click')).toBeTruthy();
+  });
+
+  it('is not added for an iPhone or a desktop visitor', async () => {
+    mockDb(linkRow({ ios_app_store_url: null, android_app_store_url: null, web_fallback_url: PLAY }));
+    expect((await get(app, IPHONE_UA)).headers.location).toBe(PLAY);
+    expect((await get(app, DESKTOP_UA)).headers.location).toBe(PLAY);
+  });
+
+  it('app-open guard: an Android in-app browser still goes to the web fallback, with no referrer', async () => {
+    mockDb(linkRow({ web_fallback_url: WEB }));
+    const res = await get(app, ANDROID_INSTAGRAM_UA);
+    const url = new URL(String(res.headers.location));
+    expect(url.hostname).toBe('example.com');
+    expect(url.searchParams.has('referrer')).toBe(false);
+  });
+});
+
+describe('withPlayInstallReferrer', () => {
+  const CLICK = '11111111-2222-4333-8444-555555555555';
+
+  it('adds the click id to a Play listing, https or market://', () => {
+    expect(withPlayInstallReferrer(PLAY, CLICK)).toBe(`${PLAY}&referrer=lf_click%3D${CLICK}`);
+    expect(withPlayInstallReferrer('market://details?id=com.example.app', CLICK)).toBe(
+      `market://details?id=com.example.app&referrer=lf_click%3D${CLICK}`
+    );
+  });
+
+  it('replaces a click id the referrer already names', () => {
+    const url = withPlayInstallReferrer(`${PLAY}&referrer=lf_click%3Dold%26utm_source%3Dx`, CLICK);
+    const referrer = new URLSearchParams(new URL(url).searchParams.get('referrer') ?? '');
+    expect(referrer.getAll('lf_click')).toEqual([CLICK]);
+    expect(referrer.get('utm_source')).toBe('x');
+  });
+
+  it('leaves every other URL alone', () => {
+    for (const url of [
+      APP_STORE,
+      WEB,
+      'https://play.google.com/store/apps/dev?id=123',
+      'https://play.google.com.evil.example/store/apps/details?id=x',
+      'not a url',
+    ]) {
+      expect(withPlayInstallReferrer(url, CLICK)).toBe(url);
+    }
   });
 });
 

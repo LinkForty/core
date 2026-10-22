@@ -49,7 +49,7 @@ The SDK must be initialized before any other functionality is used. Initializati
 
 ## 2. Deferred Deep Linking (Install Attribution)
 
-Matches a new app install back to the link click that drove it, using probabilistic device fingerprinting.
+Matches a new app install back to the link click that drove it. On Android, a Google Play install referrer names the click exactly; otherwise the match is made by probabilistic device fingerprinting.
 
 ### What the SDK must do
 
@@ -62,11 +62,12 @@ Matches a new app install back to the link click that drove it, using probabilis
    - Platform version
    - App version
    - Optional device ID (IDFA/GAID, only if user consented)
-2. Send the fingerprint to the server
-3. Receive an attribution response containing: install ID, whether attributed, confidence score, matched factors, and deep link data (if attributed)
-4. Persist the install ID and deep link data locally
-5. Deliver the result to a registered callback (or null/nil for organic installs)
-6. Allow the callback to be registered before or after initialization (if registered after and data is already available, invoke immediately)
+2. On Android, read the Google Play install referrer (Play Install Referrer API, `InstallReferrerClient`) and send it as `installReferrer`, exactly as Play returns it. The redirect puts the click id in every Play listing's `referrer` (`lf_click=<id>`), so the server matches the install to that click. Don't wait long for it: if Play doesn't answer within a couple of seconds, send the install without it.
+3. Send the fingerprint to the server
+4. Receive an attribution response containing: install ID, whether attributed, confidence score, matched factors, and deep link data (if attributed)
+5. Persist the install ID and deep link data locally
+6. Deliver the result to a registered callback (or null/nil for organic installs)
+7. Allow the callback to be registered before or after initialization (if registered after and data is already available, invoke immediately)
 
 ### API endpoint
 
@@ -340,7 +341,7 @@ Canonical field names for cross-SDK data models. SDKs should use platform-approp
 | linkId | string | No | Link UUID from the backend |
 | confidenceScore | number | No | Deferred only: match confidence (0-100) |
 | matchedFactors | string[] | No | Deferred only: which fingerprint factors matched |
-| attributionMethod | string | No | Deferred only: how the install was matched (`fingerprint`) |
+| attributionMethod | string | No | Deferred only: how the install was matched (`install_referrer` or `fingerprint`) |
 | competingLinks | number | No | Deferred only: how many other links had a qualifying click from the install's network. 0 means no other link was in contention |
 
 ### InstallResponse
@@ -351,11 +352,13 @@ Canonical field names for cross-SDK data models. SDKs should use platform-approp
 | attributed | boolean | Yes | Whether install was matched to a click |
 | confidenceScore | number | Yes | Match confidence (0-100) |
 | matchedFactors | string[] | Yes | Which fingerprint factors matched |
-| attributionMethod | string | No | `fingerprint` when matched, `none` when organic |
-| competingLinks | number | No | How many other links had a click from the install's network that also reached the threshold. 0 when nothing else was in contention, or when organic |
+| attributionMethod | string | No | `install_referrer` when the Play install referrer named the click, `fingerprint` when matched by device signals, `none` when organic |
+| competingLinks | number | No | How many other links had a click from the install's network that also reached the threshold. 0 when nothing else was in contention, when matched by install referrer, or when organic |
 | deepLinkData | DeepLinkData | No | Link data if attributed (null/empty if organic) |
 
-SDKs pass `confidenceScore`, `matchedFactors`, `attributionMethod` and `competingLinks` to the app with the deferred deep link. An app acting on a sensitive link (a sign-in or a gift) can treat `competingLinks > 0` as unverified, for example by asking the user to confirm.
+SDKs pass `confidenceScore`, `matchedFactors`, `attributionMethod` and `competingLinks` to the app with the deferred deep link. A match by install referrer has `confidenceScore` 100, `matchedFactors` `["install_referrer"]` and `competingLinks` 0.
+
+A click named by the install referrer is matched under the same rules as a fingerprint match: it must be in the app's scope, on a link that still opens, within the link's install window, and, on a link that hands a click to one install only, not already used. When it fails one of them the install is organic; the server does not fall back to a fingerprint match on another click. A referrer without a click id, or with one the server didn't issue, leaves the install to its fingerprint. An app acting on a sensitive link (a sign-in or a gift) can treat `competingLinks > 0` as unverified, for example by asking the user to confirm.
 
 ### CreateLinkOptions
 

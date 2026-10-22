@@ -118,16 +118,22 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
    * - platformVersion: Platform version (e.g., "15.0")
    * - deviceId: Optional device identifier (IDFA, GAID, etc.)
    * - attributionWindowHours: Optional custom attribution window (default: 168 = 7 days)
+   * - installReferrer: Optional, Android: the Google Play install referrer, as
+   *   the Play Install Referrer API returns it. The redirect puts the click id
+   *   in every Play listing's referrer (`lf_click=<id>`), so when it is there
+   *   the install is matched to that exact click instead of by fingerprint.
    *
    * Response:
    * - installId: UUID of the install event
    * - attributed: Boolean indicating if install was matched to a click
    * - confidenceScore: Confidence score (0-100) if matched
    * - matchedFactors: Array of matched fingerprint factors
-   * - attributionMethod: How the install was matched: 'fingerprint', or 'none' (organic)
+   * - attributionMethod: How the install was matched: 'install_referrer' (the
+   *   click named by the Play install referrer), 'fingerprint', or 'none' (organic)
    * - competingLinks: How many other links also had a click from the install's
-   *   network that reached the threshold. 0 when nothing else was in contention;
-   *   above 0, another device's tap may have led to this install. An app can
+   *   network that reached the threshold (always 0 for 'install_referrer').
+   *   0 when nothing else was in contention; above 0, another device's tap
+   *   may have led to this install. An app can
    *   treat that as unverified, e.g. confirm before acting on a sign-in link.
    * - deepLinkData: Deep link data if matched (shortCode, URLs, UTM params,
    *   confidenceScore, matchedFactors, attributionMethod, competingLinks, etc.)
@@ -154,6 +160,9 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
       // host reads it to route the install to the correct tenant; self-hosted
       // single-tenant deployments simply ignore it.
       appToken: z.string().optional(),
+      // Read leniently: a referrer this server cannot use is ignored, never
+      // a reason to reject the install.
+      installReferrer: z.unknown().optional(),
     });
 
     const body = schema.parse(request.body);
@@ -190,7 +199,8 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
         body.deviceId,
         body.attributionWindowHours,
         { name: body.sdkName, version: body.sdkVersion },
-        scope
+        scope,
+        typeof body.installReferrer === 'string' ? body.installReferrer : undefined
       );
 
       return reply.status(200).send({
