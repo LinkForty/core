@@ -1,3 +1,7 @@
+## <small>1.41.1 (2026-10-22)</small>
+
+* fix(attribution): read an install referrer passed on still encoded or inside the Play URL (#86) ([6913ef7](https://github.com/LinkForty/core/commit/6913ef7)), closes [#86](https://github.com/LinkForty/core/issues/86)
+
 ## 1.41.0 (2026-10-22)
 
 * feat(attribution): match Android installs to the click named by the Play install referrer (#84) ([840940f](https://github.com/LinkForty/core/commit/840940f)), closes [#84](https://github.com/LinkForty/core/issues/84)
