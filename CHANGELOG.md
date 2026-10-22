@@ -1,3 +1,7 @@
+## 1.41.0 (2026-10-22)
+
+* feat(attribution): match Android installs to the click named by the Play install referrer (#84) ([840940f](https://github.com/LinkForty/core/commit/840940f)), closes [#84](https://github.com/LinkForty/core/issues/84)
+
 ## 1.40.0 (2026-10-21)
 
 * feat(attribution): report how an install was matched and how many other links were in contention (#8 ([1d8e1d1](https://github.com/LinkForty/core/commit/1d8e1d1)), closes [#83](https://github.com/LinkForty/core/issues/83)
