@@ -4,7 +4,7 @@ import { db } from '../lib/database.js';
 import { resolveLinkScope, bareCodeOrderBy, linkCacheKey, isCacheableResolution } from '../lib/link-lookup.js';
 import { getClientIp } from '../lib/client-ip.js';
 import { parseUserAgent, getLocationFromIP, buildRedirectUrl, detectDevice, resolveClickUtms, extractLinkParams } from '../lib/utils.js';
-import { storeFingerprintForClick, type FingerprintData } from '../lib/fingerprint.js';
+import { INSTALL_REFERRER_CLICK_KEY, storeFingerprintForClick, type FingerprintData } from '../lib/fingerprint.js';
 import { emitClickEvent } from '../lib/event-emitter.js';
 import { classifyBot, edgeBotSignal } from '../lib/bot-detection.js';
 import {
@@ -120,12 +120,13 @@ const APP_STORE_HOSTS = new Set(['play.google.com', 'apps.apple.com', 'itunes.ap
 /**
  * True when `url` is an App Store or Google Play URL.
  *
- * A store URL is sent exactly as configured, never decorated like a website.
- * Google Play identifies the app by its own `?id=`, so appending the link's
- * deep-link parameters let a parameter named `id` replace the app's id and
- * Play answered 404. Neither store passes query parameters on to the app, so
- * nothing is lost by leaving them off: after install, the deep-link data
- * reaches the app through deferred deep linking, not through the store URL.
+ * A store URL is never decorated like a website. Google Play identifies the
+ * app by its own `?id=`, so appending the link's deep-link parameters let a
+ * parameter named `id` replace the app's id and Play answered 404. Neither
+ * store passes arbitrary query parameters on to the app, so nothing is lost by
+ * leaving them off: after install, the deep-link data reaches the app through
+ * deferred deep linking. The one parameter Play does pass on, `referrer`, is
+ * added for Android visitors by withPlayInstallReferrer().
  */
 export function isAppStoreUrl(url: string): boolean {
   try {
@@ -133,6 +134,33 @@ export function isAppStoreUrl(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * `url` with the click id added to its Google Play `referrer`, when `url` is a
+ * Play listing (`https://play.google.com/store/apps/details` or
+ * `market://details`); any other URL is returned unchanged. A `referrer` the
+ * URL already carries keeps its other keys. The installed app reads the
+ * referrer back through the Play Install Referrer API and sends it with the
+ * install, which names the click exactly (see matchReferrerClick() in lib/fingerprint.ts).
+ */
+export function withPlayInstallReferrer(url: string, clickId: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return url;
+  }
+  const isPlayListing =
+    (parsed.protocol === 'https:' &&
+      parsed.hostname.toLowerCase() === 'play.google.com' &&
+      parsed.pathname === '/store/apps/details') ||
+    (parsed.protocol === 'market:' && parsed.hostname === 'details');
+  if (!isPlayListing) return url;
+  const referrer = new URLSearchParams(parsed.searchParams.get('referrer') ?? '');
+  referrer.set(INSTALL_REFERRER_CLICK_KEY, clickId);
+  parsed.searchParams.set('referrer', referrer.toString());
+  return parsed.toString();
 }
 
 /**
@@ -979,7 +1007,9 @@ export async function redirectRoutes(
           schemeUrl: appScheme ? buildAppSchemeUrl(link) : null,
           showQr: false,
           webUrl: webFallbackUrl || link.original_url ? decorateWebDestination(webFallbackUrl || link.original_url) : null,
-          storeUrls: device === 'ios' ? { iosUrl, androidUrl: null } : { iosUrl: null, androidUrl },
+          storeUrls: device === 'ios'
+            ? { iosUrl, androidUrl: null }
+            : { iosUrl: null, androidUrl: androidUrl ? withPlayInstallReferrer(androidUrl, clickId) : null },
         });
       }
     }
@@ -1020,6 +1050,8 @@ export async function redirectRoutes(
 
     if (!useSchemeUrl) {
       finalUrl = decorateWebDestination(redirectUrl);
+      // A Play listing carries the click id to the app it installs.
+      if (device === 'android') finalUrl = withPlayInstallReferrer(finalUrl, clickId);
     } else {
       // For URI scheme URLs, append query params differently
       if (link.deep_link_parameters && Object.keys(link.deep_link_parameters).length > 0) {
@@ -1041,7 +1073,8 @@ export async function redirectRoutes(
       // browser-aware: regular browsers prefer the store URL, in-app browsers
       // prefer the web fallback (gives UL a second chance to fire).
       const fb = pickMobileFallbackUrl(device, userAgent, iosUrl, androidUrl, webFallbackUrl);
-      const storeFallback = fb?.url || link.original_url;
+      let storeFallback = fb?.url || link.original_url;
+      if (storeFallback && device === 'android') storeFallback = withPlayInstallReferrer(storeFallback, clickId);
 
       // `appScheme` is already vetted; this re-checks the assembled URL so a
       // custom scheme URL naming an executable scheme is refused too.

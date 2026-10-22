@@ -532,6 +532,8 @@ curl -X POST http://localhost:3000/api/sdk/v1/install \
   }'
 ```
 
+On Android, also send `"installReferrer"`: the Google Play install referrer, as the Play Install Referrer API returns it. Every Play listing the redirect sends an Android visitor to carries the click id in its `referrer` (`lf_click=<id>`), so the install is matched to that exact click (`attributionMethod: "install_referrer"`, `confidenceScore: 100`, `competingLinks: 0`), under the same window, live-link, scope and one-install rules as a fingerprint match. A referrer without a click id leaves the install to its fingerprint.
+
 Response:
 
 ```json

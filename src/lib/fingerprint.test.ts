@@ -895,3 +895,27 @@ describe('storage of fingerprint fields', () => {
     expect(mockDbQuery.mock.calls[1][1][4]).toBe(fingerprint.DEFAULT_ATTRIBUTION_WINDOW_HOURS);
   });
 });
+
+describe('clickIdFromInstallReferrer', () => {
+  const CLICK = '11111111-2222-4333-8444-555555555555';
+
+  it('reads the click id from a Play install referrer', () => {
+    expect(fingerprint.clickIdFromInstallReferrer(`lf_click=${CLICK}`)).toBe(CLICK);
+    expect(fingerprint.clickIdFromInstallReferrer(`utm_source=poster&lf_click=${CLICK}&utm_medium=print`)).toBe(CLICK);
+  });
+
+  it('returns null when there is no usable click id', () => {
+    for (const referrer of [
+      undefined,
+      null,
+      42,
+      '',
+      'utm_source=google-play&utm_medium=organic',
+      'lf_click=not-a-uuid',
+      `lf_click=${CLICK}'--`,
+      `lf_click=${CLICK}&${'x'.repeat(1100)}`,
+    ]) {
+      expect(fingerprint.clickIdFromInstallReferrer(referrer)).toBeNull();
+    }
+  });
+});
