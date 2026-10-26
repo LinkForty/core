@@ -92,6 +92,84 @@ describe.skipIf(!ADMIN_URL)('initializeDatabase schema lock', () => {
   }, 30_000);
 });
 
+describe.skipIf(!ADMIN_URL)('initialisation against a table someone is reading', () => {
+  // Postgres takes a table's lock before it evaluates IF NOT EXISTS, so a
+  // second start used to park an ACCESS EXCLUSIVE request on `links` behind
+  // any long reader — and every redirect behind that. With the catalog guard
+  // nothing is sent for a column that exists, and with a lock timeout a
+  // statement that does need the table gives up instead of queueing it.
+  const scratchName = `lf_core_schema_guard_${Date.now()}`;
+  let admin: pg.Client;
+  let scratchUrl: string;
+  const pools: pg.Pool[] = [];
+
+  beforeAll(async () => {
+    admin = new pg.Client({ connectionString: ADMIN_URL });
+    await admin.connect();
+    await admin.query(`CREATE DATABASE ${scratchName}`);
+    const url = new URL(ADMIN_URL as string);
+    url.pathname = `/${scratchName}`;
+    scratchUrl = url.toString();
+    // First start: every table, column and index exists afterwards.
+    await initializeDatabase({ url: scratchUrl, pool: { min: 1, max: 2 } });
+    pools.push(db);
+  }, 60_000);
+
+  afterAll(async () => {
+    for (const p of pools) await p.end().catch(() => undefined);
+    await db?.end().catch(() => undefined);
+    await admin.query(`DROP DATABASE IF EXISTS ${scratchName} WITH (FORCE)`);
+    await admin.end();
+  }, 30_000);
+
+  it('a second start completes while a transaction holds ACCESS SHARE on links, and the setting does not leak', async () => {
+    const reader = new pg.Client({ connectionString: scratchUrl });
+    await reader.connect();
+    try {
+      await reader.query('BEGIN');
+      await reader.query('SELECT 1 FROM links LIMIT 1');
+
+      const started = Date.now();
+      await initializeDatabase({ url: scratchUrl, pool: { min: 1, max: 2 }, lockTimeoutMs: 2000 });
+      pools.push(db);
+      // Nothing waited: well under a single lock timeout.
+      expect(Date.now() - started).toBeLessThan(10_000);
+
+      // The reader was never blocked either.
+      const t = Date.now();
+      await reader.query('SELECT 1 FROM links LIMIT 1');
+      expect(Date.now() - t).toBeLessThan(1_000);
+
+      // The timeout was session-level on the initialisation client and was
+      // reset before that client went back to the pool.
+      const { rows } = await db.query('SHOW lock_timeout');
+      expect(rows[0].lock_timeout).toBe('0');
+    } finally {
+      await reader.query('ROLLBACK').catch(() => undefined);
+      await reader.end();
+    }
+  }, 60_000);
+
+  it('a statement that does need the table fails with 55P03 after the timeout instead of queueing it', async () => {
+    const reader = new pg.Client({ connectionString: scratchUrl });
+    const other = new pg.Client({ connectionString: scratchUrl });
+    await reader.connect();
+    await other.connect();
+    try {
+      await reader.query('BEGIN');
+      await reader.query('SELECT 1 FROM links LIMIT 1');
+      await other.query('SET lock_timeout = 1000');
+      const t = Date.now();
+      await expect(other.query('ALTER TABLE links ADD COLUMN probe_column_not_guarded INTEGER')).rejects.toMatchObject({ code: '55P03' });
+      expect(Date.now() - t).toBeLessThan(5_000);
+    } finally {
+      await reader.query('ROLLBACK').catch(() => undefined);
+      await reader.end();
+      await other.end();
+    }
+  }, 30_000);
+});
+
 describe.skipIf(!ADMIN_URL)('idle connection errors', () => {
   const scratchName = `lf_core_idle_error_${Date.now()}`;
   let admin: pg.Client;

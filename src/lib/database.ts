@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { guardSchemaClient, isLockTimeout } from './schema-guard.js';
 
 const { Pool } = pg;
 
@@ -8,6 +9,21 @@ export interface DatabaseOptions {
     min?: number;
     max?: number;
   };
+  /**
+   * How long a schema statement at initialisation may wait for a table lock,
+   * in milliseconds. Unset (the default) means it waits as long as Postgres
+   * lets it.
+   *
+   * Postgres takes a table's lock before it evaluates `IF NOT EXISTS`, so an
+   * `ALTER TABLE … ADD COLUMN IF NOT EXISTS` for a column that already exists
+   * still asks for ACCESS EXCLUSIVE. Statements whose effect already exists
+   * are answered from the catalog and never sent, so this only matters for
+   * statements that genuinely change the schema. When one of those waits
+   * longer than this, `initializeDatabase()` fails with SQLSTATE `55P03`
+   * instead of parking a lock request that every later query on the table
+   * would queue behind; the host decides whether to retry or restart.
+   */
+  lockTimeoutMs?: number;
 }
 
 export let db: pg.Pool;
@@ -70,7 +86,15 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
     console.error('Database connection lost while idle; it will be replaced:', error.message);
   });
 
-  const client = await connectWithRetry();
+  const raw = await connectWithRetry();
+  // Idempotent statements whose effect already exists (a column, an index, an
+  // absent constraint, a settled NOT NULL) are answered from the catalog and
+  // never reach Postgres, so a routine start never asks for a table lock it
+  // does not need. See schema-guard.ts for why that matters.
+  const client = guardSchemaClient(raw);
+  const lockTimeoutMs = Number.isFinite(options.lockTimeoutMs) && (options.lockTimeoutMs as number) > 0
+    ? Math.trunc(options.lockTimeoutMs as number)
+    : null;
 
   // Serialise schema initialisation across processes.
   //
@@ -97,6 +121,13 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
   try {
     await client.query('SELECT pg_advisory_lock($1)', [SCHEMA_INIT_LOCK_KEY]);
     lockHeld = true;
+
+    // Set after the advisory lock is held: waiting for another instance's
+    // initialisation is wanted, waiting for a table lock is not. Session-level
+    // on this client only; RESET below before it goes back to the pool.
+    if (lockTimeoutMs !== null) {
+      await raw.query(`SET lock_timeout = ${lockTimeoutMs}`);
+    }
 
     // Organizations table (must be created before links, which references it).
     //
@@ -765,11 +796,31 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
       END $$;
     `);
 
-    console.log('Database schema initialized successfully');
+    if (client.skipped.length > 0) {
+      console.log(`Database schema initialized successfully (${client.skipped.length} statement(s) already applied, not re-sent)`);
+    } else {
+      console.log('Database schema initialized successfully');
+    }
   } catch (error) {
+    if (isLockTimeout(error)) {
+      // Say what happened in operator terms and keep the SQLSTATE so a host
+      // can recognise it and retry the start with backoff.
+      const wrapped = new Error(
+        `Schema initialisation waited ${lockTimeoutMs} ms for a table lock and gave up ` +
+          `(another statement is holding the table; retry the start once it finishes): ${(error as Error).message}`
+      );
+      (wrapped as any).code = (error as any).code;
+      console.error('Error initializing database:', wrapped.message);
+      throw wrapped;
+    }
     console.error('Error initializing database:', error);
     throw error;
   } finally {
+    if (lockTimeoutMs !== null) {
+      // The client returns to the shared pool: the timeout must not follow it
+      // into request handling.
+      await raw.query('RESET lock_timeout').catch(() => undefined);
+    }
     if (lockHeld) {
       // Best effort: a broken connection has already dropped the lock, and
       // failing to unlock must not mask the error that got us here.
