@@ -1,3 +1,7 @@
+## <small>1.41.2 (2026-10-26)</small>
+
+* fix(redirect): serve an organization's host only that organization's links (#88) ([41e9358](https://github.com/LinkForty/core/commit/41e9358)), closes [#88](https://github.com/LinkForty/core/issues/88)
+
 ## <small>1.41.1 (2026-10-22)</small>
 
 * fix(attribution): read an install referrer passed on still encoded or inside the Play URL (#86) ([6913ef7](https://github.com/LinkForty/core/commit/6913ef7)), closes [#86](https://github.com/LinkForty/core/issues/86)
