@@ -8,9 +8,8 @@ import { sdkRoutes } from './sdk.js';
 import { previewRoutes } from './preview.js';
 
 /**
- * A bare short code on a host that belongs to an organization resolves only
- * that organization's link; on a shared host it resolves as before, and a
- * template URL names its link on any host.
+ * A host that belongs to an organization serves only that organization's
+ * links, by bare code or by template URL; a shared host resolves as before.
  *
  * Needs a real database; skipped without DATABASE_URL, like database.test.ts.
  */
@@ -88,14 +87,14 @@ describe.skipIf(!ADMIN_URL)('bare codes on an organization host (integration)', 
     const res = await get(OWN_HOST, '/b-only');
     expect(res.statusCode).toBe(404);
     expect(logged).toContainEqual(
-      expect.objectContaining({ shortCode: 'b-only', scope: orgA, reason: 'bare_code_other_organization' })
+      expect.objectContaining({ shortCode: 'b-only', scope: orgA, reason: 'other_organization_link' })
     );
   });
 
   it('logs nothing for a code no organization has', async () => {
     logged.length = 0;
     expect((await get(OWN_HOST, '/nobody')).statusCode).toBe(404);
-    expect(logged).not.toContainEqual(expect.objectContaining({ reason: 'bare_code_other_organization' }));
+    expect(logged).not.toContainEqual(expect.objectContaining({ reason: 'other_organization_link' }));
   });
 
   it('resolves every code on a shared host, as before', async () => {
@@ -103,17 +102,36 @@ describe.skipIf(!ADMIN_URL)('bare codes on an organization host (integration)', 
     expect((await get(SHARED_HOST, '/a-bare')).headers.location).toBe('https://a.example/bare');
   });
 
-  it('resolves a template URL on any host', async () => {
-    expect((await get(OWN_HOST, '/tmpl-b/b-only')).headers.location).toBe('https://b.example/only');
+  it("answers 404 for another organization's template URL, and logs it", async () => {
+    logged.length = 0;
+    expect((await get(OWN_HOST, '/tmpl-b/b-only')).statusCode).toBe(404);
+    expect(logged).toContainEqual(
+      expect.objectContaining({ shortCode: 'b-only', scope: orgA, reason: 'other_organization_link' })
+    );
+    expect((await get(OWN_HOST, '/tmpl-a/a-tmpl')).headers.location).toBe('https://a.example/templated');
+    expect((await get(SHARED_HOST, '/tmpl-b/b-only')).headers.location).toBe('https://b.example/only');
+  });
+
+  it("refuses another organization's template URL after the shared host has cached it", async () => {
+    await get(SHARED_HOST, '/tmpl-b/both');
+    expect((await get(OWN_HOST, '/tmpl-b/both')).statusCode).toBe(404);
   });
 
   it('applies the same rule to SDK resolve and the preview page', async () => {
     expect((await get(OWN_HOST, '/api/sdk/v1/resolve/a-tmpl')).statusCode).toBe(200);
     expect((await get(OWN_HOST, '/api/sdk/v1/resolve/b-only')).statusCode).toBe(404);
     expect((await get(SHARED_HOST, '/api/sdk/v1/resolve/b-only')).statusCode).toBe(200);
+    expect((await get(OWN_HOST, '/api/sdk/v1/resolve/tmpl-b/b-only')).statusCode).toBe(404);
+    expect((await get(SHARED_HOST, '/api/sdk/v1/resolve/tmpl-b/b-only')).statusCode).toBe(200);
 
     expect((await get(OWN_HOST, '/a-tmpl/preview')).statusCode).toBe(200);
     expect((await get(OWN_HOST, '/b-only/preview')).statusCode).toBe(404);
     expect((await get(SHARED_HOST, '/b-only/preview')).statusCode).toBe(200);
+
+    // A social scraper on a template URL is served only on a host that may serve the link.
+    const scrape = (host: string, url: string) =>
+      app.inject({ method: 'GET', url, headers: { host, 'user-agent': 'facebookexternalhit/1.1' } });
+    expect((await scrape(OWN_HOST, '/tmpl-b/b-only')).statusCode).toBe(404);
+    expect((await scrape(SHARED_HOST, '/tmpl-b/b-only')).statusCode).not.toBe(404);
   });
 });

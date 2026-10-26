@@ -193,6 +193,9 @@ async function findPreviewLink(
   shortCode: string,
   templateSlug?: string
 ): Promise<any | null> {
+  // An organization's host serves only that organization's links.
+  const scope = await resolveLinkScope(request);
+
   if (templateSlug) {
     const result = await db.query(
       `SELECT l.* FROM links l
@@ -202,10 +205,10 @@ async function findPreviewLink(
        LIMIT 1`,
       [shortCode, templateSlug]
     );
-    return result.rows[0] ?? null;
+    const link = result.rows[0] ?? null;
+    return link && scope && link.organization_id !== scope ? null : link;
   }
 
-  const scope = await resolveLinkScope(request);
   const result = await db.query(
     `SELECT l.* FROM links l
      WHERE l.short_code = $1 AND l.is_active = true

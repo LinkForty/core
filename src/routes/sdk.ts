@@ -624,11 +624,13 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
     // code another organization owns is answered as unknown.
     const appScope = await appOrganization(request);
 
-    // Same resolution and cache keys as redirect.ts (lib/link-lookup.ts).
-    const scope = templateSlug
+    // Otherwise the organization the request's host belongs to, if any. Same
+    // resolution and cache keys as redirect.ts (lib/link-lookup.ts).
+    const hostScope = appScope
       ? null
-      : appScope ??
-        (await resolveLinkScope(request, (error) => fastify.log.warn({ err: error }, 'Link scope resolver failed')));
+      : await resolveLinkScope(request, (error) => fastify.log.warn({ err: error }, 'Link scope resolver failed'));
+    const owner = appScope ?? hostScope;
+    const scope = templateSlug ? null : owner;
     const cacheKey = linkCacheKey(shortCode, templateSlug, scope);
 
     // Try Redis cache first
@@ -694,7 +696,7 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
 
     const link = JSON.parse(linkData);
 
-    if (appScope && link.organization_id !== appScope) {
+    if (owner && link.organization_id !== owner) {
       // Same response as an unknown short code, and no click recorded.
       return reply.status(404).send({ error: 'Link not found' });
     }

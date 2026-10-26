@@ -368,9 +368,20 @@ export async function redirectRoutes(
       fastify.log.info('Redirect: owner restriction supported (organizations.suspended_at present)'),
   });
   /**
+   * An organization's host was asked for another organization's link and
+   * answered 404. Logged so a link shared on the wrong host can be traced.
+   */
+  function logOtherOrganizationLink(shortCode: string, scope: string): void {
+    fastify.log.info(
+      { shortCode, scope, reason: 'other_organization_link' },
+      "Link on an organization's host belongs to another organization; answered 404"
+    );
+  }
+
+  /**
    * A bare code on an organization's host resolves only that organization's
-   * links. When another organization has the code, say so in the log, so a
-   * link shared on the wrong host can be traced. Never fails the response.
+   * links. When another organization has the code, log it. Never fails the
+   * response.
    */
   async function logOtherOrganizationCode(shortCode: string, scope: string): Promise<void> {
     try {
@@ -378,12 +389,7 @@ export async function redirectRoutes(
         'SELECT 1 FROM links WHERE short_code = $1 AND organization_id IS DISTINCT FROM $2::uuid LIMIT 1',
         [shortCode, scope]
       );
-      if (other.rows.length > 0) {
-        fastify.log.info(
-          { shortCode, scope, reason: 'bare_code_other_organization' },
-          "Bare code on an organization's host belongs to another organization; answered 404"
-        );
-      }
+      if (other.rows.length > 0) logOtherOrganizationLink(shortCode, scope);
     } catch (error) {
       fastify.log.warn({ err: error }, 'Bare code ownership check failed');
     }
@@ -393,11 +399,11 @@ export async function redirectRoutes(
   async function handleRedirect(request: any, reply: any, shortCode: string, templateSlug?: string) {
     let linkData: string | null = null;
 
-    // A template URL names its link outright; a bare code is resolved for the
-    // organization the request belongs to (lib/link-lookup.ts).
-    const scope = templateSlug
-      ? null
-      : await resolveLinkScope(request, (error) => fastify.log.warn({ err: error }, 'Link scope resolver failed'));
+    // The organization the request's host belongs to, if any. A bare code is
+    // looked up only within it; a template URL names its link outright, and is
+    // checked against it below (lib/link-lookup.ts).
+    const hostScope = await resolveLinkScope(request, (error) => fastify.log.warn({ err: error }, 'Link scope resolver failed'));
+    const scope = templateSlug ? null : hostScope;
     const cacheKey = linkCacheKey(shortCode, templateSlug, scope);
 
     // Try to get link from cache if Redis is available
@@ -470,6 +476,13 @@ export async function redirectRoutes(
     }
 
     const link = JSON.parse(linkData);
+
+    // An organization's host serves only that organization's links, whichever
+    // URL form names them. Checked after the cache read, which is shared by hosts.
+    if (hostScope && link.organization_id !== hostScope) {
+      logOtherOrganizationLink(shortCode, hostScope);
+      return reply.status(404).send({ error: 'Link not found' });
+    }
 
     // Safety gate, applied after the cache read so it covers cached rows too.
     //

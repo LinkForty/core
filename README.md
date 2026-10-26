@@ -460,7 +460,8 @@ Every short code is unique across the server. Links created through Core's API h
 An application that builds on Core and assigns links to organizations (by setting `links.organization_id`) gets one set of codes per organization: two organizations can each have `promo`. Template slugs stay unique across the server, and URLs resolve like this:
 
 - `/{templateSlug}/{shortCode}` resolves to exactly one link.
-- `/{shortCode}` on a request that belongs to an organization resolves only that organization's link with that code; another organization's link with the same code is answered with 404, and the refusal is logged.
+- `/{shortCode}` on a request that belongs to an organization resolves only that organization's link with that code.
+- A request that belongs to an organization is served only that organization's links, in either form: another organization's link is answered with 404, and the refusal is logged.
 - `/{shortCode}` on any other request prefers a link without a template, then the oldest link with that code.
 
 To tell Core which organization a request belongs to, for example by custom domain, register a resolver:
