@@ -1,6 +1,6 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { db } from '../lib/database.js';
-import { resolveLinkScope, bareCodeOrderBy } from '../lib/link-lookup.js';
+import { resolveLinkScope, bareCodeOrderBy, bareCodeScopeFilter } from '../lib/link-lookup.js';
 
 /**
  * User-agents that get the Open Graph preview page instead of a redirect.
@@ -210,7 +210,8 @@ async function findPreviewLink(
     `SELECT l.* FROM links l
      WHERE l.short_code = $1 AND l.is_active = true
      AND (l.expires_at IS NULL OR l.expires_at > NOW())
-     ${bareCodeOrderBy(scope ? '$2' : undefined)}
+     ${bareCodeScopeFilter(scope ? '$2' : undefined)}
+     ${bareCodeOrderBy()}
      LIMIT 1`,
     scope ? [shortCode, scope] : [shortCode]
   );

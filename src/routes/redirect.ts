@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { db } from '../lib/database.js';
-import { resolveLinkScope, bareCodeOrderBy, linkCacheKey, isCacheableResolution } from '../lib/link-lookup.js';
+import { resolveLinkScope, bareCodeOrderBy, bareCodeScopeFilter, linkCacheKey, isCacheableResolution } from '../lib/link-lookup.js';
 import { getClientIp } from '../lib/client-ip.js';
 import { parseUserAgent, getLocationFromIP, buildRedirectUrl, detectDevice, resolveClickUtms, extractLinkParams } from '../lib/utils.js';
 import { INSTALL_REFERRER_CLICK_KEY, storeFingerprintForClick, type FingerprintData } from '../lib/fingerprint.js';
@@ -367,6 +367,28 @@ export async function redirectRoutes(
     onSupported: () =>
       fastify.log.info('Redirect: owner restriction supported (organizations.suspended_at present)'),
   });
+  /**
+   * A bare code on an organization's host resolves only that organization's
+   * links. When another organization has the code, say so in the log, so a
+   * link shared on the wrong host can be traced. Never fails the response.
+   */
+  async function logOtherOrganizationCode(shortCode: string, scope: string): Promise<void> {
+    try {
+      const other = await db.query(
+        'SELECT 1 FROM links WHERE short_code = $1 AND organization_id IS DISTINCT FROM $2::uuid LIMIT 1',
+        [shortCode, scope]
+      );
+      if (other.rows.length > 0) {
+        fastify.log.info(
+          { shortCode, scope, reason: 'bare_code_other_organization' },
+          "Bare code on an organization's host belongs to another organization; answered 404"
+        );
+      }
+    } catch (error) {
+      fastify.log.warn({ err: error }, 'Bare code ownership check failed');
+    }
+  }
+
   // Helper function to handle the actual redirect logic
   async function handleRedirect(request: any, reply: any, shortCode: string, templateSlug?: string) {
     let linkData: string | null = null;
@@ -421,7 +443,8 @@ export async function redirectRoutes(
           WHERE l.short_code = $1
           AND (l.is_active = true OR l.disabled_at IS NOT NULL)
           AND (l.expires_at IS NULL OR l.expires_at > NOW())
-          ${bareCodeOrderBy(scope ? '$2' : undefined)}
+          ${bareCodeScopeFilter(scope ? '$2' : undefined)}
+          ${bareCodeOrderBy()}
           LIMIT 1
         `;
         params = scope ? [shortCode, scope] : [shortCode];
@@ -430,6 +453,7 @@ export async function redirectRoutes(
       const result = await db.query(query, params);
 
       if (result.rows.length === 0) {
+        if (scope) await logOtherOrganizationCode(shortCode, scope);
         return reply.status(404).send({ error: 'Link not found' });
       }
 

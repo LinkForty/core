@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { db } from '../lib/database.js';
-import { resolveLinkScope, bareCodeOrderBy, linkCacheKey, isCacheableResolution } from '../lib/link-lookup.js';
+import { resolveLinkScope, bareCodeOrderBy, bareCodeScopeFilter, linkCacheKey, isCacheableResolution } from '../lib/link-lookup.js';
 import { getClientIp } from '../lib/client-ip.js';
 import {
   recordInstallEvent,
@@ -667,7 +667,8 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
           LEFT JOIN organizations o ON l.organization_id = o.id
           WHERE l.short_code = $1 AND l.is_active = true
           AND (l.expires_at IS NULL OR l.expires_at > NOW())
-          ${bareCodeOrderBy(scope ? '$2' : undefined)}
+          ${bareCodeScopeFilter(scope ? '$2' : undefined)}
+          ${bareCodeOrderBy()}
           LIMIT 1
         `;
         params = scope ? [shortCode, scope] : [shortCode];
