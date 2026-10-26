@@ -3,6 +3,7 @@ import {
   setLinkScopeResolver,
   resolveLinkScope,
   bareCodeOrderBy,
+  bareCodeScopeFilter,
   linkCacheKey,
   isCacheableResolution,
 } from './link-lookup.js';
@@ -40,6 +41,16 @@ describe('bareCodeOrderBy', () => {
     expect(bareCodeOrderBy('$2')).toBe(
       'ORDER BY COALESCE(l.organization_id = $2::uuid, false) DESC, (l.template_id IS NULL) DESC, l.created_at ASC, l.id ASC'
     );
+  });
+});
+
+describe('bareCodeScopeFilter', () => {
+  it("limits the lookup to the request's organization", () => {
+    expect(bareCodeScopeFilter('$2')).toBe('AND l.organization_id = $2::uuid');
+  });
+
+  it('adds nothing without an organization', () => {
+    expect(bareCodeScopeFilter()).toBe('');
   });
 });
 
