@@ -1,3 +1,7 @@
+## <small>1.41.3 (2026-10-26)</small>
+
+* fix(database): skip idempotent schema statements and honour a lock timeout at init (#87) ([1ee0f63](https://github.com/LinkForty/core/commit/1ee0f63)), closes [#87](https://github.com/LinkForty/core/issues/87)
+
 ## <small>1.41.2 (2026-10-26)</small>
 
 * fix(redirect): serve an organization's host only that organization's links (#88) ([41e9358](https://github.com/LinkForty/core/commit/41e9358)), closes [#88](https://github.com/LinkForty/core/issues/88)
