@@ -267,7 +267,7 @@ You can change the page or send browsers somewhere else instead, without writing
    ```
 
    Changes show within a minute.
-2. **The instance's defaults**: the same fields from `NOT_FOUND_*` environment variables (`NOT_FOUND_REDIRECT_URL`, `NOT_FOUND_TITLE`, `NOT_FOUND_BUTTON_LABEL`…) on the Docker image (see [DOCKER.md](DOCKER.md#not-found-page)), or the `notFoundDefaults` redirect option when you create the server yourself (`notFoundSettingsFromEnv()` reads the variables for you).
+2. **The instance's defaults**: the `notFound` section of `linkforty.config.json` (see [Configuration file](#configuration-file)), with the same fields.
 3. **The built-in page.**
 
 URLs must be http(s) and colors hex; anything else is dropped, and all text is escaped. The `notFound` option below decides in code ahead of all three.
@@ -407,6 +407,7 @@ interface ServerOptions {
   trustProxy?: boolean | number;  // Trust X-Forwarded-For when behind a proxy (default: false)
   redirect?: RedirectRouteOptions;  // See below
   sdk?: SdkRouteOptions;            // See below
+  config?: LinkFortyConfig;         // linkforty.config.json, from loadConfig()
 }
 
 interface RedirectRouteOptions {
@@ -434,8 +435,8 @@ interface RedirectRouteOptions {
   // A hook that throws is logged and treated as false.
   isWebLinkRequest?: (request) => Promise<boolean> | boolean;
   // The instance's not-found page or redirect, used when the organization has
-  // no settings.notFound of its own. notFoundSettingsFromEnv() builds it from
-  // the NOT_FOUND_* environment variables.
+  // no settings.notFound of its own. createServer() fills it from the
+  // `notFound` section of the config file (ServerOptions.config).
   notFoundDefaults?: NotFoundSettings;
   // Decide the not-found response in code, ahead of the organization's
   // settings and notFoundDefaults: page content (title,
@@ -468,6 +469,25 @@ interface SdkRouteOptions {
 Install matching only considers clicks from the installing device's own network (its IPv4 /24 or IPv6 /64), since no other click can reach the confidence threshold, so the attribution window holds however much traffic the server takes. It relies on the `idx_fingerprints_ip` index, which `initializeDatabase()` builds concurrently on first start so click writes are never blocked.
 
 `renderLaunchpadPage()`, `defaultLaunchpadContent()` and `shouldServeLaunchpadOnDesktop()` are exported so a host can render the same page elsewhere (a settings preview, for instance). `renderNotFoundPage()` is exported for the same reason, and for a host that answers some requests before they reach the redirect route.
+
+### Configuration file
+
+Core splits its configuration the way most self-hosted platforms do:
+
+- **Environment variables** hold infrastructure and secrets: `DATABASE_URL`, `REDIS_URL`, `PORT`, `TRUST_PROXY`, and so on.
+- **`linkforty.config.json`** holds the instance's defaults and behavior, including text a visitor reads. Today that's the `notFound` section; see [linkforty.config.example.json](linkforty.config.example.json) and [DOCKER.md](DOCKER.md#configuration-file) for every setting.
+- **`organizations.settings`** holds per-organization values, which take precedence over the file where both apply.
+
+The file is optional. Core reads the path in `LINKFORTY_CONFIG`, or `linkforty.config.json` in the working directory. A file with an invalid value or unknown setting stops the server at startup with the setting named, rather than starting with it ignored. The Docker image does this for you. When you create the server yourself, load it and pass it in:
+
+```typescript
+import { createServer, loadConfig } from '@linkforty/core';
+
+const { config } = loadConfig(); // throws ConfigError on a bad file
+const server = await createServer({ database: { url: process.env.DATABASE_URL }, config });
+```
+
+Options passed in code (such as `redirect.notFoundDefaults`) take precedence over the file.
 
 ### Running behind a reverse proxy
 

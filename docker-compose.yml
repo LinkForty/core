@@ -57,15 +57,6 @@ services:
       PORT: ${PORT:-3000}
       HOST: ${HOST:-0.0.0.0}
 
-      # Optional: the page a browser sees for a broken link (see .env.example)
-      NOT_FOUND_REDIRECT_URL: ${NOT_FOUND_REDIRECT_URL:-}
-      NOT_FOUND_TITLE: ${NOT_FOUND_TITLE:-}
-      NOT_FOUND_MESSAGE: ${NOT_FOUND_MESSAGE:-}
-      NOT_FOUND_LOGO_URL: ${NOT_FOUND_LOGO_URL:-}
-      NOT_FOUND_ACCENT_COLOR: ${NOT_FOUND_ACCENT_COLOR:-}
-      NOT_FOUND_BACKGROUND_COLOR: ${NOT_FOUND_BACKGROUND_COLOR:-}
-      NOT_FOUND_BUTTON_LABEL: ${NOT_FOUND_BUTTON_LABEL:-}
-      NOT_FOUND_BUTTON_URL: ${NOT_FOUND_BUTTON_URL:-}
 
       # Optional: JWT secret for authentication
       # JWT_SECRET: ${JWT_SECRET}
@@ -80,6 +71,12 @@ services:
     ports:
       - "${LINKFORTY_PORT:-3000}:3000"
     restart: unless-stopped
+
+    # Optional: instance settings such as the not-found page. Copy
+    # linkforty.config.example.json to linkforty.config.json, then uncomment.
+    # (Create the file first: if it's missing, Docker mounts an empty directory.)
+    # volumes:
+    #   - ./linkforty.config.json:/app/linkforty.config.json:ro
 
     # /health is liveness (process up); /health/ready also checks the database.
     healthcheck:

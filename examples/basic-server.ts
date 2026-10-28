@@ -1,4 +1,4 @@
-import { createServer, notFoundSettingsFromEnv } from '@linkforty/core';
+import { createServer, loadConfig, ConfigError } from '@linkforty/core';
 
 function getTrustProxy(): boolean | number | undefined {
   const v = process.env.TRUST_PROXY;
@@ -9,8 +9,29 @@ function getTrustProxy(): boolean | number | undefined {
   return undefined;
 }
 
+/**
+ * linkforty.config.json: the file named by LINKFORTY_CONFIG, else the one in the
+ * working directory, if there is one. A broken file stops the server here with
+ * the bad setting named, rather than starting with the setting ignored.
+ */
+function readConfig() {
+  try {
+    const loaded = loadConfig();
+    if (loaded.path) console.log(`Configuration: ${loaded.path}`);
+    return loaded.config;
+  } catch (error) {
+    if (error instanceof ConfigError) {
+      console.error(`Invalid configuration — ${error.message}`);
+      process.exit(1);
+    }
+    throw error;
+  }
+}
+
 async function start() {
+  const config = readConfig();
   const server = await createServer({
+    config,
     database: {
       url: process.env.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/linkforty',
     },
@@ -21,10 +42,6 @@ async function start() {
       origin: process.env.CORS_ORIGIN || '*',
     },
     trustProxy: getTrustProxy(),
-    redirect: {
-      // What a browser sees for a broken link: NOT_FOUND_* environment variables.
-      notFoundDefaults: notFoundSettingsFromEnv(),
-    },
   });
 
   await server.listen({

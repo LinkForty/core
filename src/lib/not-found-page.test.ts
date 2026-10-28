@@ -3,7 +3,6 @@ import {
   NOT_FOUND_DEFAULTS,
   NOT_FOUND_SETTINGS_TTL_MS,
   createOrganizationNotFoundSettingsLookup,
-  notFoundSettingsFromEnv,
   readNotFoundSettings,
   readOrganizationNotFoundSettings,
   resolveNotFoundSettings,
@@ -130,23 +129,6 @@ describe('readNotFoundSettings', () => {
   it('reads an organization settings column', () => {
     expect(readOrganizationNotFoundSettings({ notFound: { title: 'Org' }, launchpad: {} })).toEqual({ title: 'Org' });
     expect(readOrganizationNotFoundSettings({ launchpad: {} })).toBeNull();
-  });
-});
-
-describe('notFoundSettingsFromEnv', () => {
-  it('reads the NOT_FOUND_* variables', () => {
-    expect(
-      notFoundSettingsFromEnv({
-        NOT_FOUND_TITLE: 'Gone',
-        NOT_FOUND_BUTTON_LABEL: 'Home',
-        NOT_FOUND_BUTTON_URL: 'https://example.com/',
-        NOT_FOUND_ACCENT_COLOR: '#0d9488',
-        UNRELATED: 'x',
-      })
-    ).toEqual({ title: 'Gone', buttonLabel: 'Home', buttonUrl: 'https://example.com/', accentColor: '#0d9488' });
-  });
-  it('is undefined when none is set', () => {
-    expect(notFoundSettingsFromEnv({ NOT_FOUND_TITLE: '' })).toBeUndefined();
   });
 });
 

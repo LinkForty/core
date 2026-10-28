@@ -349,8 +349,8 @@ export interface RedirectRouteOptions {
   /**
    * The instance's not-found page, or a URL to send browsers to instead, used
    * when the organization has no `settings.notFound` of its own
-   * (lib/not-found-page.ts). `notFoundSettingsFromEnv()` builds it from the
-   * NOT_FOUND_* environment variables, as the Docker image does.
+   * (lib/not-found-page.ts). createServer() fills it from the `notFound`
+   * section of linkforty.config.json.
    */
   notFoundDefaults?: NotFoundSettings;
   /**

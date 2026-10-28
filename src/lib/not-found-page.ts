@@ -14,8 +14,8 @@
  *
  *   1. the `notFound` hook, for a deployment that needs logic;
  *   2. the organization's `settings.notFound`, read by Core itself;
- *   3. the instance's `notFoundDefaults` — on the Docker image, the NOT_FOUND_*
- *      environment variables (notFoundSettingsFromEnv);
+ *   3. the instance's defaults: the `notFound` section of linkforty.config.json
+ *      (lib/config.ts), passed to the routes as `notFoundDefaults`;
  *   4. the built-in page.
  *
  * The organization is the one the request's host belongs to. Failing that, for a
@@ -59,7 +59,7 @@ export interface NotFoundContent {
 
 /**
  * Not-found settings, as an organization stores them in `settings.notFound` and
- * as an instance passes them in `notFoundDefaults`. With `redirectUrl`, browsers
+ * as the instance sets them in linkforty.config.json. With `redirectUrl`, browsers
  * are sent there (302) and the rest is ignored; without it, the rest is the page.
  */
 export interface NotFoundSettings extends NotFoundContent {
@@ -146,9 +146,11 @@ const SETTING_KEYS = [
 ] as const;
 
 /**
- * Settings from untrusted JSON (an organization's `settings`, a config file):
- * keeps the known string fields, and returns null when none is set.
- * Values are checked again where they are used.
+ * Settings from stored JSON (an organization's `settings`): keeps the known
+ * string fields and returns null when none is set. Lenient on purpose, since a
+ * bad value in the database must not break a redirect; values are checked
+ * again where they are used. The config file is validated strictly instead
+ * (lib/config.ts).
  */
 export function readNotFoundSettings(raw: unknown): NotFoundSettings | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
@@ -164,30 +166,6 @@ export function readNotFoundSettings(raw: unknown): NotFoundSettings | null {
 export function readOrganizationNotFoundSettings(orgSettings: unknown): NotFoundSettings | null {
   if (!orgSettings || typeof orgSettings !== 'object') return null;
   return readNotFoundSettings((orgSettings as Record<string, unknown>).notFound);
-}
-
-/** Environment variable for each setting. */
-export const NOT_FOUND_ENV = {
-  redirectUrl: 'NOT_FOUND_REDIRECT_URL',
-  title: 'NOT_FOUND_TITLE',
-  message: 'NOT_FOUND_MESSAGE',
-  logoUrl: 'NOT_FOUND_LOGO_URL',
-  accentColor: 'NOT_FOUND_ACCENT_COLOR',
-  backgroundColor: 'NOT_FOUND_BACKGROUND_COLOR',
-  buttonLabel: 'NOT_FOUND_BUTTON_LABEL',
-  buttonUrl: 'NOT_FOUND_BUTTON_URL',
-} as const satisfies Record<(typeof SETTING_KEYS)[number], string>;
-
-/**
- * Instance settings from NOT_FOUND_* environment variables, for `notFoundDefaults`.
- * Undefined when none is set.
- */
-export function notFoundSettingsFromEnv(
-  env: Record<string, string | undefined> = process.env
-): NotFoundSettings | undefined {
-  const raw: Record<string, string | undefined> = {};
-  for (const key of SETTING_KEYS) raw[key] = env[NOT_FOUND_ENV[key]];
-  return readNotFoundSettings(raw) ?? undefined;
 }
 
 /** How long an organization's settings are reused before being read again. */
