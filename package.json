@@ -93,6 +93,7 @@
     "migrations",
     "README.md",
     "LICENSE",
-    "llms.txt"
+    "llms.txt",
+    "linkforty.config.example.json"
   ]
 }

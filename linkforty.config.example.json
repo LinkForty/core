@@ -1,0 +1,11 @@
+{
+  "notFound": {
+    "title": "Link not found",
+    "message": "This link doesn't exist or is no longer available.",
+    "logoUrl": "https://example.com/logo.png",
+    "accentColor": "#0f766e",
+    "backgroundColor": "#f6f7f8",
+    "buttonLabel": "Go to example.com",
+    "buttonUrl": "https://example.com/"
+  }
+}

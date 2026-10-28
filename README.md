@@ -245,6 +245,33 @@ GET /:templateSlug/:shortCode
 
 Automatically redirects users to the appropriate URL based on device type (iOS/Android/web), evaluates targeting rules, and tracks the click asynchronously.
 
+**Not-found page:** When a link can't be served, a browser gets a small HTML page ("Link not found") with status 404, `noindex`, `Cache-Control: no-store` and a content-security policy that allows no script. That covers an unknown code, an expired or switched-off link, a link on another organization's host, a visitor outside the link's targeting rules, and a link with no destination for the visitor's device. All of these render the same page, so an expired link can't be told apart from a code that never existed. Clients that don't send `Accept: text/html` (API callers, scripts) keep the JSON body: `{ "error": "Link not found" }`, or `{ "error": "No destination URL configured for this link" }` for a link with no destination. A link withdrawn for abuse keeps its own 410 notice.
+
+You can change the page or send browsers somewhere else instead, without writing code. The first of these that is set wins:
+
+1. **The organization's settings**, `organizations.settings.notFound`, on a host that belongs to the organization. On a shared host, only a live link that has nothing for this visitor (a targeting miss, no destination) uses its organization's settings. An unknown, expired or switched-off code there uses the instance's.
+
+   ```json
+   {
+     "notFound": {
+       "redirectUrl": "https://ridealert.example",   // send browsers here (302); the rest is ignored
+       "title": "This ride link has expired",
+       "message": "Open the app to see current rides.",
+       "logoUrl": "https://cdn.example/logo.png",
+       "accentColor": "#0f766e",                     // the button
+       "backgroundColor": "#f6f7f8",                 // light mode only
+       "buttonLabel": "Get the app",                 // shown only with buttonUrl
+       "buttonUrl": "https://ridealert.example/app"
+     }
+   }
+   ```
+
+   Changes show within a minute.
+2. **The instance's defaults**: the `notFound` section of `linkforty.config.json` (see [Configuration file](#configuration-file)), with the same fields.
+3. **The built-in page.**
+
+URLs must be http(s) and colors hex; anything else is dropped, and all text is escaped. The `notFound` option below decides in code ahead of all three.
+
 **Mobile interstitial:** When a link has `appScheme` configured and a store fallback URL (iOS App Store or Google Play), mobile requests receive a smart interstitial page instead of a raw 302 redirect. The interstitial tries to open the app via URI scheme and falls back to the app store after 1.5 seconds. This handles the case where a 302 to a custom URI scheme fails silently when the app is not installed. URL fragments are preserved through the redirect, enabling patterns like E2E encryption where the decryption key lives in the fragment.
 
 **Launchpad page (desktop):** A link to app-only content has nowhere to send a desktop visitor. When the chain resolves no web destination (link → template → workspace `appConfig`), a desktop request gets a hosted landing page instead of an error: the link's title, description and image (`ogTitle` / `ogDescription` / `ogImageUrl`, falling back to `title` / `description`), the app's icon and name, the official App Store / Google Play badges (embedded in the page, so it makes no third-party request), and a QR code so the visitor can finish on their phone. The page is `noindex`, sent with `Cache-Control: no-store` and a content-security policy that allows no script without a per-response nonce, and it never navigates on its own — no timers, no automatic scheme attempts.
@@ -380,6 +407,7 @@ interface ServerOptions {
   trustProxy?: boolean | number;  // Trust X-Forwarded-For when behind a proxy (default: false)
   redirect?: RedirectRouteOptions;  // See below
   sdk?: SdkRouteOptions;            // See below
+  config?: LinkFortyConfig;         // linkforty.config.json, from loadConfig()
 }
 
 interface RedirectRouteOptions {
@@ -406,6 +434,24 @@ interface RedirectRouteOptions {
   // association files on that host, so no installed app can claim its URLs.
   // A hook that throws is logged and treated as false.
   isWebLinkRequest?: (request) => Promise<boolean> | boolean;
+  // The instance's not-found page or redirect, used when the organization has
+  // no settings.notFound of its own. createServer() fills it from the
+  // `notFound` section of the config file (ServerOptions.config).
+  notFoundDefaults?: NotFoundSettings;
+  // Decide the not-found response in code, ahead of the organization's
+  // settings and notFoundDefaults: page content (title,
+  // message, logoUrl, accentColor, backgroundColor, buttonLabel, buttonUrl — all
+  // optional, all escaped; non-http(s) URLs and non-hex colors are dropped),
+  // a URL to 302 to (http(s) only), or null to fall through. Called only
+  // for requests that accept HTML, and never for a link withdrawn for abuse.
+  // `context.reason` is "unknown" | "disabled" | "not_targeted" |
+  // "no_destination"; `context.link` is the link row (null for "unknown");
+  // `context.scope` is the host's organization, if any. Use the reason to
+  // decide whose settings apply, not to vary the page: an expired link must
+  // look like a code that never existed. A hook that throws is logged and
+  // treated as null.
+  notFound?: (request, context: { reason, link, scope }) =>
+    Promise<NotFoundResolution | null> | NotFoundResolution | null;
 }
 
 interface SdkRouteOptions {
@@ -422,7 +468,26 @@ interface SdkRouteOptions {
 
 Install matching only considers clicks from the installing device's own network (its IPv4 /24 or IPv6 /64), since no other click can reach the confidence threshold, so the attribution window holds however much traffic the server takes. It relies on the `idx_fingerprints_ip` index, which `initializeDatabase()` builds concurrently on first start so click writes are never blocked.
 
-`renderLaunchpadPage()`, `defaultLaunchpadContent()` and `shouldServeLaunchpadOnDesktop()` are exported so a host can render the same page elsewhere (a settings preview, for instance).
+`renderLaunchpadPage()`, `defaultLaunchpadContent()` and `shouldServeLaunchpadOnDesktop()` are exported so a host can render the same page elsewhere (a settings preview, for instance). `renderNotFoundPage()` is exported for the same reason, and for a host that answers some requests before they reach the redirect route.
+
+### Configuration file
+
+Core splits its configuration the way most self-hosted platforms do:
+
+- **Environment variables** hold infrastructure and secrets: `DATABASE_URL`, `REDIS_URL`, `PORT`, `TRUST_PROXY`, and so on.
+- **`linkforty.config.json`** holds the instance's defaults and behavior, including text a visitor reads. Today that's the `notFound` section; see [linkforty.config.example.json](linkforty.config.example.json) and [DOCKER.md](DOCKER.md#configuration-file) for every setting.
+- **`organizations.settings`** holds per-organization values, which take precedence over the file where both apply.
+
+The file is optional. Core reads the path in `LINKFORTY_CONFIG`, or `linkforty.config.json` in the working directory. A file with an invalid value or unknown setting stops the server at startup with the setting named, rather than starting with it ignored. The Docker image does this for you. When you create the server yourself, load it and pass it in:
+
+```typescript
+import { createServer, loadConfig } from '@linkforty/core';
+
+const { config } = loadConfig(); // throws ConfigError on a bad file
+const server = await createServer({ database: { url: process.env.DATABASE_URL }, config });
+```
+
+Options passed in code (such as `redirect.notFoundDefaults`) take precedence over the file.
 
 ### Running behind a reverse proxy
 

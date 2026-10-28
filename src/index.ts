@@ -11,6 +11,7 @@ import { templateRoutes } from './routes/templates.js';
 import { qrRoutes } from './routes/qr.js';
 import { wellKnownRoutes } from './routes/well-known.js';
 import { healthRoutes } from './routes/health.js';
+import type { LinkFortyConfig } from './lib/config.js';
 
 /**
  * Configuration options for creating a LinkForty server instance.
@@ -30,6 +31,11 @@ export interface ServerOptions {
   redirect?: RedirectRouteOptions;
   /** Options for the SDK routes: install match scoping. */
   sdk?: SdkRouteOptions;
+  /**
+   * The instance's settings from linkforty.config.json, as loadConfig() returns
+   * them. Options passed in code take precedence over the file.
+   */
+  config?: LinkFortyConfig;
 }
 
 /**
@@ -65,7 +71,10 @@ export async function createServer(options: ServerOptions = {}) {
   // Routes
   await fastify.register(healthRoutes);
   await fastify.register(wellKnownRoutes);
-  await fastify.register(redirectRoutes, options.redirect ?? {});
+  await fastify.register(redirectRoutes, {
+    ...options.redirect,
+    notFoundDefaults: options.redirect?.notFoundDefaults ?? options.config?.notFound,
+  });
   await fastify.register(linkRoutes);
   await fastify.register(analyticsRoutes);
   await fastify.register(sdkRoutes, options.sdk ?? {});
@@ -86,6 +95,8 @@ export * from './lib/link-lookup.js';
 export * from './lib/portable/index.js';
 export * from './lib/link-safety.js';
 export * from './lib/launchpad.js';
+export * from './lib/not-found-page.js';
+export * from './lib/config.js';
 export * from './lib/event-emitter.js';
 export * from './types/index.js';
 export type { RedirectRouteOptions } from './routes/redirect.js';

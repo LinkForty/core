@@ -174,8 +174,8 @@ describe('no web destination', () => {
     expect(res.headers.location).toBe('https://from-template.example/');
   });
 
-  /** Mobile already gets a store URL from the branches above; reaching here means nothing exists. */
-  it('leaves mobile on the JSON 404', async () => {
+  /** Mobile already gets a store URL from the branches above; reaching here means nothing exists. A browser gets the not-found page (redirect.not-found.test.ts). */
+  it('keeps the JSON 404 for a mobile client that does not ask for HTML', async () => {
     mockDb(linkRow());
     const res = await get(app, IPHONE_UA);
     expect(res.statusCode).toBe(404);

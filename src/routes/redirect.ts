@@ -29,6 +29,21 @@ import {
   type LaunchpadContentContext,
   type LaunchpadSettings,
 } from '../lib/launchpad.js';
+import {
+  NOT_FOUND_JSON,
+  createOrganizationNotFoundSettingsLookup,
+  notFoundContentSecurityPolicy,
+  readNotFoundSettings,
+  readOrganizationNotFoundSettings,
+  renderNotFoundPage,
+  resolveNotFoundSettings,
+  safeNotFoundRedirect,
+  wantsHtml,
+  type NotFoundContext,
+  type NotFoundReason,
+  type NotFoundResolution,
+  type NotFoundSettings,
+} from '../lib/not-found-page.js';
 
 /** Longest query string the Launchpad page carries into its QR code and og:url. */
 const MAX_PAGE_URL_SEARCH = 512;
@@ -331,6 +346,29 @@ export interface RedirectRouteOptions {
    * claim its URLs either. A hook that throws is logged and treated as false.
    */
   isWebLinkRequest?: (request: FastifyRequest) => Promise<boolean> | boolean;
+  /**
+   * The instance's not-found page, or a URL to send browsers to instead, used
+   * when the organization has no `settings.notFound` of its own
+   * (lib/not-found-page.ts). createServer() fills it from the `notFound`
+   * section of linkforty.config.json.
+   */
+  notFoundDefaults?: NotFoundSettings;
+  /**
+   * Decide the not-found response in code, ahead of the organization's settings
+   * and `notFoundDefaults`: page content, a URL to redirect to, or null to fall
+   * through to them. Called only for requests that accept HTML; other clients
+   * keep the JSON 404. Not called for a link withdrawn for abuse, which keeps its
+   * own notice.
+   *
+   * `context.reason` is for the host's own decisions. Whatever the host returns,
+   * return the same thing for every reason it treats alike: an expired link must
+   * not be told apart from a code that never existed. A hook that throws is
+   * logged and treated as null.
+   */
+  notFound?: (
+    request: FastifyRequest,
+    context: NotFoundContext
+  ) => Promise<NotFoundResolution | null> | NotFoundResolution | null;
 }
 
 export async function redirectRoutes(
@@ -393,6 +431,82 @@ export async function redirectRoutes(
     } catch (error) {
       fastify.log.warn({ err: error }, 'Bare code ownership check failed');
     }
+  }
+
+  /**
+   * Answer a link that can't be served. Browsers get the not-found page (or the
+   * host's redirect); everything else gets the JSON body it always has. Records
+   * nothing: whether a click was already written is up to the caller.
+   */
+  const notFoundDefaults = readNotFoundSettings(options.notFoundDefaults);
+  const lookupOrganizationNotFoundSettings = createOrganizationNotFoundSettingsLookup({
+    query: (sql, params) => db.query(sql, params),
+    onError: (err) => fastify.log.warn({ err }, 'Reading not-found settings failed; using the instance page'),
+  });
+
+  /**
+   * The settings that speak for this not-found: the host's organization, or for
+   * a live link with nothing for this visitor, the link's own organization;
+   * then the instance's. See lib/not-found-page.ts.
+   */
+  async function notFoundSettingsFor(
+    reason: NotFoundReason,
+    link: Record<string, any> | null,
+    scope: string | null
+  ): Promise<NotFoundSettings | null> {
+    const linkSpeaks = reason === 'not_targeted' || reason === 'no_destination';
+    const organizationId = scope ?? (linkSpeaks ? link?.organization_id ?? null : null);
+    if (organizationId) {
+      const own =
+        link && link.organization_id === organizationId
+          ? readOrganizationNotFoundSettings(link.org_settings)
+          : await lookupOrganizationNotFoundSettings(organizationId);
+      if (own) return own;
+    }
+    return notFoundDefaults;
+  }
+
+  async function sendNotFound(
+    request: any,
+    reply: any,
+    reason: NotFoundReason,
+    link: Record<string, any> | null,
+    scope: string | null
+  ) {
+    if (!wantsHtml(request.headers.accept)) {
+      return reply
+        .status(404)
+        .send(reason === 'no_destination' ? NOT_FOUND_JSON.no_destination : NOT_FOUND_JSON.default);
+    }
+
+    let resolution: NotFoundResolution | null = null;
+    if (options.notFound) {
+      try {
+        resolution = (await options.notFound(request, { reason, link, scope })) ?? null;
+      } catch (err) {
+        fastify.log.error({ err, reason }, 'notFound hook threw; using the configured page');
+      }
+    }
+    if (!resolution) {
+      const settings = await notFoundSettingsFor(reason, link, scope);
+      if (settings) resolution = resolveNotFoundSettings(settings);
+    }
+
+    if (resolution?.kind === 'redirect') {
+      const target = safeNotFoundRedirect(resolution.url);
+      if (target) {
+        return reply.header('Cache-Control', 'no-store').redirect(302, target);
+      }
+      fastify.log.warn({ reason }, 'Not-found redirect is not http(s); using the default page');
+    }
+
+    return reply
+      .status(404)
+      .header('X-Robots-Tag', 'noindex, nofollow')
+      .header('Cache-Control', 'no-store')
+      .header('Content-Security-Policy', notFoundContentSecurityPolicy())
+      .type('text/html')
+      .send(renderNotFoundPage(resolution?.kind === 'page' ? resolution.content : {}));
   }
 
   // Helper function to handle the actual redirect logic
@@ -460,7 +574,7 @@ export async function redirectRoutes(
 
       if (result.rows.length === 0) {
         if (scope) await logOtherOrganizationCode(shortCode, scope);
-        return reply.status(404).send({ error: 'Link not found' });
+        return sendNotFound(request, reply, 'unknown', null, hostScope);
       }
 
       linkData = JSON.stringify(result.rows[0]);
@@ -481,7 +595,9 @@ export async function redirectRoutes(
     // URL form names them. Checked after the cache read, which is shared by hosts.
     if (hostScope && link.organization_id !== hostScope) {
       logOtherOrganizationLink(shortCode, hostScope);
-      return reply.status(404).send({ error: 'Link not found' });
+      // Indistinguishable from a code that doesn't exist, and the row is not
+      // this host's to hand to the hook.
+      return sendNotFound(request, reply, 'unknown', null, hostScope);
     }
 
     // Safety gate, applied after the cache read so it covers cached rows too.
@@ -522,7 +638,7 @@ export async function redirectRoutes(
           .type('text/html')
           .send(generateBlockedLinkHTML());
       }
-      return reply.status(404).send({ error: 'Link not found' });
+      return sendNotFound(request, reply, 'disabled', link, hostScope);
     }
 
     if (safety.outcome === 'warn') {
@@ -579,7 +695,7 @@ export async function redirectRoutes(
 
       // If targeting rules exist but user doesn't match, return 404
       if (!isTargeted) {
-        return reply.status(404).send({ error: 'Link not found' });
+        return sendNotFound(request, reply, 'not_targeted', link, hostScope);
       }
     }
 
@@ -1055,8 +1171,8 @@ export async function redirectRoutes(
      * No destination at any level of the chain.
      *
      * On desktop this is a real person who clicked a real link, so serve a page
-     * rather than a JSON error body. Mobile keeps the 404: the branches above
-     * already offer a store URL to a device that could install the app, so
+     * rather than a JSON error body. Mobile gets the not-found page: the branches
+     * above already offer a store URL to a device that could install the app, so
      * reaching here means the link has nothing at all.
      *
      * Unlike the warning page earlier in this handler, this does NOT suppress
@@ -1079,7 +1195,7 @@ export async function redirectRoutes(
             })
           );
       }
-      return reply.status(404).send({ error: 'No destination URL configured for this link' });
+      return sendNotFound(request, reply, 'no_destination', link, hostScope);
     }
 
     // Build final URL with parameters
