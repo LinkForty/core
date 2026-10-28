@@ -1,3 +1,7 @@
+## 1.43.0 (2026-10-28)
+
+* feat(config): set instance Launchpad defaults in linkforty.config.json (#90) ([fee5d6d](https://github.com/LinkForty/core/commit/fee5d6d)), closes [#90](https://github.com/LinkForty/core/issues/90)
+
 ## 1.42.0 (2026-10-28)
 
 * feat(redirect): serve a configurable not-found page, and add linkforty.config.json (#89) ([068f37d](https://github.com/LinkForty/core/commit/068f37d)), closes [#89](https://github.com/LinkForty/core/issues/89)
