@@ -19,6 +19,7 @@ import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import { z } from 'zod';
 import type { NotFoundSettings } from './not-found-page.js';
+import type { LaunchpadSettings } from './launchpad.js';
 
 /** File looked for in the working directory when LINKFORTY_CONFIG is unset. */
 export const DEFAULT_CONFIG_FILE = 'linkforty.config.json';
@@ -26,6 +27,12 @@ export const DEFAULT_CONFIG_FILE = 'linkforty.config.json';
 export interface LinkFortyConfig {
   /** What a browser sees when a link can't be served (lib/not-found-page.ts). */
   notFound?: NotFoundSettings;
+  /**
+   * The instance's Launchpad settings (lib/launchpad.ts). An organization's
+   * `settings.launchpad` overrides them field by field. `templateId` is
+   * organization-only: it names a host-rendered template.
+   */
+  launchpad?: Omit<LaunchpadSettings, 'templateId'>;
 }
 
 export class ConfigError extends Error {
@@ -71,9 +78,24 @@ const notFoundSchema = z
     message: 'buttonLabel and buttonUrl must be set together',
   });
 
+/** The same limits readLaunchpadSettings applies to an organization's settings. */
+const launchpadSchema = z
+  .object({
+    desktop: z.enum(['no-destination', 'always', 'off']).optional(),
+    mobile: z.enum(['store', 'page']).optional(),
+    appName: z.string().trim().min(1).max(60).optional(),
+    appIconUrl: httpUrl.optional(),
+    appWebsiteUrl: httpUrl.optional(),
+    // Six digits only: the page mixes these colors to derive its palette.
+    accentColor: z.string().trim().regex(/^#[0-9a-f]{6}$/i, 'must be a six-digit hex color such as #0f766e').optional(),
+    backgroundColor: z.string().trim().regex(/^#[0-9a-f]{6}$/i, 'must be a six-digit hex color such as #101418').optional(),
+  })
+  .strict();
+
 const configSchema = z
   .object({
     notFound: notFoundSchema.optional(),
+    launchpad: launchpadSchema.optional(),
   })
   .strict();
 

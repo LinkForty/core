@@ -7,5 +7,14 @@
     "backgroundColor": "#f6f7f8",
     "buttonLabel": "Go to example.com",
     "buttonUrl": "https://example.com/"
+  },
+  "launchpad": {
+    "desktop": "no-destination",
+    "mobile": "store",
+    "appName": "Example App",
+    "appIconUrl": "https://example.com/icon.png",
+    "appWebsiteUrl": "https://example.com/",
+    "accentColor": "#0f766e",
+    "backgroundColor": "#101418"
   }
 }

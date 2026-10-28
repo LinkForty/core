@@ -21,7 +21,7 @@ import {
   defaultLaunchpadContent,
   launchpadContentSecurityPolicy,
   readLaunchpadLinkMode,
-  readLaunchpadSettings,
+  mergeLaunchpadSettings,
   renderLaunchpadPage,
   shouldServeLaunchpadOnDesktop,
   shouldServeLaunchpadOnMobile,
@@ -314,10 +314,18 @@ export interface RedirectRouteOptions {
    */
   abuseReportUrl?: string;
   /**
-   * Launchpad page hooks (see lib/launchpad.ts). Both optional: without them
-   * the page is built from the link row alone and reports nothing.
+   * Launchpad page settings and hooks (see lib/launchpad.ts). All optional:
+   * without them the page uses each organization's settings alone, is built
+   * from the link row, and reports nothing.
    */
   launchpad?: {
+    /**
+     * The instance's Launchpad settings, used where an organization's
+     * `settings.launchpad` leaves a field unset: the organization wins per
+     * field (mergeLaunchpadSettings). createServer() fills it from the
+     * `launchpad` section of linkforty.config.json.
+     */
+    defaults?: LaunchpadSettings;
     /**
      * Supply richer page content than the link row carries — a rendered share
      * image, a templated hero. Return null to use the default. A hook that
@@ -1115,7 +1123,7 @@ export async function redirectRoutes(
        *
        * The click has already been recorded above; this is a genuine visit.
        */
-      const launchpadSettings = readLaunchpadSettings(orgSettings);
+      const launchpadSettings = mergeLaunchpadSettings(options.launchpad?.defaults, orgSettings);
       const shouldServe = shouldServeLaunchpadOnDesktop({
         hasWebDestination: Boolean(redirectUrl),
         orgMode: launchpadSettings.desktop,
@@ -1142,7 +1150,7 @@ export async function redirectRoutes(
      * is a navigation. That difference is the whole reason the mode exists.
      */
     if (device === 'ios' || device === 'android') {
-      const launchpadSettings = readLaunchpadSettings(orgSettings);
+      const launchpadSettings = mergeLaunchpadSettings(options.launchpad?.defaults, orgSettings);
       const hasAppOpenPath = device === 'ios' ? Boolean(link.ios_universal_link) : Boolean(link.android_app_link);
       if (
         shouldServeLaunchpadOnMobile({

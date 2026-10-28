@@ -97,6 +97,22 @@ To send every broken link to your site:
 
 An organization's own `settings.notFound` (same fields) takes precedence on hosts that belong to it. See the README.
 
+#### Launchpad page
+
+The page a visitor gets when a link has no web destination for their device: the link's title and image, your app's name and icon, store buttons and a QR code. The `launchpad` section sets it for the whole instance:
+
+| Setting           | Description                                                                                              |
+|-------------------|----------------------------------------------------------------------------------------------------------|
+| `desktop`         | When desktop visitors get the page: `no-destination` (default, only when there's nowhere else to go), `always`, or `off` |
+| `mobile`          | Phones without a Universal Link / App Link: `store` (default, the store redirect) or `page`             |
+| `appName`         | Shown in the page header, up to 60 characters                                                           |
+| `appIconUrl`      | App icon (http or https)                                                                                 |
+| `appWebsiteUrl`   | Your website; the header links to it when set                                                            |
+| `accentColor`     | Buttons and links, six-digit hex (`#0f766e`)                                                             |
+| `backgroundColor` | Fixes the page background, six-digit hex. Unset, the page follows the visitor's light/dark setting      |
+
+A single link can opt out or in with its `launchpadMode` (`off` / `on`). An organization's own `settings.launchpad` overrides these settings one field at a time, so it can change just the color and keep your app name. That differs from `notFound`, where an organization's settings replace the instance's as a whole.
+
 ### Docker Compose Configuration
 
 The `docker-compose.yml` file includes:

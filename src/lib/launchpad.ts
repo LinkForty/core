@@ -160,6 +160,23 @@ export function readLaunchpadSettings(orgSettings: unknown): LaunchpadSettings {
   };
 }
 
+/**
+ * The settings a request uses: the instance's defaults (linkforty.config.json),
+ * overridden field by field by the organization's `settings.launchpad`.
+ *
+ * Per field rather than as a whole, unlike the not-found page's settings:
+ * organizations routinely set one or two fields (a color, a mode), and replacing
+ * the instance's settings wholesale would drop its app name and icon for them.
+ * An organization value that `readLaunchpadSettings` rejects is simply absent,
+ * so it never erases a valid instance value.
+ */
+export function mergeLaunchpadSettings(
+  defaults: LaunchpadSettings | undefined,
+  orgSettings: unknown
+): LaunchpadSettings {
+  return { ...defaults, ...readLaunchpadSettings(orgSettings) };
+}
+
 /** Normalise `links.launchpad_mode`, which a cached row from before the column existed may lack. */
 export function readLaunchpadLinkMode(value: unknown): LaunchpadLinkMode {
   return LINK_MODES.find((m) => m === value) ?? 'inherit';
