@@ -86,6 +86,7 @@ export * from './lib/link-lookup.js';
 export * from './lib/portable/index.js';
 export * from './lib/link-safety.js';
 export * from './lib/launchpad.js';
+export * from './lib/not-found-page.js';
 export * from './lib/event-emitter.js';
 export * from './types/index.js';
 export type { RedirectRouteOptions } from './routes/redirect.js';

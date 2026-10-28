@@ -245,6 +245,8 @@ GET /:templateSlug/:shortCode
 
 Automatically redirects users to the appropriate URL based on device type (iOS/Android/web), evaluates targeting rules, and tracks the click asynchronously.
 
+**Not-found page:** When a link can't be served, a browser gets a small HTML page ("Link not found") with status 404, `noindex`, `Cache-Control: no-store` and a content-security policy that allows no script. That covers an unknown code, an expired or switched-off link, a link on another organization's host, a visitor outside the link's targeting rules, and a link with no destination for the visitor's device. All of these render the same page, so an expired link can't be told apart from a code that never existed. Clients that don't send `Accept: text/html` (API callers, scripts) keep the JSON body: `{ "error": "Link not found" }`, or `{ "error": "No destination URL configured for this link" }` for a link with no destination. A link withdrawn for abuse keeps its own 410 notice. The `notFound` option below lets a host brand the page or redirect instead.
+
 **Mobile interstitial:** When a link has `appScheme` configured and a store fallback URL (iOS App Store or Google Play), mobile requests receive a smart interstitial page instead of a raw 302 redirect. The interstitial tries to open the app via URI scheme and falls back to the app store after 1.5 seconds. This handles the case where a 302 to a custom URI scheme fails silently when the app is not installed. URL fragments are preserved through the redirect, enabling patterns like E2E encryption where the decryption key lives in the fragment.
 
 **Launchpad page (desktop):** A link to app-only content has nowhere to send a desktop visitor. When the chain resolves no web destination (link → template → workspace `appConfig`), a desktop request gets a hosted landing page instead of an error: the link's title, description and image (`ogTitle` / `ogDescription` / `ogImageUrl`, falling back to `title` / `description`), the app's icon and name, the official App Store / Google Play badges (embedded in the page, so it makes no third-party request), and a QR code so the visitor can finish on their phone. The page is `noindex`, sent with `Cache-Control: no-store` and a content-security policy that allows no script without a per-response nonce, and it never navigates on its own — no timers, no automatic scheme attempts.
@@ -406,6 +408,19 @@ interface RedirectRouteOptions {
   // association files on that host, so no installed app can claim its URLs.
   // A hook that throws is logged and treated as false.
   isWebLinkRequest?: (request) => Promise<boolean> | boolean;
+  // What a browser gets when a link can't be served: page content (title,
+  // message, logoUrl, accentColor, backgroundColor, ctaLabel, ctaUrl — all
+  // optional, all escaped; non-http(s) URLs and non-hex colors are dropped),
+  // a URL to 302 to (http(s) only), or null for the default page. Called only
+  // for requests that accept HTML, and never for a link withdrawn for abuse.
+  // `context.reason` is "unknown" | "disabled" | "not_targeted" |
+  // "no_destination"; `context.link` is the link row (null for "unknown");
+  // `context.scope` is the host's organization, if any. Use the reason to
+  // decide whose settings apply, not to vary the page: an expired link must
+  // look like a code that never existed. A hook that throws is logged and
+  // treated as null.
+  notFound?: (request, context: { reason, link, scope }) =>
+    Promise<NotFoundResolution | null> | NotFoundResolution | null;
 }
 
 interface SdkRouteOptions {
@@ -422,7 +437,7 @@ interface SdkRouteOptions {
 
 Install matching only considers clicks from the installing device's own network (its IPv4 /24 or IPv6 /64), since no other click can reach the confidence threshold, so the attribution window holds however much traffic the server takes. It relies on the `idx_fingerprints_ip` index, which `initializeDatabase()` builds concurrently on first start so click writes are never blocked.
 
-`renderLaunchpadPage()`, `defaultLaunchpadContent()` and `shouldServeLaunchpadOnDesktop()` are exported so a host can render the same page elsewhere (a settings preview, for instance).
+`renderLaunchpadPage()`, `defaultLaunchpadContent()` and `shouldServeLaunchpadOnDesktop()` are exported so a host can render the same page elsewhere (a settings preview, for instance). `renderNotFoundPage()` is exported for the same reason, and for a host that answers some requests before they reach the redirect route.
 
 ### Running behind a reverse proxy
 
