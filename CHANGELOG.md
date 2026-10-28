@@ -1,3 +1,7 @@
+## 1.42.0 (2026-10-28)
+
+* feat(redirect): serve a configurable not-found page, and add linkforty.config.json (#89) ([068f37d](https://github.com/LinkForty/core/commit/068f37d)), closes [#89](https://github.com/LinkForty/core/issues/89)
+
 ## <small>1.41.3 (2026-10-26)</small>
 
 * fix(database): skip idempotent schema statements and honour a lock timeout at init (#87) ([1ee0f63](https://github.com/LinkForty/core/commit/1ee0f63)), closes [#87](https://github.com/LinkForty/core/issues/87)
