@@ -66,9 +66,16 @@ const CASES = {
   noDestination: { row: linkRow({ original_url: null }), ua: IPHONE_UA },
 } as const;
 
+/** The `settings` column per organization, as the settings lookup reads it. */
+let orgSettings: Record<string, unknown> = {};
+
 function mockDb(row: Record<string, unknown> | null) {
   query.mockReset();
-  query.mockImplementation(async (sql: string) => {
+  query.mockImplementation(async (sql: string, params: unknown[] = []) => {
+    if (/SELECT settings FROM organizations/i.test(sql)) {
+      const settings = orgSettings[String(params[0])];
+      return { rows: settings ? [{ settings }] : [], rowCount: settings ? 1 : 0 };
+    }
     if (/information_schema\.columns/i.test(sql)) {
       return { rows: [{ '?column?': 1 }], rowCount: 1 };
     }
@@ -103,6 +110,7 @@ function visit(kase: { row: Record<string, unknown> | null; ua: string }, accept
 
 beforeEach(() => {
   setLinkScopeResolver(undefined);
+  orgSettings = {};
 });
 
 afterEach(async () => {
@@ -203,7 +211,7 @@ describe('not-found page, with a hook', () => {
     await start({
       notFound: async () => ({
         kind: 'page',
-        content: { title: 'Nothing here', ctaLabel: 'Go home', ctaUrl: 'https://example.com/' },
+        content: { title: 'Nothing here', buttonLabel: 'Go home', buttonUrl: 'https://example.com/' },
       }),
     });
     const res = await visit(CASES.notTargeted);
@@ -237,5 +245,76 @@ describe('not-found page, with a hook', () => {
     const res = await visit(CASES.unknown);
     expect(res.statusCode).toBe(404);
     expect(res.body).toContain('<h1>Link not found</h1>');
+  });
+});
+
+describe('not-found settings', () => {
+  const INSTANCE = { title: 'Instance page' };
+  const ORG_A_SETTINGS = { notFound: { title: 'Org A page' } };
+
+  it('uses the instance defaults when nothing else speaks', async () => {
+    await start({ notFoundDefaults: INSTANCE });
+    for (const kase of Object.values(CASES)) {
+      const res = await visit(kase);
+      expect(res.statusCode).toBe(404);
+      expect(res.body).toContain('<h1>Instance page</h1>');
+    }
+  });
+
+  it('redirects every browser when the instance names a URL', async () => {
+    await start({ notFoundDefaults: { redirectUrl: 'https://example.com/', title: 'ignored' } });
+    const res = await visit(CASES.unknown);
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toBe('https://example.com/');
+  });
+
+  it('keeps JSON for API clients even with a redirect configured', async () => {
+    await start({ notFoundDefaults: { redirectUrl: 'https://example.com/' } });
+    const res = await visit(CASES.unknown, 'application/json');
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toEqual({ error: 'Link not found' });
+  });
+
+  it("uses the host organization's settings for an unknown code", async () => {
+    orgSettings[ORG_A] = ORG_A_SETTINGS;
+    await start({ notFoundDefaults: INSTANCE });
+    setLinkScopeResolver(() => ORG_A);
+    const res = await visit(CASES.unknown);
+    expect(res.body).toContain('<h1>Org A page</h1>');
+  });
+
+  it("falls back to the instance when the host organization has none", async () => {
+    await start({ notFoundDefaults: INSTANCE });
+    setLinkScopeResolver(() => ORG_B);
+    const res = await visit(CASES.unknown);
+    expect(res.body).toContain('<h1>Instance page</h1>');
+  });
+
+  it("uses the link's organization for a targeting miss on a shared host", async () => {
+    await start({ notFoundDefaults: INSTANCE });
+    const res = await visit({
+      row: linkRow({ targeting_rules: { devices: ['ios'] }, org_settings: ORG_A_SETTINGS }),
+      ua: DESKTOP_UA,
+    });
+    expect(res.body).toContain('<h1>Org A page</h1>');
+  });
+
+  it("does not let a switched-off link's organization speak on a shared host", async () => {
+    await start({ notFoundDefaults: INSTANCE });
+    // A cached inactive row: on a shared host it must look like any unknown code.
+    const res = await visit({ row: linkRow({ is_active: false, org_settings: ORG_A_SETTINGS }), ua: DESKTOP_UA });
+    expect(res.body).toContain('<h1>Instance page</h1>');
+    expect(res.body).toBe((await visit(CASES.unknown)).body);
+  });
+
+  it('lets the hook override the settings, and fall through with null', async () => {
+    orgSettings[ORG_A] = ORG_A_SETTINGS;
+    setLinkScopeResolver(() => ORG_A);
+    await start({ notFoundDefaults: INSTANCE, notFound: () => ({ kind: 'page', content: { title: 'Hook page' } }) });
+    expect((await visit(CASES.unknown)).body).toContain('<h1>Hook page</h1>');
+    await app.close();
+
+    await start({ notFoundDefaults: INSTANCE, notFound: () => null });
+    expect((await visit(CASES.unknown)).body).toContain('<h1>Org A page</h1>');
   });
 });

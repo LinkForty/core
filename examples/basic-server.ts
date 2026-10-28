@@ -1,4 +1,4 @@
-import { createServer } from '@linkforty/core';
+import { createServer, notFoundSettingsFromEnv } from '@linkforty/core';
 
 function getTrustProxy(): boolean | number | undefined {
   const v = process.env.TRUST_PROXY;
@@ -21,6 +21,10 @@ async function start() {
       origin: process.env.CORS_ORIGIN || '*',
     },
     trustProxy: getTrustProxy(),
+    redirect: {
+      // What a browser sees for a broken link: NOT_FOUND_* environment variables.
+      notFoundDefaults: notFoundSettingsFromEnv(),
+    },
   });
 
   await server.listen({

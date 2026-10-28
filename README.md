@@ -245,7 +245,32 @@ GET /:templateSlug/:shortCode
 
 Automatically redirects users to the appropriate URL based on device type (iOS/Android/web), evaluates targeting rules, and tracks the click asynchronously.
 
-**Not-found page:** When a link can't be served, a browser gets a small HTML page ("Link not found") with status 404, `noindex`, `Cache-Control: no-store` and a content-security policy that allows no script. That covers an unknown code, an expired or switched-off link, a link on another organization's host, a visitor outside the link's targeting rules, and a link with no destination for the visitor's device. All of these render the same page, so an expired link can't be told apart from a code that never existed. Clients that don't send `Accept: text/html` (API callers, scripts) keep the JSON body: `{ "error": "Link not found" }`, or `{ "error": "No destination URL configured for this link" }` for a link with no destination. A link withdrawn for abuse keeps its own 410 notice. The `notFound` option below lets a host brand the page or redirect instead.
+**Not-found page:** When a link can't be served, a browser gets a small HTML page ("Link not found") with status 404, `noindex`, `Cache-Control: no-store` and a content-security policy that allows no script. That covers an unknown code, an expired or switched-off link, a link on another organization's host, a visitor outside the link's targeting rules, and a link with no destination for the visitor's device. All of these render the same page, so an expired link can't be told apart from a code that never existed. Clients that don't send `Accept: text/html` (API callers, scripts) keep the JSON body: `{ "error": "Link not found" }`, or `{ "error": "No destination URL configured for this link" }` for a link with no destination. A link withdrawn for abuse keeps its own 410 notice.
+
+You can change the page or send browsers somewhere else instead, without writing code. The first of these that is set wins:
+
+1. **The organization's settings**, `organizations.settings.notFound`, on a host that belongs to the organization. On a shared host, only a live link that has nothing for this visitor (a targeting miss, no destination) uses its organization's settings. An unknown, expired or switched-off code there uses the instance's.
+
+   ```json
+   {
+     "notFound": {
+       "redirectUrl": "https://ridealert.example",   // send browsers here (302); the rest is ignored
+       "title": "This ride link has expired",
+       "message": "Open the app to see current rides.",
+       "logoUrl": "https://cdn.example/logo.png",
+       "accentColor": "#0f766e",                     // the button
+       "backgroundColor": "#f6f7f8",                 // light mode only
+       "buttonLabel": "Get the app",                 // shown only with buttonUrl
+       "buttonUrl": "https://ridealert.example/app"
+     }
+   }
+   ```
+
+   Changes show within a minute.
+2. **The instance's defaults**: the same fields from `NOT_FOUND_*` environment variables (`NOT_FOUND_REDIRECT_URL`, `NOT_FOUND_TITLE`, `NOT_FOUND_BUTTON_LABEL`…) on the Docker image (see [DOCKER.md](DOCKER.md#not-found-page)), or the `notFoundDefaults` redirect option when you create the server yourself (`notFoundSettingsFromEnv()` reads the variables for you).
+3. **The built-in page.**
+
+URLs must be http(s) and colors hex; anything else is dropped, and all text is escaped. The `notFound` option below decides in code ahead of all three.
 
 **Mobile interstitial:** When a link has `appScheme` configured and a store fallback URL (iOS App Store or Google Play), mobile requests receive a smart interstitial page instead of a raw 302 redirect. The interstitial tries to open the app via URI scheme and falls back to the app store after 1.5 seconds. This handles the case where a 302 to a custom URI scheme fails silently when the app is not installed. URL fragments are preserved through the redirect, enabling patterns like E2E encryption where the decryption key lives in the fragment.
 
@@ -408,10 +433,15 @@ interface RedirectRouteOptions {
   // association files on that host, so no installed app can claim its URLs.
   // A hook that throws is logged and treated as false.
   isWebLinkRequest?: (request) => Promise<boolean> | boolean;
-  // What a browser gets when a link can't be served: page content (title,
-  // message, logoUrl, accentColor, backgroundColor, ctaLabel, ctaUrl — all
+  // The instance's not-found page or redirect, used when the organization has
+  // no settings.notFound of its own. notFoundSettingsFromEnv() builds it from
+  // the NOT_FOUND_* environment variables.
+  notFoundDefaults?: NotFoundSettings;
+  // Decide the not-found response in code, ahead of the organization's
+  // settings and notFoundDefaults: page content (title,
+  // message, logoUrl, accentColor, backgroundColor, buttonLabel, buttonUrl — all
   // optional, all escaped; non-http(s) URLs and non-hex colors are dropped),
-  // a URL to 302 to (http(s) only), or null for the default page. Called only
+  // a URL to 302 to (http(s) only), or null to fall through. Called only
   // for requests that accept HTML, and never for a link withdrawn for abuse.
   // `context.reason` is "unknown" | "disabled" | "not_targeted" |
   // "no_destination"; `context.link` is the link row (null for "unknown");

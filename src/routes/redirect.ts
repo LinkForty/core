@@ -31,13 +31,18 @@ import {
 } from '../lib/launchpad.js';
 import {
   NOT_FOUND_JSON,
+  createOrganizationNotFoundSettingsLookup,
   notFoundContentSecurityPolicy,
+  readNotFoundSettings,
+  readOrganizationNotFoundSettings,
   renderNotFoundPage,
+  resolveNotFoundSettings,
   safeNotFoundRedirect,
   wantsHtml,
   type NotFoundContext,
   type NotFoundReason,
   type NotFoundResolution,
+  type NotFoundSettings,
 } from '../lib/not-found-page.js';
 
 /** Longest query string the Launchpad page carries into its QR code and og:url. */
@@ -342,16 +347,23 @@ export interface RedirectRouteOptions {
    */
   isWebLinkRequest?: (request: FastifyRequest) => Promise<boolean> | boolean;
   /**
-   * What a browser gets when a link can't be served (lib/not-found-page.ts):
-   * page content, a URL to redirect to, or null for the default page. Called
-   * only for requests that accept HTML; other clients keep the JSON 404. Not
-   * called for a link withdrawn for abuse, which keeps its own notice.
+   * The instance's not-found page, or a URL to send browsers to instead, used
+   * when the organization has no `settings.notFound` of its own
+   * (lib/not-found-page.ts). `notFoundSettingsFromEnv()` builds it from the
+   * NOT_FOUND_* environment variables, as the Docker image does.
+   */
+  notFoundDefaults?: NotFoundSettings;
+  /**
+   * Decide the not-found response in code, ahead of the organization's settings
+   * and `notFoundDefaults`: page content, a URL to redirect to, or null to fall
+   * through to them. Called only for requests that accept HTML; other clients
+   * keep the JSON 404. Not called for a link withdrawn for abuse, which keeps its
+   * own notice.
    *
-   * `context.reason` is for the host's own decisions, such as which
-   * organization's settings apply. Whatever the host returns, return the same
-   * thing for every reason it treats alike: an expired link must not be told
-   * apart from a code that never existed. A hook that throws is logged and
-   * treated as null.
+   * `context.reason` is for the host's own decisions. Whatever the host returns,
+   * return the same thing for every reason it treats alike: an expired link must
+   * not be told apart from a code that never existed. A hook that throws is
+   * logged and treated as null.
    */
   notFound?: (
     request: FastifyRequest,
@@ -426,6 +438,34 @@ export async function redirectRoutes(
    * host's redirect); everything else gets the JSON body it always has. Records
    * nothing: whether a click was already written is up to the caller.
    */
+  const notFoundDefaults = readNotFoundSettings(options.notFoundDefaults);
+  const lookupOrganizationNotFoundSettings = createOrganizationNotFoundSettingsLookup({
+    query: (sql, params) => db.query(sql, params),
+    onError: (err) => fastify.log.warn({ err }, 'Reading not-found settings failed; using the instance page'),
+  });
+
+  /**
+   * The settings that speak for this not-found: the host's organization, or for
+   * a live link with nothing for this visitor, the link's own organization;
+   * then the instance's. See lib/not-found-page.ts.
+   */
+  async function notFoundSettingsFor(
+    reason: NotFoundReason,
+    link: Record<string, any> | null,
+    scope: string | null
+  ): Promise<NotFoundSettings | null> {
+    const linkSpeaks = reason === 'not_targeted' || reason === 'no_destination';
+    const organizationId = scope ?? (linkSpeaks ? link?.organization_id ?? null : null);
+    if (organizationId) {
+      const own =
+        link && link.organization_id === organizationId
+          ? readOrganizationNotFoundSettings(link.org_settings)
+          : await lookupOrganizationNotFoundSettings(organizationId);
+      if (own) return own;
+    }
+    return notFoundDefaults;
+  }
+
   async function sendNotFound(
     request: any,
     reply: any,
@@ -444,8 +484,12 @@ export async function redirectRoutes(
       try {
         resolution = (await options.notFound(request, { reason, link, scope })) ?? null;
       } catch (err) {
-        fastify.log.error({ err, reason }, 'notFound hook threw; using the default page');
+        fastify.log.error({ err, reason }, 'notFound hook threw; using the configured page');
       }
+    }
+    if (!resolution) {
+      const settings = await notFoundSettingsFor(reason, link, scope);
+      if (settings) resolution = resolveNotFoundSettings(settings);
     }
 
     if (resolution?.kind === 'redirect') {
@@ -453,7 +497,7 @@ export async function redirectRoutes(
       if (target) {
         return reply.header('Cache-Control', 'no-store').redirect(302, target);
       }
-      fastify.log.warn({ reason }, 'notFound hook returned a redirect that is not http(s); using the default page');
+      fastify.log.warn({ reason }, 'Not-found redirect is not http(s); using the default page');
     }
 
     return reply

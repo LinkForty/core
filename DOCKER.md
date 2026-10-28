@@ -59,6 +59,32 @@ docker run -d \
 
 See [.env.example](.env.example) for complete configuration options.
 
+### Not-found page
+
+When a link doesn't exist, has expired, or a visitor doesn't match its targeting rules, a browser gets a small "Link not found" page (status 404). API clients and scripts get a JSON 404 instead. Every one of these cases shows the same page, so an expired link can't be told apart from a code that never existed. Change the page, or send visitors somewhere else, with these variables:
+
+| Variable                     | Description                                                                 |
+|------------------------------|-----------------------------------------------------------------------------|
+| `NOT_FOUND_REDIRECT_URL`     | Send browsers here (302) instead of showing the page. The others are ignored |
+| `NOT_FOUND_TITLE`            | Heading (default: "Link not found")                                         |
+| `NOT_FOUND_MESSAGE`          | Text under the heading                                                      |
+| `NOT_FOUND_LOGO_URL`         | Logo above the heading (https)                                              |
+| `NOT_FOUND_ACCENT_COLOR`     | Button color, hex (`#0f766e`)                                               |
+| `NOT_FOUND_BACKGROUND_COLOR` | Page background in light mode, hex                                          |
+| `NOT_FOUND_BUTTON_LABEL`     | Button text; shown only with `NOT_FOUND_BUTTON_URL`                         |
+| `NOT_FOUND_BUTTON_URL`       | Where the button goes (http or https)                                       |
+
+URLs must be http(s) and colors must be hex; anything else is ignored. Restart the container after changing them.
+
+```bash
+docker run -d \
+  -e DATABASE_URL=postgresql://user:pass@host:5432/db \
+  -e NOT_FOUND_REDIRECT_URL=https://example.com/ \
+  linkforty/core:latest
+```
+
+An organization's own `settings.notFound` (same fields, camelCase: `redirectUrl`, `title`, `buttonLabel`…) takes precedence on hosts that belong to it. See the README.
+
 ### Docker Compose Configuration
 
 The `docker-compose.yml` file includes:

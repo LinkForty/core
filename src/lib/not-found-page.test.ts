@@ -1,6 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   NOT_FOUND_DEFAULTS,
+  NOT_FOUND_SETTINGS_TTL_MS,
+  createOrganizationNotFoundSettingsLookup,
+  notFoundSettingsFromEnv,
+  readNotFoundSettings,
+  readOrganizationNotFoundSettings,
+  resolveNotFoundSettings,
   notFoundContentSecurityPolicy,
   renderNotFoundPage,
   safeNotFoundRedirect,
@@ -43,8 +49,8 @@ describe('renderNotFoundPage', () => {
       logoUrl: 'https://cdn.example.com/logo.png',
       accentColor: '#0d9488',
       backgroundColor: '#fafafa',
-      ctaLabel: 'Go home',
-      ctaUrl: 'https://example.com/',
+      buttonLabel: 'Go home',
+      buttonUrl: 'https://example.com/',
     });
     expect(html).toContain('<h1>Nothing here</h1>');
     expect(html).toContain('<p>Try our homepage.</p>');
@@ -71,8 +77,8 @@ describe('renderNotFoundPage', () => {
   it('drops non-http URLs', () => {
     const html = renderNotFoundPage({
       logoUrl: 'javascript:alert(1)',
-      ctaLabel: 'Click',
-      ctaUrl: 'javascript:alert(1)',
+      buttonLabel: 'Click',
+      buttonUrl: 'javascript:alert(1)',
     });
     expect(html).not.toContain('javascript:');
     expect(html).not.toContain('<a ');
@@ -80,8 +86,8 @@ describe('renderNotFoundPage', () => {
   });
 
   it('needs both a label and a URL for the button', () => {
-    expect(renderNotFoundPage({ ctaUrl: 'https://example.com/' })).not.toContain('<a ');
-    expect(renderNotFoundPage({ ctaLabel: 'Go' })).not.toContain('<a ');
+    expect(renderNotFoundPage({ buttonUrl: 'https://example.com/' })).not.toContain('<a ');
+    expect(renderNotFoundPage({ buttonLabel: 'Go' })).not.toContain('<a ');
   });
 
   it('drops colors that are not hex', () => {
@@ -108,5 +114,83 @@ describe('safeNotFoundRedirect', () => {
     expect(safeNotFoundRedirect('javascript:alert(1)')).toBeNull();
     expect(safeNotFoundRedirect('/relative')).toBeNull();
     expect(safeNotFoundRedirect(undefined)).toBeNull();
+  });
+});
+
+describe('readNotFoundSettings', () => {
+  it('keeps known, non-empty string fields', () => {
+    expect(readNotFoundSettings({ title: ' Hi ', message: '', logoUrl: 42, extra: 'x', redirectUrl: 'https://a.example' }))
+      .toEqual({ title: 'Hi', redirectUrl: 'https://a.example' });
+  });
+  it('is null when nothing is set', () => {
+    expect(readNotFoundSettings({})).toBeNull();
+    expect(readNotFoundSettings(null)).toBeNull();
+    expect(readNotFoundSettings(['title'])).toBeNull();
+  });
+  it('reads an organization settings column', () => {
+    expect(readOrganizationNotFoundSettings({ notFound: { title: 'Org' }, launchpad: {} })).toEqual({ title: 'Org' });
+    expect(readOrganizationNotFoundSettings({ launchpad: {} })).toBeNull();
+  });
+});
+
+describe('notFoundSettingsFromEnv', () => {
+  it('reads the NOT_FOUND_* variables', () => {
+    expect(
+      notFoundSettingsFromEnv({
+        NOT_FOUND_TITLE: 'Gone',
+        NOT_FOUND_BUTTON_LABEL: 'Home',
+        NOT_FOUND_BUTTON_URL: 'https://example.com/',
+        NOT_FOUND_ACCENT_COLOR: '#0d9488',
+        UNRELATED: 'x',
+      })
+    ).toEqual({ title: 'Gone', buttonLabel: 'Home', buttonUrl: 'https://example.com/', accentColor: '#0d9488' });
+  });
+  it('is undefined when none is set', () => {
+    expect(notFoundSettingsFromEnv({ NOT_FOUND_TITLE: '' })).toBeUndefined();
+  });
+});
+
+describe('resolveNotFoundSettings', () => {
+  it('redirects when the settings name a valid URL', () => {
+    expect(resolveNotFoundSettings({ redirectUrl: 'https://example.com/', title: 'x' }))
+      .toEqual({ kind: 'redirect', url: 'https://example.com/' });
+  });
+  it('renders the page when the redirect is not http(s)', () => {
+    expect(resolveNotFoundSettings({ redirectUrl: 'javascript:alert(1)', title: 'x' }))
+      .toEqual({ kind: 'page', content: { title: 'x' } });
+  });
+});
+
+describe('createOrganizationNotFoundSettingsLookup', () => {
+  it('holds an answer for the TTL, then reads again', async () => {
+    let clock = 0;
+    const query = vi.fn(async () => ({ rows: [{ settings: { notFound: { title: 'Org' } } }] }));
+    const lookup = createOrganizationNotFoundSettingsLookup({ query, now: () => clock });
+    expect(await lookup('org-a')).toEqual({ title: 'Org' });
+    await lookup('org-a');
+    expect(query).toHaveBeenCalledTimes(1);
+    clock += NOT_FOUND_SETTINGS_TTL_MS + 1;
+    await lookup('org-a');
+    expect(query).toHaveBeenCalledTimes(2);
+  });
+
+  it('holds a "no settings" answer too', async () => {
+    const query = vi.fn(async () => ({ rows: [] }));
+    const lookup = createOrganizationNotFoundSettingsLookup({ query });
+    expect(await lookup('org-a')).toBeNull();
+    await lookup('org-a');
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not hold a failed read', async () => {
+    const onError = vi.fn();
+    const query = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('db down'))
+      .mockResolvedValueOnce({ rows: [{ settings: { notFound: { title: 'Org' } } }] });
+    const lookup = createOrganizationNotFoundSettingsLookup({ query, onError });
+    expect(await lookup('org-a')).toBeNull();
+    expect(onError).toHaveBeenCalledOnce();
+    expect(await lookup('org-a')).toEqual({ title: 'Org' });
   });
 });
