@@ -92,6 +92,30 @@ describe('parseConfig', () => {
     expect(error.message).toContain(expected);
   });
 
+  it('accepts every launchpad setting', () => {
+    const launchpad = {
+      desktop: 'always',
+      mobile: 'page',
+      appName: 'Ride Alert',
+      appIconUrl: 'https://cdn.example.com/icon.png',
+      appWebsiteUrl: 'https://ridealert.example',
+      accentColor: '#0f766e',
+      backgroundColor: '#101418',
+    };
+    expect(parseConfig({ launchpad })).toEqual({ launchpad });
+  });
+
+  it.each([
+    [{ launchpad: { desktop: 'sometimes' } }, 'launchpad.desktop'],
+    [{ launchpad: { accentColor: '#abc' } }, 'launchpad.accentColor: must be a six-digit hex color'],
+    [{ launchpad: { appIconUrl: 'ftp://cdn.example/icon.png' } }, 'launchpad.appIconUrl: must be an http(s) URL'],
+    [{ launchpad: { templateId: 'hero-1' } }, 'launchpad: unknown setting "templateId"'],
+    [{ launchpad: { appname: 'x' } }, 'launchpad: unknown setting "appname"'],
+    [{ launchpad: { appName: 'x'.repeat(61) } }, 'launchpad.appName'],
+  ])('names the bad launchpad setting: %j', (raw, expected) => {
+    expect(errorFrom(() => parseConfig(raw)).message).toContain(expected);
+  });
+
   it('rejects a file that is not an object', () => {
     expect(() => parseConfig([])).toThrow(ConfigError);
   });

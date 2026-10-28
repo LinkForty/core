@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   defaultLaunchpadContent,
   launchpadContentSecurityPolicy,
+  mergeLaunchpadSettings,
   readLaunchpadLinkMode,
   readLaunchpadSettings,
   renderLaunchpadPage,
@@ -403,5 +404,34 @@ describe('renderLaunchpadPage — header links to the app website', () => {
     expect(readLaunchpadSettings({ launchpad: { appWebsiteUrl: 'https://demo.example' } }).appWebsiteUrl).toBe('https://demo.example');
     expect(readLaunchpadSettings({ launchpad: { appWebsiteUrl: 'javascript:alert(1)' } }).appWebsiteUrl).toBeUndefined();
     expect(readLaunchpadSettings({ launchpad: { appWebsiteUrl: '' } }).appWebsiteUrl).toBeUndefined();
+  });
+});
+
+describe('mergeLaunchpadSettings', () => {
+  const ORG = { launchpad: { appName: 'Org App', desktop: 'always' } };
+
+  it('is readLaunchpadSettings when there are no defaults', () => {
+    expect(mergeLaunchpadSettings(undefined, ORG)).toEqual(readLaunchpadSettings(ORG));
+    expect(mergeLaunchpadSettings(undefined, null)).toEqual({});
+  });
+
+  it('lets the organization win per field and keeps the rest of the defaults', () => {
+    expect(mergeLaunchpadSettings({ appName: 'Instance', accentColor: '#123456', mobile: 'page' }, ORG)).toEqual({
+      appName: 'Org App',
+      desktop: 'always',
+      accentColor: '#123456',
+      mobile: 'page',
+    });
+  });
+
+  it('uses the defaults for an organization with no settings', () => {
+    expect(mergeLaunchpadSettings({ appName: 'Instance' }, {})).toEqual({ appName: 'Instance' });
+  });
+
+  it('never lets an invalid organization value erase a valid default', () => {
+    const org = { launchpad: { accentColor: 'teal', desktop: 'sometimes', appIconUrl: 'javascript:x' } };
+    expect(
+      mergeLaunchpadSettings({ accentColor: '#123456', desktop: 'off', appIconUrl: 'https://cdn.example/i.png' }, org)
+    ).toEqual({ accentColor: '#123456', desktop: 'off', appIconUrl: 'https://cdn.example/i.png' });
   });
 });

@@ -510,3 +510,85 @@ describe('launchpad page — mobile mode', () => {
     expect(res.statusCode).toBe(302);
   });
 });
+
+describe('launchpad page — instance defaults (linkforty.config.json)', () => {
+  /** The page carries a fresh nonce per response; everything else must match. */
+  const withoutNonce = (html: string) => html.replace(/nonce-[A-Za-z0-9+/=]+|nonce="[A-Za-z0-9+/=]+"/g, 'nonce');
+
+  it('changes nothing when there are no defaults', async () => {
+    const rows = [
+      linkRow({ og_title: 'Ride Alert' }),
+      linkRow({ org_settings: { launchpad: { appName: 'Demo App', accentColor: '#0f766e', desktop: 'always' } }, web_fallback_url: 'https://example.com/page' }),
+    ];
+    const withEmpty = await build({ launchpad: { defaults: {} } });
+    try {
+      for (const row of rows) {
+        for (const ua of [DESKTOP_UA, IPHONE_UA]) {
+          mockDb(row);
+          const before = await get(app, ua);
+          mockDb(row);
+          const after = await get(withEmpty, ua);
+          expect(after.statusCode).toBe(before.statusCode);
+          expect(after.headers.location).toBe(before.headers.location);
+          expect(withoutNonce(after.body)).toBe(withoutNonce(before.body));
+        }
+      }
+    } finally {
+      await new Promise((r) => setImmediate(r));
+      await withEmpty.close();
+    }
+  });
+
+  it("serves the page in front of a destination when the instance chose 'always'", async () => {
+    await app.close();
+    app = await build({ launchpad: { defaults: { desktop: 'always' } } });
+    mockDb(linkRow({ web_fallback_url: 'https://example.com/page' }));
+    const res = await get(app, DESKTOP_UA);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('class="lp"');
+  });
+
+  it('themes a link that has no organization', async () => {
+    await app.close();
+    app = await build({ launchpad: { defaults: { appName: 'Instance App', accentColor: '#123456' } } });
+    mockDb(linkRow());
+    const res = await get(app, DESKTOP_UA);
+    expect(res.body).toContain('<span>Instance App</span>');
+    expect(res.body).toContain('--lp-accent: #123456;');
+  });
+
+  it("lets the organization override per field, keeping the instance's other fields", async () => {
+    await app.close();
+    app = await build({ launchpad: { defaults: { appName: 'Instance App', accentColor: '#123456' } } });
+    mockDb(linkRow({ org_settings: { launchpad: { appName: 'Org App' } } }));
+    const res = await get(app, DESKTOP_UA);
+    expect(res.body).toContain('<span>Org App</span>');
+    expect(res.body).not.toContain('Instance App');
+    expect(res.body).toContain('--lp-accent: #123456;');
+  });
+
+  it("serves the page to an iPhone when the instance chose mobile 'page'", async () => {
+    await app.close();
+    app = await build({ launchpad: { defaults: { mobile: 'page' } } });
+    mockDb(linkRow());
+    const res = await get(app, IPHONE_UA);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('class="lp"');
+  });
+
+  it("a link set to 'off' still wins over an instance set to 'always'", async () => {
+    await app.close();
+    app = await build({ launchpad: { defaults: { desktop: 'always' } } });
+    mockDb(linkRow({ web_fallback_url: 'https://example.com/page', launchpad_mode: 'off' }));
+    const res = await get(app, DESKTOP_UA);
+    expect(res.statusCode).toBe(302);
+  });
+
+  it("an organization set to 'off' wins over an instance set to 'always'", async () => {
+    await app.close();
+    app = await build({ launchpad: { defaults: { desktop: 'always' } } });
+    mockDb(linkRow({ web_fallback_url: 'https://example.com/page', org_settings: { launchpad: { desktop: 'off' } } }));
+    const res = await get(app, DESKTOP_UA);
+    expect(res.statusCode).toBe(302);
+  });
+});

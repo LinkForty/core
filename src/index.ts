@@ -74,6 +74,10 @@ export async function createServer(options: ServerOptions = {}) {
   await fastify.register(redirectRoutes, {
     ...options.redirect,
     notFoundDefaults: options.redirect?.notFoundDefaults ?? options.config?.notFound,
+    launchpad: {
+      ...options.redirect?.launchpad,
+      defaults: options.redirect?.launchpad?.defaults ?? options.config?.launchpad,
+    },
   });
   await fastify.register(linkRoutes);
   await fastify.register(analyticsRoutes);

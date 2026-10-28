@@ -298,7 +298,9 @@ When the link does have a web destination, the page offers it as a "Continue on 
 
   Without `backgroundColor` the page follows the visitor's light/dark preference. With one, the background is fixed and the text, surfaces and borders are derived from it — a light or a dark brand color both stay legible, and the visitor's theme no longer changes the page.
 
-- `links.launchpad_mode` (per link, `launchpadMode` on the links API): `inherit` (default), `on` or `off`. The link's value wins over the workspace's.
+- The `launchpad` section of `linkforty.config.json` (per instance): the same fields except `templateId`, which names a host-rendered template and stays per workspace. It's the default for every link, including links with no workspace. A workspace's `settings.launchpad` overrides it **field by field**: a workspace that sets only `accentColor` keeps the instance's `appName`, icon and modes. (The not-found page works differently: a workspace's `settings.notFound` replaces the instance's as a whole.)
+
+- `links.launchpad_mode` (per link, `launchpadMode` on the links API): `inherit` (default), `on` or `off`. The link's value wins over the workspace's and the instance's.
 
 With `desktop: "off"` (or `launchpad_mode: "off"`), a link with no web destination gets the plain "This link opens in an app" page instead.
 
@@ -475,7 +477,7 @@ Install matching only considers clicks from the installing device's own network 
 Core splits its configuration the way most self-hosted platforms do:
 
 - **Environment variables** hold infrastructure and secrets: `DATABASE_URL`, `REDIS_URL`, `PORT`, `TRUST_PROXY`, and so on.
-- **`linkforty.config.json`** holds the instance's defaults and behavior, including text a visitor reads. Today that's the `notFound` section; see [linkforty.config.example.json](linkforty.config.example.json) and [DOCKER.md](DOCKER.md#configuration-file) for every setting.
+- **`linkforty.config.json`** holds the instance's defaults and behavior, including text a visitor reads. Today that's the `notFound` and `launchpad` sections; see [linkforty.config.example.json](linkforty.config.example.json) and [DOCKER.md](DOCKER.md#configuration-file) for every setting.
 - **`organizations.settings`** holds per-organization values, which take precedence over the file where both apply.
 
 The file is optional. Core reads the path in `LINKFORTY_CONFIG`, or `linkforty.config.json` in the working directory. A file with an invalid value or unknown setting stops the server at startup with the setting named, rather than starting with it ignored. The Docker image does this for you. When you create the server yourself, load it and pass it in:
