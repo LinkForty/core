@@ -1020,11 +1020,11 @@ AGPL-3.0 - see [LICENSE](LICENSE) file for details.
 - **[@linkforty/mobile-sdk-expo](https://github.com/LinkForty/mobile-sdk-expo)** - Expo SDK
 - **[mobile-sdk-ios](https://github.com/LinkForty/mobile-sdk-ios)** - iOS SDK (Swift)
 - **[mobile-sdk-android](https://github.com/LinkForty/mobile-sdk-android)** - Android SDK (Kotlin)
-- **[LinkForty Cloud](https://linkforty.com)** - Hosted SaaS version with authentication, teams, billing, and dashboard
+- **[LinkForty Cloud](https://go.linkforty.com/m0ycvnog/core-cloud)** - Hosted SaaS version with authentication, teams, billing, and dashboard
 
 ## Support
 
-- **Documentation**: [https://docs.linkforty.com](https://docs.linkforty.com)
+- **Documentation**: [docs.linkforty.com](https://go.linkforty.com/m0ycvnog/core-docs)
 - **Issues**: [GitHub Issues](https://github.com/linkforty/core/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/linkforty/core/discussions)
 
