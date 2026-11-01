@@ -1,3 +1,7 @@
+## <small>1.43.1 (2026-11-01)</small>
+
+* docs(readme): route the Cloud and docs links through LinkForty short links (#91) ([ebf258d](https://github.com/LinkForty/core/commit/ebf258d)), closes [#91](https://github.com/LinkForty/core/issues/91)
+
 ## 1.43.0 (2026-10-28)
 
 * feat(config): set instance Launchpad defaults in linkforty.config.json (#90) ([fee5d6d](https://github.com/LinkForty/core/commit/fee5d6d)), closes [#90](https://github.com/LinkForty/core/issues/90)
