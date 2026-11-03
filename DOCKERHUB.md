@@ -123,6 +123,7 @@ volumes:
 |----------|---------|
 | React Native | [`@linkforty/mobile-sdk-react-native`](https://www.npmjs.com/package/@linkforty/mobile-sdk-react-native) |
 | Expo | [`@linkforty/mobile-sdk-expo`](https://www.npmjs.com/package/@linkforty/mobile-sdk-expo) |
+| Flutter | [`linkforty_flutter`](https://pub.dev/packages/linkforty_flutter) |
 | iOS (Swift) | [LinkFortySDK](https://github.com/LinkForty/mobile-sdk-ios) |
 | Android (Kotlin) | [LinkFortySDK](https://github.com/LinkForty/mobile-sdk-android) |
 
@@ -130,7 +131,6 @@ volumes:
 
 | | LinkForty | Branch | AppsFlyer | Firebase Dynamic Links |
 |---|-----------|--------|-----------|----------------------|
-| **Pricing** | Free (self-hosted) | $299+/mo | $500+/mo | Shut down |
 | **Open Source** | Yes (AGPL-3.0) | No | No | No |
 | **Self-Hosted** | Yes | No | No | No |
 | **Data Ownership** | Complete | Vendor | Vendor | Was Google |

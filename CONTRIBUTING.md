@@ -288,7 +288,7 @@ Closes #123
 
 ## Documentation
 
-- Update README.md for new features
+- Update README.md or the reference in `docs/` for new features
 - Add JSDoc comments for exported functions
 - Update API documentation
 - Include examples for new functionality

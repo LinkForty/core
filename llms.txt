@@ -513,7 +513,7 @@ curl "http://localhost:3000/api/links/uuid/qr?format=svg" -o qr.svg
 
 ### Mobile SDK Endpoints (Public)
 
-These are called by the LinkForty mobile SDKs (`@linkforty/mobile-sdk-react-native`, `@linkforty/mobile-sdk-expo`, iOS SDK, Android SDK).
+These are called by the LinkForty mobile SDKs (`@linkforty/mobile-sdk-react-native`, `@linkforty/mobile-sdk-expo`, `linkforty_flutter`, iOS SDK, Android SDK).
 
 #### POST /api/sdk/v1/install — Report App Install
 

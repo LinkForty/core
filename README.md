@@ -5,7 +5,7 @@
 
   **Open-source alternative to Branch.io, AppsFlyer OneLink, and Firebase Dynamic Links**
 
-  Self-hosted deep linking engine with device detection, analytics, deferred deep linking, and smart routing. No per-click pricing, no vendor lock-in, full data ownership — runs on your own PostgreSQL. Firebase Dynamic Links shut down in August 2025; LinkForty is a production-ready, open-source replacement you can deploy today.
+  Self-hosted deep linking engine with device detection, analytics, deferred deep linking, and smart routing. No per-click pricing, no vendor lock-in, full data ownership — runs on your own PostgreSQL. Firebase Dynamic Links shut down in August 2025; LinkForty is a production-ready, open-source alternative you can deploy today.
 </div>
 
 [![npm version](https://img.shields.io/npm/v/@linkforty/core.svg)](https://www.npmjs.com/package/@linkforty/core)
@@ -21,25 +21,17 @@
 - **No per-click pricing** — No usage-based fees, no monthly minimums, no enterprise sales calls
 - **Full data ownership** — All click data, analytics, and attribution stored in your PostgreSQL database
 - **Privacy-first** — No third-party data sharing, no tracking pixels, your users' data stays with you
-- **Drop-in replacement** — REST API + mobile SDKs for React Native, Expo, iOS (Swift), and Android (Kotlin)
-- **Firebase Dynamic Links replacement** — Google shut down Firebase Dynamic Links in August 2025. LinkForty provides the same capabilities with a self-hosted, open-source stack
+- **REST API and mobile SDKs** — SDKs for React Native, Expo, Flutter, iOS (Swift), and Android (Kotlin)
+- **Firebase Dynamic Links alternative** — Google shut down Firebase Dynamic Links in August 2025. LinkForty is a self-hosted, open-source alternative
 
 ### How LinkForty Compares
 
-| Feature | LinkForty Core | Branch | AppsFlyer | Firebase Dynamic Links |
-|---------|---------------|--------|-----------|----------------------|
-| **Open Source** | Yes (AGPL-3.0) | No | No | No |
-| **Self-Hosted** | Yes | No | No | No |
-| **Data Ownership** | Complete | Vendor-controlled | Vendor-controlled | Was Google-controlled |
-| **Deferred Deep Linking** | Yes | Yes | Yes | Was supported |
-| **Device Detection & Routing** | Yes | Yes | Yes | Was supported |
-| **Click Analytics** | Yes | Yes | Yes | Basic |
-| **QR Code Generation** | Built-in | No | No | No |
-| **Webhooks** | Yes | Enterprise only | Enterprise only | No |
-| **iOS Universal Links** | Yes | Yes | Yes | Was supported |
-| **Android App Links** | Yes | Yes | Yes | Was supported |
-| **UTM Parameter Tracking** | Yes | Yes | Custom params | Was supported |
-| **Custom Domains** | Yes | Enterprise only | Enterprise only | No |
+| | LinkForty Core | Branch | AppsFlyer |
+|---|----------------|--------|-----------|
+| **Open source** | Yes (AGPL-3.0) | No | No |
+| **Self-hosted** | Yes | No | No |
+| **Where your data lives** | Your PostgreSQL | Branch's servers | AppsFlyer's servers |
+| **Per-click pricing** | None | Check their pricing | Check their pricing |
 
 ## Features
 
@@ -243,70 +235,7 @@ GET /:shortCode
 GET /:templateSlug/:shortCode
 ```
 
-Automatically redirects users to the appropriate URL based on device type (iOS/Android/web), evaluates targeting rules, and tracks the click asynchronously.
-
-**Not-found page:** When a link can't be served, a browser gets a small HTML page ("Link not found") with status 404, `noindex`, `Cache-Control: no-store` and a content-security policy that allows no script. That covers an unknown code, an expired or switched-off link, a link on another organization's host, a visitor outside the link's targeting rules, and a link with no destination for the visitor's device. All of these render the same page, so an expired link can't be told apart from a code that never existed. Clients that don't send `Accept: text/html` (API callers, scripts) keep the JSON body: `{ "error": "Link not found" }`, or `{ "error": "No destination URL configured for this link" }` for a link with no destination. A link withdrawn for abuse keeps its own 410 notice.
-
-You can change the page or send browsers somewhere else instead, without writing code. The first of these that is set wins:
-
-1. **The organization's settings**, `organizations.settings.notFound`, on a host that belongs to the organization. On a shared host, only a live link that has nothing for this visitor (a targeting miss, no destination) uses its organization's settings. An unknown, expired or switched-off code there uses the instance's.
-
-   ```json
-   {
-     "notFound": {
-       "redirectUrl": "https://example.com",   // send browsers here (302); the rest is ignored
-       "title": "This link has expired",
-       "message": "Open the app to continue.",
-       "logoUrl": "https://cdn.example/logo.png",
-       "accentColor": "#0f766e",                     // the button
-       "backgroundColor": "#f6f7f8",                 // light mode only
-       "buttonLabel": "Get the app",                 // shown only with buttonUrl
-       "buttonUrl": "https://example.com/app"
-     }
-   }
-   ```
-
-   Changes show within a minute.
-2. **The instance's defaults**: the `notFound` section of `linkforty.config.json` (see [Configuration file](#configuration-file)), with the same fields.
-3. **The built-in page.**
-
-URLs must be http(s) and colors hex; anything else is dropped, and all text is escaped. The `notFound` option below decides in code ahead of all three.
-
-**Mobile interstitial:** When a link has `appScheme` configured and a store fallback URL (iOS App Store or Google Play), mobile requests receive a smart interstitial page instead of a raw 302 redirect. The interstitial tries to open the app via URI scheme and falls back to the app store after 1.5 seconds. This handles the case where a 302 to a custom URI scheme fails silently when the app is not installed. URL fragments are preserved through the redirect, enabling patterns like E2E encryption where the decryption key lives in the fragment.
-
-**Launchpad page (desktop):** A link to app-only content has nowhere to send a desktop visitor. When the chain resolves no web destination (link → template → workspace `appConfig`), a desktop request gets a hosted landing page instead of an error: the link's title, description and image (`ogTitle` / `ogDescription` / `ogImageUrl`, falling back to `title` / `description`), the app's icon and name, the official App Store / Google Play badges (embedded in the page, so it makes no third-party request), and a QR code so the visitor can finish on their phone. The page is `noindex`, sent with `Cache-Control: no-store` and a content-security policy that allows no script without a per-response nonce, and it never navigates on its own — no timers, no automatic scheme attempts.
-
-When the link does have a web destination, the page offers it as a "Continue on the web" link, and the title links there too, so a visitor is never trapped. By default it appears **only** where the alternative is nothing; a link that resolves to a destination still gets its 302. Two knobs change that:
-
-- `organizations.settings.launchpad` (per workspace):
-
-  ```json
-  {
-    "launchpad": {
-      "desktop": "no-destination",     // "no-destination" (default) | "always" | "off"
-      "mobile": "store",               // "store" (default) | "page"
-      "appName": "Example App",
-      "appIconUrl": "https://cdn.example/icon.png",
-      "appWebsiteUrl": "https://example.com", // optional; the header's icon and name link here
-      "accentColor": "#0f766e",           // buttons, the web link, focus rings
-      "backgroundColor": "#101418"        // optional; fixes the page's palette (see below)
-    }
-  }
-  ```
-
-  `appWebsiteUrl` is deliberately explicit rather than derived from a link's web fallback, which may be someone else's page (an event listing, a video). Unset, the header is not a link.
-
-  Without `backgroundColor` the page follows the visitor's light/dark preference. With one, the background is fixed and the text, surfaces and borders are derived from it — a light or a dark brand color both stay legible, and the visitor's theme no longer changes the page.
-
-- The `launchpad` section of `linkforty.config.json` (per instance): the same fields except `templateId`, which names a host-rendered template and stays per workspace. It's the default for every link, including links with no workspace. A workspace's `settings.launchpad` overrides it **field by field**: a workspace that sets only `accentColor` keeps the instance's `appName`, icon and modes. (The not-found page works differently: a workspace's `settings.notFound` replaces the instance's as a whole.)
-
-- `links.launchpad_mode` (per link, `launchpadMode` on the links API): `inherit` (default), `on` or `off`. The link's value wins over the workspace's and the instance's.
-
-With `desktop: "off"` (or `launchpad_mode: "off"`), a link with no web destination gets the plain "This link opens in an app" page instead.
-
-**Launchpad page (mobile):** With `mobile: "page"`, a phone visitor whose platform has no Universal Link / App Link on the link gets the same page instead of the store redirect or the scheme interstitial: an "Open in app" button when the link has a URI scheme (a tap, not a navigation — the URL fragment is appended on tap), the visitor's own store button, and the web fallback as a "Continue on the web" link. That last one matters inside in-app browsers (Gmail, Facebook, Instagram…), which bypass Universal Links: the store redirect would send someone who *has* the app to the store, so the redirect path prefers the web fallback there to give the OS a second chance on the next hop — and the page keeps that hop available as a tap. Links that carry a Universal Link / App Link keep their 302 regardless, because the OS resolves the installed case before the request reaches this server. `launchpad_mode: "off"` opts a link out; `"on"` does not force the page onto a workspace that chose `"store"`. The default, `"store"`, is unchanged behaviour.
-
-Two hooks on `RedirectRouteOptions` let a host application extend the page without forking it — see [Server Options](#server-options).
+Redirects users to the appropriate URL based on device type (iOS/Android/web), evaluates targeting rules, and tracks the click asynchronously. See [Redirects](docs/redirects.md) for the not-found page, the mobile interstitial and the Launchpad page.
 
 ### QR Codes
 
@@ -386,458 +315,17 @@ GET /.well-known/assetlinks.json              # Android App Links
 GET /:shortCode/preview                # OG meta tag page for social scrapers
 ```
 
-## Configuration
-
-### Server Options
-
-```typescript
-interface ServerOptions {
-  database?: {
-    url?: string;           // PostgreSQL connection string
-    pool?: {
-      min?: number;         // Minimum pool connections (default: 2)
-      max?: number;         // Maximum pool connections (default: 10)
-    };
-  };
-  redis?: {
-    url: string;            // Redis connection string (optional)
-  };
-  cors?: {
-    origin: string | string[];  // CORS allowed origins (default: '*')
-  };
-  logger?: boolean;         // Enable Fastify logger (default: true)
-  trustProxy?: boolean | number;  // Trust X-Forwarded-For when behind a proxy (default: false)
-  redirect?: RedirectRouteOptions;  // See below
-  sdk?: SdkRouteOptions;            // See below
-  config?: LinkFortyConfig;         // linkforty.config.json, from loadConfig()
-}
-
-interface RedirectRouteOptions {
-  abuseReportUrl?: string;  // Linked from the link-safety warning page
-  launchpad?: {
-    // Supply richer content for the launchpad page than the link row carries:
-    // a rendered share image, a templated hero. Return null for the default.
-    // A hook that throws is logged and treated as null — the page never fails
-    // because of it. `heroHtml` is inserted unescaped: render it yourself,
-    // never from end-user input.
-    // `context.webUrl` is the link's web destination, decorated exactly as
-    // "Continue on the web" uses it (or null), so a hero that draws its own
-    // title can link it the way the default page does.
-    resolveContent?: (link, settings, context: { webUrl: string | null }) => Promise<LaunchpadContent | null>;
-    // Endpoint that receives `{ linkId, event }` beacons from the page —
-    // "view" on load; "cta_ios" / "cta_android" / "cta_open" / "cta_web" /
-    // "cta_app_website" on tap. No cookies or identifiers. Unset means the
-    // page sends nothing. If you validate event names, accept all of these.
-    beaconUrl?: string;
-  };
-  // Return true when the request is on a host reserved for web links. Every
-  // link on it then sends every device to its web destination with a plain
-  // 302: no launchpad page, no scheme attempt, no store. Don't serve
-  // association files on that host, so no installed app can claim its URLs.
-  // A hook that throws is logged and treated as false.
-  isWebLinkRequest?: (request) => Promise<boolean> | boolean;
-  // The instance's not-found page or redirect, used when the organization has
-  // no settings.notFound of its own. createServer() fills it from the
-  // `notFound` section of the config file (ServerOptions.config).
-  notFoundDefaults?: NotFoundSettings;
-  // Decide the not-found response in code, ahead of the organization's
-  // settings and notFoundDefaults: page content (title,
-  // message, logoUrl, accentColor, backgroundColor, buttonLabel, buttonUrl — all
-  // optional, all escaped; non-http(s) URLs and non-hex colors are dropped),
-  // a URL to 302 to (http(s) only), or null to fall through. Called only
-  // for requests that accept HTML, and never for a link withdrawn for abuse.
-  // `context.reason` is "unknown" | "disabled" | "not_targeted" |
-  // "no_destination"; `context.link` is the link row (null for "unknown");
-  // `context.scope` is the host's organization, if any. Use the reason to
-  // decide whose settings apply, not to vary the page: an expired link must
-  // look like a code that never existed. A hook that throws is logged and
-  // treated as null.
-  notFound?: (request, context: { reason, link, scope }) =>
-    Promise<NotFoundResolution | null> | NotFoundResolution | null;
-}
-
-interface SdkRouteOptions {
-  // Narrow the clicks an install can be attributed to. A server shared by
-  // several apps resolves the installing app (from the SDK's `appToken`, say)
-  // and returns its organization, so an install only ever matches — and
-  // receives the deep link of — that organization's links. Return null to
-  // match against every click, as when the option is absent. A hook that
-  // throws is logged and treated as null.
-  resolveInstallScope?: (request, body: { appToken?: string }) =>
-    Promise<{ organizationId?: string } | null> | { organizationId?: string } | null;
-}
-```
-
-Install matching only considers clicks from the installing device's own network (its IPv4 /24 or IPv6 /64), since no other click can reach the confidence threshold, so the attribution window holds however much traffic the server takes. It relies on the `idx_fingerprints_ip` index, which `initializeDatabase()` builds concurrently on first start so click writes are never blocked.
-
-`renderLaunchpadPage()`, `defaultLaunchpadContent()` and `shouldServeLaunchpadOnDesktop()` are exported so a host can render the same page elsewhere (a settings preview, for instance). `renderNotFoundPage()` is exported for the same reason, and for a host that answers some requests before they reach the redirect route.
-
-### Configuration file
-
-Core splits its configuration the way most self-hosted platforms do:
-
-- **Environment variables** hold infrastructure and secrets: `DATABASE_URL`, `REDIS_URL`, `PORT`, `TRUST_PROXY`, and so on.
-- **`linkforty.config.json`** holds the instance's defaults and behavior, including text a visitor reads. Today that's the `notFound` and `launchpad` sections; see [linkforty.config.example.json](linkforty.config.example.json) and [DOCKER.md](DOCKER.md#configuration-file) for every setting.
-- **`organizations.settings`** holds per-organization values, which take precedence over the file where both apply.
-
-The file is optional. Core reads the path in `LINKFORTY_CONFIG`, or `linkforty.config.json` in the working directory. A file with an invalid value or unknown setting stops the server at startup with the setting named, rather than starting with it ignored. The Docker image does this for you. When you create the server yourself, load it and pass it in:
-
-```typescript
-import { createServer, loadConfig } from '@linkforty/core';
-
-const { config } = loadConfig(); // throws ConfigError on a bad file
-const server = await createServer({ database: { url: process.env.DATABASE_URL }, config });
-```
-
-Options passed in code (such as `redirect.notFoundDefaults`) take precedence over the file.
-
-### Running behind a reverse proxy
-
-When Core runs behind a reverse proxy, CDN, or load balancer, set `trustProxy` so the server uses the real client IP from `X-Forwarded-For` for redirect targeting, geo, attribution, and fingerprinting. Pass it when creating the server (e.g. `trustProxy: true` or a number of proxy hops) or set the `TRUST_PROXY` environment variable (e.g. `TRUST_PROXY=1`). Client-provided `ipAddress` in the SDK install request body is **not** used as the trusted IP; it is optional debug metadata only and must not be relied on for attribution.
-
-### Email security scanner detection
-
-Mail security services (Microsoft Defender Safe Links, Mimecast, Proofpoint and others) open every link in a delivered email to check where it leads. They send a normal desktop browser user agent, so without help those visits count as human clicks, and on links sent by email they can outnumber the people.
-
-Core can recognize them by the network they come from. Give it a MaxMind [GeoLite2-ASN](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data) database (free with a MaxMind account; the license doesn't allow shipping it with Core, and MaxMind updates it weekly):
-
-```bash
-ASN_DB_PATH=/data/GeoLite2-ASN.mmdb
-```
-
-or pass `botDetection: { asnDatabasePath }` to `createServer()`. A click is then recorded with `is_bot = true` and `bot_reason = 'email_scanner'` when it comes from a desktop browser on Microsoft, Amazon or Google's networks (ASNs 8075, 16509, 14618, 15169, 396982). Mobile browsers, app HTTP clients and SDK requests from those networks are not flagged. Without the database the rule is off; a file that can't be opened is logged and the server starts without it.
-
-To change the networks, set `botDetection.emailScannerAsns` in `linkforty.config.json`. It replaces the built-in list, and an empty list turns the rule off. Networks iCloud Private Relay exits through (Apple, Cloudflare, Akamai, Fastly) are rejected, since real Safari users would be flagged.
-
-A host that registers the routes itself instead of calling `createServer()` turns the rule on with `loadScannerDetection(path, { asns })`.
-
-### Environment Variables
-
-```bash
-DATABASE_URL=postgresql://localhost/linkforty
-REDIS_URL=redis://localhost:6379
-PORT=3000
-NODE_ENV=production
-CORS_ORIGIN=*
-# When behind a reverse proxy: TRUST_PROXY=1 (or number of hops) so client IP is read from X-Forwarded-For
-# TRUST_PROXY=1
-# Email security scanner detection (optional): path to a MaxMind GeoLite2-ASN database
-# ASN_DB_PATH=/data/GeoLite2-ASN.mmdb
-
-# Mobile SDK (optional — for iOS Universal Links and Android App Links)
-IOS_TEAM_ID=ABC123XYZ
-IOS_BUNDLE_ID=com.yourcompany.yourapp
-ANDROID_PACKAGE_NAME=com.yourcompany.yourapp
-ANDROID_SHA256_FINGERPRINTS=AA:BB:CC:DD:...
-
-# Custom domain for QR code URLs (optional)
-SHORTLINK_DOMAIN=yourdomain.com
-```
-
-## Database Schema
-
-Core does not create a `users` table. Authentication and user management are the consumer's responsibility. The `user_id` column on `links` and `webhooks` is optional (nullable, no foreign key) — use it for multi-tenant scoping when your auth layer provides a user identity.
-
-### Short codes and URL resolution
-
-Every short code is unique across the server. Links created through Core's API have no organization, so they all share one set of codes.
-
-An application that builds on Core and assigns links to organizations (by setting `links.organization_id`) gets one set of codes per organization: two organizations can each have `promo`. Template slugs stay unique across the server, and URLs resolve like this:
-
-- `/{templateSlug}/{shortCode}` resolves to exactly one link.
-- `/{shortCode}` on a request that belongs to an organization resolves only that organization's link with that code.
-- A request that belongs to an organization is served only that organization's links, in either form: another organization's link is answered with 404, and the refusal is logged.
-- `/{shortCode}` on any other request prefers a link without a template, then the oldest link with that code.
-
-To tell Core which organization a request belongs to, for example by custom domain, register a resolver:
-
-```typescript
-import { setLinkScopeResolver } from '@linkforty/core';
-
-setLinkScopeResolver(async (request) => organizationIdForHost(request.headers.host) ?? null);
-```
-
-The redirect, SDK resolve and preview routes all use it. A resolver that throws is logged and treated as null.
-
-### Links Table
-
-| Column                  | Type         | Description                              |
-|-------------------------|--------------|------------------------------------------|
-| id                      | UUID         | Primary key                              |
-| user_id                 | UUID         | Optional owner/tenant identifier         |
-| short_code              | VARCHAR(20)  | Short code, unique per organization_id   |
-| original_url            | TEXT         | Original URL                             |
-| title                   | VARCHAR(255) | Link title                               |
-| description             | TEXT         | Link description                         |
-| ios_app_store_url       | TEXT         | iOS App Store URL                        |
-| android_app_store_url   | TEXT         | Android Play Store URL                   |
-| web_fallback_url        | TEXT         | Web fallback URL                         |
-| app_scheme              | VARCHAR(255) | URI scheme (e.g., "myapp")               |
-| ios_universal_link      | TEXT         | iOS Universal Link URL                   |
-| android_app_link        | TEXT         | Android App Link URL                     |
-| deep_link_path          | TEXT         | In-app destination path                  |
-| deep_link_parameters    | JSONB        | Custom app parameters                    |
-| utm_parameters          | JSONB        | UTM tracking parameters                  |
-| targeting_rules         | JSONB        | Country/device/language targeting         |
-| og_title                | VARCHAR(255) | Open Graph title                         |
-| og_description          | TEXT         | Open Graph description                   |
-| og_image_url            | TEXT         | Open Graph image URL                     |
-| og_type                 | VARCHAR(50)  | Open Graph type (default: "website")     |
-| launchpad_mode          | VARCHAR(10)  | Launchpad page: inherit / on / off       |
-| attribution_window_hours| INTEGER      | Install attribution window (default: 168)|
-| attribution_window_minutes| INTEGER    | Window in minutes; replaces the hours when set |
-| one_install_per_click   | BOOLEAN      | A click matches one install only (default: false) |
-| is_active               | BOOLEAN      | Active status                            |
-| expires_at              | TIMESTAMP    | Expiration date                          |
-| created_at              | TIMESTAMP    | Creation timestamp                       |
-| updated_at              | TIMESTAMP    | Last update timestamp                    |
-
-### Click Events Table
-
-| Column       | Type         | Description                  |
-|--------------|--------------|------------------------------|
-| id           | UUID         | Primary key                  |
-| link_id      | UUID         | Foreign key to links         |
-| clicked_at   | TIMESTAMP    | Click timestamp              |
-| ip_address   | INET         | User IP address              |
-| user_agent   | TEXT         | User agent string            |
-| device_type  | VARCHAR(20)  | Device type (ios/android/web)|
-| platform     | VARCHAR(20)  | Platform (iOS/Android/Web)   |
-| country_code | CHAR(2)      | Country code                 |
-| country_name | VARCHAR(100) | Country name                 |
-| region       | VARCHAR(100) | Region/state                 |
-| city         | VARCHAR(100) | City                         |
-| latitude     | DECIMAL      | Latitude                     |
-| longitude    | DECIMAL      | Longitude                    |
-| timezone     | VARCHAR(100) | Timezone                     |
-| utm_source   | VARCHAR(255) | UTM source                   |
-| utm_medium   | VARCHAR(255) | UTM medium                   |
-| utm_campaign | VARCHAR(255) | UTM campaign                 |
-| referrer     | TEXT         | Referrer URL                 |
-| is_bot       | BOOLEAN      | Automated traffic, excluded from human analytics |
-| bot_reason   | VARCHAR(16)  | Why: `edge`, `method`, `ua` or `email_scanner` |
-
-### Device Fingerprints Table
-
-| Column           | Type        | Description                         |
-|------------------|-------------|-------------------------------------|
-| id               | UUID        | Primary key                         |
-| click_id         | UUID        | Foreign key to click_events         |
-| fingerprint_hash | VARCHAR(64) | SHA-256 hash of fingerprint signals |
-| ip_address       | INET        | IP address                          |
-| user_agent       | TEXT        | User agent string                   |
-| timezone         | VARCHAR(100)| Timezone                            |
-| language         | VARCHAR(10) | Browser language                    |
-| screen_width     | INTEGER     | Screen width                        |
-| screen_height    | INTEGER     | Screen height                       |
-| platform         | VARCHAR(50) | Platform                            |
-| platform_version | VARCHAR(50) | Platform version                    |
-| created_at       | TIMESTAMP   | Creation timestamp                  |
-
-### Install Events Table
-
-| Column                  | Type        | Description                        |
-|-------------------------|-------------|------------------------------------|
-| id                      | UUID        | Primary key                        |
-| link_id                 | UUID        | Attributed link (nullable)         |
-| click_id                | UUID        | Attributed click (nullable)        |
-| fingerprint_hash        | VARCHAR(64) | Device fingerprint hash            |
-| confidence_score        | DECIMAL     | Match confidence (0-100)           |
-| installed_at            | TIMESTAMP   | Install timestamp                  |
-| first_open_at           | TIMESTAMP   | First app open                     |
-| deep_link_retrieved     | BOOLEAN     | Whether deferred link was fetched  |
-| deep_link_data          | JSONB       | Deferred deep link data            |
-| attribution_window_hours| INTEGER     | Attribution window used (default: 168) |
-| device_id               | VARCHAR(255)| Optional device identifier         |
-| created_at              | TIMESTAMP   | Creation timestamp                 |
-
-### In-App Events Table
-
-| Column          | Type         | Description                  |
-|-----------------|--------------|------------------------------|
-| id              | UUID         | Primary key                  |
-| install_id      | UUID         | Foreign key to install_events|
-| event_name      | VARCHAR(255) | Event name                   |
-| event_data      | JSONB        | Custom event properties      |
-| event_timestamp | TIMESTAMP    | When the event occurred      |
-| created_at      | TIMESTAMP    | Creation timestamp           |
-
-### Webhooks Table
-
-| Column     | Type         | Description                      |
-|------------|--------------|----------------------------------|
-| id         | UUID         | Primary key                      |
-| user_id    | UUID         | Optional owner/tenant identifier |
-| organization_id | UUID    | Optional owning organization; receives events for all its links |
-| name       | VARCHAR(255) | Webhook name                     |
-| url        | TEXT         | Delivery URL                     |
-| secret     | VARCHAR(255) | HMAC signing secret              |
-| events     | TEXT[]       | Subscribed event types           |
-| is_active  | BOOLEAN      | Active status                    |
-| retry_count| INTEGER      | Max retries (default: 3)         |
-| timeout_ms | INTEGER      | Request timeout (default: 10000) |
-| headers    | JSONB        | Custom HTTP headers              |
-| created_at | TIMESTAMP    | Creation timestamp               |
-| updated_at | TIMESTAMP    | Last update timestamp            |
-
-## Utilities
-
-### Generate Short Code
-
-```typescript
-import { generateShortCode } from '@linkforty/core';
-
-const code = generateShortCode(8); // Returns 8-character nanoid
-```
-
-### Detect Device
-
-```typescript
-import { detectDevice } from '@linkforty/core';
-
-const device = detectDevice(userAgent); // Returns 'ios' | 'android' | 'web'
-```
-
-### Get Location from IP
-
-```typescript
-import { getLocationFromIP } from '@linkforty/core';
-
-const location = getLocationFromIP('8.8.8.8');
-// Returns: { countryCode, countryName, region, city, latitude, longitude, timezone }
-```
-
-### Build Redirect URL with UTM Parameters
-
-```typescript
-import { buildRedirectUrl } from '@linkforty/core';
-
-const url = buildRedirectUrl('https://example.com', {
-  source: 'twitter',
-  medium: 'social',
-  campaign: 'summer-sale'
-});
-// Returns: https://example.com?utm_source=twitter&utm_medium=social&utm_campaign=summer-sale
-```
-
-## Advanced Usage
-
-### Custom Route Registration
-
-```typescript
-import { createServer } from '@linkforty/core';
-
-const server = await createServer({
-  database: { url: 'postgresql://localhost/linkforty' },
-});
-
-// Add custom routes
-server.get('/custom', async (request, reply) => {
-  return { message: 'Hello World' };
-});
-
-await server.listen({ port: 3000 });
-```
-
-### Using Individual Route Handlers
-
-```typescript
-import Fastify from 'fastify';
-import { initializeDatabase, redirectRoutes, linkRoutes } from '@linkforty/core';
-
-const fastify = Fastify();
-
-// Initialize database separately
-await initializeDatabase({ url: 'postgresql://localhost/linkforty' });
-
-// Register only specific routes
-await fastify.register(redirectRoutes);
-await fastify.register(linkRoutes);
-
-await fastify.listen({ port: 3000 });
-```
-
-#### Starting while the database is busy
-
-`initializeDatabase()` creates or updates the schema on every start. Postgres takes a table's lock *before* it evaluates `IF NOT EXISTS`, so a statement such as `ALTER TABLE links ADD COLUMN IF NOT EXISTS …` for a column that already exists would still request an exclusive lock on `links` — and if a long statement (a retention job, a large export) holds that table, the request waits, and every later query on the table, redirects included, queues behind it until the long statement ends. To keep a routine start from ever doing that, statements whose effect already exists are answered from the catalog and never sent, and you can bound the wait for the rest:
-
-```typescript
-await initializeDatabase({
-  url: 'postgresql://localhost/linkforty',
-  // A schema change that waits longer than this fails the start with
-  // SQLSTATE 55P03 rather than queueing the table. Retry or restart.
-  lockTimeoutMs: 5000,
-});
-```
-
-The timeout applies only to the initialisation session and is reset before that connection returns to the pool. When adding schema statements of your own, use the idempotent shapes (`ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, `DROP CONSTRAINT IF EXISTS`) or a `DO $$ … IF NOT EXISTS (SELECT … FROM information_schema …)` block, never a bare `ALTER` that asks for a lock on every start.
+## Reference
+
+- [Redirects](docs/redirects.md)
+- [Configuration](docs/configuration.md): server options and hooks, `linkforty.config.json`, reverse proxies, environment variables
+- [Database schema](docs/database-schema.md)
+- [Using Core as a library](docs/library-usage.md)
+- [Export and import](docs/export-import.md)
 
 ## Deployment
 
-LinkForty can be deployed in multiple ways depending on your needs:
-
-### Production Deployment (Recommended)
-
-Deploy to managed platforms with minimal DevOps overhead:
-
-**Fly.io (Recommended)**
-- Global edge deployment
-- Managed PostgreSQL and Redis
-- Auto-scaling and SSL included
-- Starting at ~$10-15/month
-
-[View Fly.io deployment guide](infra/fly.io/DEPLOYMENT.md)
-
-See [`infra/`](infra/) directory for all deployment options and platform-specific guides.
-
-### Docker Deployment (Recommended for Self-Hosting)
-
-**Production-ready Docker images available on Docker Hub:**
-
-```bash
-# One-command deployment
-curl -O https://raw.githubusercontent.com/linkforty/core/main/docker-compose.yml
-docker compose up -d
-```
-
-**Image Details:**
-- **Registry:** `linkforty/core`
-- **Tags:** `latest`, `v1.x.x`, `main`
-- **Architectures:** linux/amd64, linux/arm64
-- **Base:** Node.js 22 Alpine (minimal, secure)
-- **Security:** Non-root user, SBOM attestations
-
-**Version Pinning (Recommended):**
-```yaml
-services:
-  linkforty:
-    image: linkforty/core:v1.5.0  # Pin to specific version
-```
-
-See [DOCKER.md](DOCKER.md) for complete deployment guide including:
-- Environment configuration
-- Health checks
-- Backup strategies
-- Production best practices
-
-### Manual Deployment
-
-For custom infrastructure needs:
-
-1. Install dependencies: `npm install @linkforty/core`
-2. Set up PostgreSQL database (13+)
-3. Set up Redis (optional but recommended)
-4. Run migrations: `npm run migrate`
-5. Start server: `node server.js`
-
-### Other Platforms
-
-Community-maintained templates available for:
-- AWS (ECS/Fargate)
-- Google Cloud Run
-- Railway, Render, and more
-
-See [`infra/CONTRIBUTING.md`](infra/CONTRIBUTING.md) to add support for additional platforms.
+Core runs anywhere you can run a container with PostgreSQL 13+ (Redis is optional). See [DOCKER.md](DOCKER.md) for the image, Compose setup, health checks, backups and version pinning.
 
 ## Performance
 
@@ -949,6 +437,7 @@ LinkForty Core supports iOS Universal Links and Android App Links for seamless d
 |----------|---------|---------|
 | React Native | [`@linkforty/mobile-sdk-react-native`](https://github.com/LinkForty/mobile-sdk-react-native) | `npm install @linkforty/mobile-sdk-react-native` |
 | Expo | [`@linkforty/mobile-sdk-expo`](https://github.com/LinkForty/mobile-sdk-expo) | `npx expo install @linkforty/mobile-sdk-expo` |
+| Flutter | [`linkforty_flutter`](https://github.com/LinkForty/mobile-sdk-flutter) | `flutter pub add linkforty_flutter` |
 | iOS (Swift) | [LinkFortySDK](https://github.com/LinkForty/mobile-sdk-ios) | Swift Package Manager |
 | Android (Kotlin) | [LinkFortySDK](https://github.com/LinkForty/mobile-sdk-android) | Gradle dependency |
 
@@ -967,49 +456,6 @@ adb shell am start -a android.intent.action.VIEW \
   -d "https://yourdomain.com/test"
 ```
 
-
-## Export and Import
-
-Move a server's links and analytics to another LinkForty server (self-hosted or LinkForty Cloud), or keep a backup, with a **bundle**: one gzipped file of newline-delimited JSON.
-
-```bash
-# Everything on this server
-DATABASE_URL=postgres://... npx linkforty export backup.lfbundle
-
-# One organization's data
-DATABASE_URL=postgres://... npx linkforty export acme.lfbundle --organization <organization-id>
-
-# Check a bundle against a database without writing anything
-DATABASE_URL=postgres://... npx linkforty import acme.lfbundle --dry-run
-
-# Import it; add --organization <id> to import into an existing organization
-DATABASE_URL=postgres://... npx linkforty import acme.lfbundle
-```
-
-**What a bundle carries:** organizations (name and the `appConfig` and `launchpad` settings), link templates, links, click events, device fingerprints, install events, in-app events and webhooks.
-
-**What it leaves out:**
-- **Webhook signing secrets.** Import issues new ones and prints them, so update your receivers.
-- **Link-safety state** (`warn_at`, `disabled_at`, `disabled_reason`, `suspended_at`), which belongs to the server that set it.
-
-**How import works:**
-- **Ids are kept**, so links, clicks and installs stay connected and apps keep their install ids.
-- **Checked first.** It reports conflicts before writing anything: ids already present, short codes already used in the target organization, template slugs already taken.
-- **All or nothing.** It writes everything in one transaction.
-- **Tamper check.** A bundle that was cut short or edited is refused, because its checksum no longer matches.
-
-**From code:** use `exportBundle`, `exportBundleToFile`, `importBundle` and `importBundleFile`, exported from the package root. `BUNDLE_TABLES` lists every column and whether a bundle carries it. A schema test fails when a column is added without a classification there.
-
-## Migrate from Another Platform
-
-Switching from an existing deep linking provider? LinkForty supports zero-downtime migration via custom domain DNS cutover.
-
-- [Migrate from Branch.io](https://docs.linkforty.com/migrations/branch)
-- [Migrate from AppsFlyer OneLink](https://docs.linkforty.com/migrations/appsflyer)
-- [Migrate from Firebase Dynamic Links](https://docs.linkforty.com/comparisons/firebase-dynamic-links-migration) (shut down August 2025)
-- [Migrate from Adjust](https://docs.linkforty.com/migrations/adjust)
-- [Migrate from Kochava](https://docs.linkforty.com/migrations/kochava)
-- [Migration overview and checklist](https://docs.linkforty.com/migrations/overview)
 
 ## For AI Tools (llms.txt)
 
@@ -1034,26 +480,12 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for det
 
 AGPL-3.0 - see [LICENSE](LICENSE) file for details.
 
-## Related Projects
+## Managed hosting
 
-- **[@linkforty/mobile-sdk-react-native](https://github.com/LinkForty/mobile-sdk-react-native)** - React Native SDK
-- **[@linkforty/mobile-sdk-expo](https://github.com/LinkForty/mobile-sdk-expo)** - Expo SDK
-- **[mobile-sdk-ios](https://github.com/LinkForty/mobile-sdk-ios)** - iOS SDK (Swift)
-- **[mobile-sdk-android](https://github.com/LinkForty/mobile-sdk-android)** - Android SDK (Kotlin)
-- **[LinkForty Cloud](https://go.linkforty.com/m0ycvnog/core-cloud)** - Hosted SaaS version with authentication, teams, billing, and dashboard
+Prefer not to run it yourself? [LinkForty Cloud](https://go.linkforty.com/m0ycvnog/core-cloud) is the hosted version, with authentication, teams and a dashboard.
 
 ## Support
 
 - **Documentation**: [docs.linkforty.com](https://go.linkforty.com/m0ycvnog/core-docs)
 - **Issues**: [GitHub Issues](https://github.com/linkforty/core/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/linkforty/core/discussions)
-
-## Built with:
-- [Fastify](https://www.fastify.io/) - Fast web framework
-- [PostgreSQL](https://www.postgresql.org/) - Powerful database
-- [Redis](https://redis.io/) - In-memory cache
-- [Zod](https://zod.dev/) - TypeScript-first schema validation
-- [nanoid](https://github.com/ai/nanoid) - Unique ID generation
-- [geoip-lite](https://github.com/geoip-lite/node-geoip) - IP geolocation
-- [ua-parser-js](https://github.com/faisalman/ua-parser-js) - User agent parsing
-- [qrcode](https://github.com/soldair/node-qrcode) - QR code generation
