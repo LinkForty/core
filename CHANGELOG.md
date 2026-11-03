@@ -1,3 +1,7 @@
+## <small>1.44.1 (2026-11-03)</small>
+
+* docs: use neutral placeholder names in examples and tests (#93) ([5a0466d](https://github.com/LinkForty/core/commit/5a0466d)), closes [#93](https://github.com/LinkForty/core/issues/93)
+
 ## 1.44.0 (2026-11-03)
 
 * feat(bot-detection): classify email security scanner clicks (#92) ([56b07db](https://github.com/LinkForty/core/commit/56b07db)), closes [#92](https://github.com/LinkForty/core/issues/92)
