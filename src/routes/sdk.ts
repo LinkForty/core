@@ -744,7 +744,8 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
           userAgent,
           request.method,
           edgeBotSignal(request.headers['x-lf-bot']),
-          isSdkRequest(request.headers)
+          isSdkRequest(request.headers),
+          ip
         );
 
         // Extract fingerprint data from query params (sent by SDK)

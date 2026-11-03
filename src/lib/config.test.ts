@@ -120,3 +120,24 @@ describe('parseConfig', () => {
     expect(() => parseConfig([])).toThrow(ConfigError);
   });
 });
+
+describe('botDetection', () => {
+  it('accepts a list of scanner networks', () => {
+    expect(parseConfig({ botDetection: { emailScannerAsns: [8075, 16509] } })).toEqual({
+      botDetection: { emailScannerAsns: [8075, 16509] },
+    });
+    expect(parseConfig({ botDetection: { emailScannerAsns: [] } })).toEqual({ botDetection: { emailScannerAsns: [] } });
+  });
+
+  it('rejects networks iCloud Private Relay exits through', () => {
+    const error = errorFrom(() => parseConfig({ botDetection: { emailScannerAsns: [8075, 13335] } }));
+    expect(error.message).toContain('botDetection.emailScannerAsns');
+    expect(error.message).toContain('Private Relay');
+  });
+
+  it('rejects malformed ASNs and unknown keys', () => {
+    expect(() => parseConfig({ botDetection: { emailScannerAsns: ['8075'] } })).toThrow(ConfigError);
+    expect(() => parseConfig({ botDetection: { emailScannerAsns: [-1] } })).toThrow(ConfigError);
+    expect(() => parseConfig({ botDetection: { scanners: true } })).toThrow(ConfigError);
+  });
+});

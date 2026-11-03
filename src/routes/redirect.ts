@@ -741,7 +741,9 @@ export async function redirectRoutes(
         const { isBot, reason: botReason } = classifyBot(
           userAgent,
           request.method,
-          edgeBotSignal(request.headers['x-lf-bot'])
+          edgeBotSignal(request.headers['x-lf-bot']),
+          false,
+          ip
         );
 
         // Resolve the UTMs recorded on the click row. Inbound query-string
