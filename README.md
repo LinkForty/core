@@ -5,7 +5,7 @@
 
   **Open-source alternative to Branch.io, AppsFlyer OneLink, and Firebase Dynamic Links**
 
-  Self-hosted deep linking engine with device detection, analytics, deferred deep linking, and smart routing. No per-click pricing, no vendor lock-in, full data ownership — runs on your own PostgreSQL. Firebase Dynamic Links shut down in August 2025; LinkForty is a production-ready, open-source replacement you can deploy today.
+  Self-hosted deep linking engine with device detection, analytics, deferred deep linking, and smart routing. No per-click pricing, no vendor lock-in, full data ownership — runs on your own PostgreSQL. Firebase Dynamic Links shut down in August 2025; LinkForty is a production-ready, open-source alternative you can deploy today.
 </div>
 
 [![npm version](https://img.shields.io/npm/v/@linkforty/core.svg)](https://www.npmjs.com/package/@linkforty/core)
@@ -333,70 +333,7 @@ GET /:shortCode/preview                # OG meta tag page for social scrapers
 
 ## Deployment
 
-LinkForty can be deployed in multiple ways depending on your needs:
-
-### Production Deployment (Recommended)
-
-Deploy to managed platforms with minimal DevOps overhead:
-
-**Fly.io (Recommended)**
-- Global edge deployment
-- Managed PostgreSQL and Redis
-- Auto-scaling and SSL included
-- Starting at ~$10-15/month
-
-[View Fly.io deployment guide](infra/fly.io/DEPLOYMENT.md)
-
-See [`infra/`](infra/) directory for all deployment options and platform-specific guides.
-
-### Docker Deployment (Recommended for Self-Hosting)
-
-**Production-ready Docker images available on Docker Hub:**
-
-```bash
-# One-command deployment
-curl -O https://raw.githubusercontent.com/linkforty/core/main/docker-compose.yml
-docker compose up -d
-```
-
-**Image Details:**
-- **Registry:** `linkforty/core`
-- **Tags:** `latest`, `v1.x.x`, `main`
-- **Architectures:** linux/amd64, linux/arm64
-- **Base:** Node.js 22 Alpine (minimal, secure)
-- **Security:** Non-root user, SBOM attestations
-
-**Version Pinning (Recommended):**
-```yaml
-services:
-  linkforty:
-    image: linkforty/core:v1.5.0  # Pin to specific version
-```
-
-See [DOCKER.md](DOCKER.md) for complete deployment guide including:
-- Environment configuration
-- Health checks
-- Backup strategies
-- Production best practices
-
-### Manual Deployment
-
-For custom infrastructure needs:
-
-1. Install dependencies: `npm install @linkforty/core`
-2. Set up PostgreSQL database (13+)
-3. Set up Redis (optional but recommended)
-4. Run migrations: `npm run migrate`
-5. Start server: `node server.js`
-
-### Other Platforms
-
-Community-maintained templates available for:
-- AWS (ECS/Fargate)
-- Google Cloud Run
-- Railway, Render, and more
-
-See [`infra/CONTRIBUTING.md`](infra/CONTRIBUTING.md) to add support for additional platforms.
+Core runs anywhere you can run a container with PostgreSQL 13+ (Redis is optional). See [DOCKER.md](DOCKER.md) for the image, Compose setup, health checks, backups and version pinning.
 
 ## Performance
 
@@ -549,6 +486,10 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for det
 ## License
 
 AGPL-3.0 - see [LICENSE](LICENSE) file for details.
+
+## Managed hosting
+
+Prefer not to run it yourself? [LinkForty Cloud](https://go.linkforty.com/m0ycvnog/core-cloud) is the hosted version, with authentication, teams and a dashboard.
 
 ## Support
 
