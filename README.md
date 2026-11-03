@@ -26,20 +26,12 @@
 
 ### How LinkForty Compares
 
-| Feature | LinkForty Core | Branch | AppsFlyer | Firebase Dynamic Links |
-|---------|---------------|--------|-----------|----------------------|
-| **Open Source** | Yes (AGPL-3.0) | No | No | No |
-| **Self-Hosted** | Yes | No | No | No |
-| **Data Ownership** | Complete | Vendor-controlled | Vendor-controlled | Was Google-controlled |
-| **Deferred Deep Linking** | Yes | Yes | Yes | Was supported |
-| **Device Detection & Routing** | Yes | Yes | Yes | Was supported |
-| **Click Analytics** | Yes | Yes | Yes | Basic |
-| **QR Code Generation** | Built-in | No | No | No |
-| **Webhooks** | Yes | Enterprise only | Enterprise only | No |
-| **iOS Universal Links** | Yes | Yes | Yes | Was supported |
-| **Android App Links** | Yes | Yes | Yes | Was supported |
-| **UTM Parameter Tracking** | Yes | Yes | Custom params | Was supported |
-| **Custom Domains** | Yes | Enterprise only | Enterprise only | No |
+| | LinkForty Core | Branch | AppsFlyer |
+|---|----------------|--------|-----------|
+| **Open source** | Yes (AGPL-3.0) | No | No |
+| **Self-hosted** | Yes | No | No |
+| **Where your data lives** | Your PostgreSQL | Branch's servers | AppsFlyer's servers |
+| **Per-click pricing** | None | Check their pricing | Check their pricing |
 
 ## Features
 

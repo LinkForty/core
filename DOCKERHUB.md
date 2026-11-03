@@ -130,7 +130,6 @@ volumes:
 
 | | LinkForty | Branch | AppsFlyer | Firebase Dynamic Links |
 |---|-----------|--------|-----------|----------------------|
-| **Pricing** | Free (self-hosted) | $299+/mo | $500+/mo | Shut down |
 | **Open Source** | Yes (AGPL-3.0) | No | No | No |
 | **Self-Hosted** | Yes | No | No | No |
 | **Data Ownership** | Complete | Vendor | Vendor | Was Google |
