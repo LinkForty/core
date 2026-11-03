@@ -21,7 +21,7 @@
 - **No per-click pricing** — No usage-based fees, no monthly minimums, no enterprise sales calls
 - **Full data ownership** — All click data, analytics, and attribution stored in your PostgreSQL database
 - **Privacy-first** — No third-party data sharing, no tracking pixels, your users' data stays with you
-- **Drop-in replacement** — REST API + mobile SDKs for React Native, Expo, iOS (Swift), and Android (Kotlin)
+- **REST API and mobile SDKs** — SDKs for React Native, Expo, iOS (Swift), and Android (Kotlin)
 - **Firebase Dynamic Links replacement** — Google shut down Firebase Dynamic Links in August 2025. LinkForty provides the same capabilities with a self-hosted, open-source stack
 
 ### How LinkForty Compares
@@ -526,17 +526,6 @@ adb shell am start -a android.intent.action.VIEW \
   -d "https://yourdomain.com/test"
 ```
 
-
-## Migrate from Another Platform
-
-Switching from an existing deep linking provider? LinkForty supports zero-downtime migration via custom domain DNS cutover.
-
-- [Migrate from Branch.io](https://docs.linkforty.com/migrations/branch)
-- [Migrate from AppsFlyer OneLink](https://docs.linkforty.com/migrations/appsflyer)
-- [Migrate from Firebase Dynamic Links](https://docs.linkforty.com/comparisons/firebase-dynamic-links-migration) (shut down August 2025)
-- [Migrate from Adjust](https://docs.linkforty.com/migrations/adjust)
-- [Migrate from Kochava](https://docs.linkforty.com/migrations/kochava)
-- [Migration overview and checklist](https://docs.linkforty.com/migrations/overview)
 
 ## For AI Tools (llms.txt)
 
