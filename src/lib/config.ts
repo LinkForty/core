@@ -20,6 +20,7 @@ import { resolve } from 'path';
 import { z } from 'zod';
 import type { NotFoundSettings } from './not-found-page.js';
 import type { LaunchpadSettings } from './launchpad.js';
+import { RELAY_ASNS } from './scanner-detection.js';
 
 /** File looked for in the working directory when LINKFORTY_CONFIG is unset. */
 export const DEFAULT_CONFIG_FILE = 'linkforty.config.json';
@@ -33,6 +34,16 @@ export interface LinkFortyConfig {
    * organization-only: it names a host-rendered template.
    */
   launchpad?: Omit<LaunchpadSettings, 'templateId'>;
+  /** Click classification (lib/bot-detection.ts). */
+  botDetection?: {
+    /**
+     * Networks (ASNs) whose desktop-browser clicks count as email security
+     * scanners. Replaces the built-in list (DEFAULT_SCANNER_ASNS in
+     * lib/scanner-detection.ts); an empty list turns the rule off. The rule
+     * also needs an ASN database (`asnDatabasePath` / ASN_DB_PATH).
+     */
+    emailScannerAsns?: number[];
+  };
 }
 
 export class ConfigError extends Error {
@@ -92,10 +103,22 @@ const launchpadSchema = z
   })
   .strict();
 
+const botDetectionSchema = z
+  .object({
+    emailScannerAsns: z
+      .array(z.number().int().positive())
+      .refine((asns) => !asns.some((asn) => RELAY_ASNS.includes(asn)), {
+        message: `must not include ${RELAY_ASNS.join(', ')}: iCloud Private Relay exits through these networks, so real visitors would be flagged`,
+      })
+      .optional(),
+  })
+  .strict();
+
 const configSchema = z
   .object({
     notFound: notFoundSchema.optional(),
     launchpad: launchpadSchema.optional(),
+    botDetection: botDetectionSchema.optional(),
   })
   .strict();
 

@@ -1,4 +1,5 @@
 import { isbot } from 'isbot';
+import { isEmailScanner } from './scanner-detection.js';
 
 /**
  * Bot classification for click ingestion.
@@ -19,8 +20,12 @@ import { isbot } from 'isbot';
  *              Skipped for SDK requests: an SDK's user agent is the app's HTTP
  *              library (`okhttp/…` on Android), which `isbot` lists as a client
  *              library, and it says nothing about who opened the link.
+ *   4. email_scanner — a desktop browser user agent from a cloud provider's
+ *              network: a mail security service opening every link in a
+ *              delivered message (lib/scanner-detection.ts). Only active when
+ *              the instance supplies an ASN database. Skipped for SDK requests.
  */
-export type BotReason = 'edge' | 'method' | 'ua';
+export type BotReason = 'edge' | 'method' | 'ua' | 'email_scanner';
 
 export interface BotClassification {
   isBot: boolean;
@@ -33,11 +38,13 @@ export function classifyBot(
   userAgent: string | undefined,
   method: string | undefined,
   edgeIsBot?: boolean,
-  sdkRequest?: boolean
+  sdkRequest?: boolean,
+  ip?: string
 ): BotClassification {
   if (edgeIsBot === true) return { isBot: true, reason: 'edge' };
   if (method && NON_HUMAN_METHODS.has(method.toUpperCase())) return { isBot: true, reason: 'method' };
   if (!sdkRequest && isbot(userAgent ?? '')) return { isBot: true, reason: 'ua' };
+  if (!sdkRequest && isEmailScanner(userAgent, ip)) return { isBot: true, reason: 'email_scanner' };
   return { isBot: false, reason: null };
 }
 

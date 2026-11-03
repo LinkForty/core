@@ -42,6 +42,9 @@ async function start() {
       origin: process.env.CORS_ORIGIN || '*',
     },
     trustProxy: getTrustProxy(),
+    botDetection: {
+      asnDatabasePath: process.env.ASN_DB_PATH || undefined,
+    },
   });
 
   await server.listen({

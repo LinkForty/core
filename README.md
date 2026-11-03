@@ -495,6 +495,22 @@ Options passed in code (such as `redirect.notFoundDefaults`) take precedence ove
 
 When Core runs behind a reverse proxy, CDN, or load balancer, set `trustProxy` so the server uses the real client IP from `X-Forwarded-For` for redirect targeting, geo, attribution, and fingerprinting. Pass it when creating the server (e.g. `trustProxy: true` or a number of proxy hops) or set the `TRUST_PROXY` environment variable (e.g. `TRUST_PROXY=1`). Client-provided `ipAddress` in the SDK install request body is **not** used as the trusted IP; it is optional debug metadata only and must not be relied on for attribution.
 
+### Email security scanner detection
+
+Mail security services (Microsoft Defender Safe Links, Mimecast, Proofpoint and others) open every link in a delivered email to check where it leads. They send a normal desktop browser user agent, so without help those visits count as human clicks, and on links sent by email they can outnumber the people.
+
+Core can recognize them by the network they come from. Give it a MaxMind [GeoLite2-ASN](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data) database (free with a MaxMind account; the license doesn't allow shipping it with Core, and MaxMind updates it weekly):
+
+```bash
+ASN_DB_PATH=/data/GeoLite2-ASN.mmdb
+```
+
+or pass `botDetection: { asnDatabasePath }` to `createServer()`. A click is then recorded with `is_bot = true` and `bot_reason = 'email_scanner'` when it comes from a desktop browser on Microsoft, Amazon or Google's networks (ASNs 8075, 16509, 14618, 15169, 396982). Mobile browsers, app HTTP clients and SDK requests from those networks are not flagged. Without the database the rule is off; a file that can't be opened is logged and the server starts without it.
+
+To change the networks, set `botDetection.emailScannerAsns` in `linkforty.config.json`. It replaces the built-in list, and an empty list turns the rule off. Networks iCloud Private Relay exits through (Apple, Cloudflare, Akamai, Fastly) are rejected, since real Safari users would be flagged.
+
+A host that registers the routes itself instead of calling `createServer()` turns the rule on with `loadScannerDetection(path, { asns })`.
+
 ### Environment Variables
 
 ```bash
@@ -505,6 +521,8 @@ NODE_ENV=production
 CORS_ORIGIN=*
 # When behind a reverse proxy: TRUST_PROXY=1 (or number of hops) so client IP is read from X-Forwarded-For
 # TRUST_PROXY=1
+# Email security scanner detection (optional): path to a MaxMind GeoLite2-ASN database
+# ASN_DB_PATH=/data/GeoLite2-ASN.mmdb
 
 # Mobile SDK (optional — for iOS Universal Links and Android App Links)
 IOS_TEAM_ID=ABC123XYZ
@@ -596,6 +614,8 @@ The redirect, SDK resolve and preview routes all use it. A resolver that throws 
 | utm_medium   | VARCHAR(255) | UTM medium                   |
 | utm_campaign | VARCHAR(255) | UTM campaign                 |
 | referrer     | TEXT         | Referrer URL                 |
+| is_bot       | BOOLEAN      | Automated traffic, excluded from human analytics |
+| bot_reason   | VARCHAR(16)  | Why: `edge`, `method`, `ua` or `email_scanner` |
 
 ### Device Fingerprints Table
 

@@ -12,6 +12,7 @@ import { qrRoutes } from './routes/qr.js';
 import { wellKnownRoutes } from './routes/well-known.js';
 import { healthRoutes } from './routes/health.js';
 import type { LinkFortyConfig } from './lib/config.js';
+import { loadScannerDetection } from './lib/scanner-detection.js';
 
 /**
  * Configuration options for creating a LinkForty server instance.
@@ -31,6 +32,15 @@ export interface ServerOptions {
   redirect?: RedirectRouteOptions;
   /** Options for the SDK routes: install match scoping. */
   sdk?: SdkRouteOptions;
+  /** Click classification options. */
+  botDetection?: {
+    /**
+     * Path to a MaxMind GeoLite2-ASN (or GeoIP2-ISP) `.mmdb` file. Turns on the
+     * email security scanner rule (lib/scanner-detection.ts); without it the
+     * rule is off. A file that can't be opened is logged and the rule stays off.
+     */
+    asnDatabasePath?: string;
+  };
   /**
    * The instance's settings from linkforty.config.json, as loadConfig() returns
    * them. Options passed in code take precedence over the file.
@@ -68,6 +78,13 @@ export async function createServer(options: ServerOptions = {}) {
   // Database
   await initializeDatabase(options.database);
 
+  // Email security scanner detection (optional: needs an ASN database)
+  const scannerDetection = loadScannerDetection(options.botDetection?.asnDatabasePath, {
+    asns: options.config?.botDetection?.emailScannerAsns,
+    log: (message) => fastify.log.warn(message),
+  });
+  if (scannerDetection) fastify.log.info('Email scanner detection is on');
+
   // Routes
   await fastify.register(healthRoutes);
   await fastify.register(wellKnownRoutes);
@@ -102,6 +119,7 @@ export * from './lib/launchpad.js';
 export * from './lib/not-found-page.js';
 export * from './lib/config.js';
 export * from './lib/event-emitter.js';
+export * from './lib/scanner-detection.js';
 export * from './types/index.js';
 export type { RedirectRouteOptions } from './routes/redirect.js';
 export type { SdkRouteOptions } from './routes/sdk.js';
