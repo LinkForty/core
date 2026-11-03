@@ -155,7 +155,7 @@ describe('isAttributableIp', () => {
     expect(fingerprint.isAttributableIp('8.8.8.8')).toBe(true);
   });
 
-  it('rejects CGNAT (100.64.0.0/10) — the Marriage365 case', () => {
+  it('rejects CGNAT (100.64.0.0/10)', () => {
     expect(fingerprint.isAttributableIp('100.64.0.5')).toBe(false);
     expect(fingerprint.isAttributableIp('100.127.255.254')).toBe(false);
   });
@@ -188,7 +188,7 @@ describe('isAttributableIp', () => {
 
 describe('calculateConfidenceScore — shared-IP filter', () => {
   it('does NOT award the IP score for two devices sharing a CGNAT /24', () => {
-    // Exactly the Marriage365 leak: unrelated installs collapsing onto 100.64.0.x.
+    // Unrelated installs behind CGNAT collapse onto 100.64.0.x and must not match.
     const click = { ...baseFingerprint, ipAddress: '100.64.0.5' };
     const install = { ...baseFingerprint, ipAddress: '100.64.0.9' };
 
