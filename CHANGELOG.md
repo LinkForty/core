@@ -1,3 +1,7 @@
+## 1.44.0 (2026-11-03)
+
+* feat(bot-detection): classify email security scanner clicks (#92) ([56b07db](https://github.com/LinkForty/core/commit/56b07db)), closes [#92](https://github.com/LinkForty/core/issues/92)
+
 ## <small>1.43.1 (2026-11-01)</small>
 
 * docs(readme): route the Cloud and docs links through LinkForty short links (#91) ([ebf258d](https://github.com/LinkForty/core/commit/ebf258d)), closes [#91](https://github.com/LinkForty/core/issues/91)
