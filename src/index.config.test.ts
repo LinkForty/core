@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 // vi.mock is hoisted above these imports, so index.js still receives the mock.
-import { createServer, parseConfig } from './index.js';
+import { configureScannerDetection, createServer, isEmailScanner, isScannerDetectionEnabled, parseConfig } from './index.js';
 
 const query = vi.fn();
 vi.mock('./lib/database.js', () => ({
@@ -97,5 +97,53 @@ describe('createServer config', () => {
     server = await createServer({ logger: false });
     mockLink(link);
     expect((await visit('/abc123')).statusCode).toBe(302);
+  });
+});
+
+describe('createServer: email scanner detection is optional', () => {
+  const WINDOWS_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36';
+  const IP = '192.0.2.10';
+
+  afterEach(() => {
+    configureScannerDetection({ lookup: null });
+  });
+
+  it('starts with the rule off when nothing is configured', async () => {
+    server = await createServer({ logger: false });
+    expect(isScannerDetectionEnabled()).toBe(false);
+    expect(isEmailScanner(WINDOWS_UA, IP)).toBe(false);
+  });
+
+  it('starts with the rule off when the database file is missing', async () => {
+    server = await createServer({ logger: false, botDetection: { asnDatabasePath: '/nonexistent/asn.mmdb' } });
+    expect(isScannerDetectionEnabled()).toBe(false);
+  });
+
+  it('accepts a custom lookup, without any database file', async () => {
+    server = await createServer({ logger: false, botDetection: { asnLookup: () => 8075 } });
+    expect(isEmailScanner(WINDOWS_UA, IP)).toBe(true);
+  });
+
+  it('applies the configured network list to a custom lookup', async () => {
+    server = await createServer({
+      logger: false,
+      botDetection: { asnLookup: () => 8075 },
+      config: parseConfig({ botDetection: { emailScannerAsns: [64500] } }),
+    });
+    expect(isEmailScanner(WINDOWS_UA, IP)).toBe(false);
+  });
+
+  it('prefers a custom lookup over a database path', async () => {
+    server = await createServer({
+      logger: false,
+      botDetection: { asnLookup: () => 8075, asnDatabasePath: '/nonexistent/asn.mmdb' },
+    });
+    expect(isEmailScanner(WINDOWS_UA, IP)).toBe(true);
+  });
+
+  it('leaves a lookup the host already set in place', async () => {
+    configureScannerDetection({ lookup: () => 8075 });
+    server = await createServer({ logger: false });
+    expect(isEmailScanner(WINDOWS_UA, IP)).toBe(true);
   });
 });

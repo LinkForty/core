@@ -111,19 +111,30 @@ When Core runs behind a reverse proxy, CDN, or load balancer, set `trustProxy` s
 
 Mail security services (Microsoft Defender Safe Links, Mimecast, Proofpoint and others) open every link in a delivered email to check where it leads. They send a normal desktop browser user agent, so without help those visits count as human clicks, and on links sent by email they can outnumber the people.
 
-Core can recognize them by the network they come from. Give it an ASN database in MMDB format. [DB-IP's IP to ASN Lite](https://db-ip.com/db/download/ip-to-asn-lite) works, needs no account, and is updated monthly (`https://download.db-ip.com/free/dbip-asn-lite-YYYY-MM.mmdb.gz`; unzip it first):
+**This is optional and off by default.** Core needs no account, key, download or third-party service to run. Without an ASN source, clicks are classified by the other bot rules and these visits count as human clicks.
+
+To turn it on, give Core a source of IP-to-ASN data, which is how it recognizes the networks scanners run from. Any of these works:
+
+- **An MMDB file**, set with `ASN_DB_PATH` or `botDetection.asnDatabasePath`. [DB-IP's IP to ASN Lite](https://db-ip.com/db/download/ip-to-asn-lite) is one option. It needs no account and is updated monthly (`https://download.db-ip.com/free/dbip-asn-lite-YYYY-MM.mmdb.gz`; unzip it first).
+- **Your own lookup**, a function from IP to ASN passed as `botDetection.asnLookup`. Use this for an API, an in-house table or another format.
 
 ```bash
 ASN_DB_PATH=/data/asn.mmdb
 ```
 
-or pass `botDetection: { asnDatabasePath }` to `createServer()`. A click is then recorded with `is_bot = true` and `bot_reason = 'email_scanner'` when it comes from a desktop browser on Microsoft, Amazon or Google's networks (ASNs 8075, 8070, 16509, 14618, 15169, 396982). Mobile browsers, app HTTP clients and SDK requests from those networks are not flagged. Without the database the rule is off; a file that can't be opened is logged and the server starts without it.
+```typescript
+const server = await createServer({
+  botDetection: { asnLookup: (ip) => myAsnTable.get(ip) ?? null },
+});
+```
+
+A click is then recorded with `is_bot = true` and `bot_reason = 'email_scanner'` when it comes from a desktop browser on Microsoft, Amazon or Google's networks (ASNs 8075, 8070, 16509, 14618, 15169, 396982). Mobile browsers, app HTTP clients and SDK requests from those networks are not flagged. Without the database the rule is off; a file that can't be opened is logged and the server starts without it.
 
 To change the networks, set `botDetection.emailScannerAsns` in `linkforty.config.json`. It replaces the built-in list, and an empty list turns the rule off. Networks iCloud Private Relay exits through (Apple, Cloudflare, Akamai, Fastly) are rejected, since real Safari users would be flagged.
 
-A host that registers the routes itself instead of calling `createServer()` turns the rule on with `loadScannerDetection(path, { asns })`.
+A host that registers the routes itself instead of calling `createServer()` turns the rule on with `loadScannerDetection(path, { asns })` or `configureScannerDetection({ lookup, asns })`.
 
-The database's license applies to you, not to Core. DB-IP's Lite data is CC BY 4.0: it allows commercial use, and asks for a link to DB-IP on pages that display or use its results. MaxMind's GeoLite2-ASN and GeoIP2-ISP files also work, but check their terms first, since MaxMind sells a separate commercial license for GeoLite.
+A database's license applies to you, not to Core. DB-IP's Lite data is CC BY 4.0: it allows commercial use, and asks for a link to DB-IP on pages that display or use its results. MaxMind's GeoLite2-ASN and GeoIP2-ISP files also work, but check their terms first, since MaxMind sells a separate commercial license for GeoLite.
 
 Core reads the file once at startup, so restart after replacing it. A host that refreshes it while running can call `openAsnDatabase(path)` and pass the result to `configureScannerDetection({ lookup })`, which keeps the current database if the new file can't be opened.
 

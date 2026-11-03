@@ -12,7 +12,7 @@ import { qrRoutes } from './routes/qr.js';
 import { wellKnownRoutes } from './routes/well-known.js';
 import { healthRoutes } from './routes/health.js';
 import type { LinkFortyConfig } from './lib/config.js';
-import { loadScannerDetection } from './lib/scanner-detection.js';
+import { configureScannerDetection, loadScannerDetection, type AsnLookup } from './lib/scanner-detection.js';
 
 /**
  * Configuration options for creating a LinkForty server instance.
@@ -32,12 +32,20 @@ export interface ServerOptions {
   redirect?: RedirectRouteOptions;
   /** Options for the SDK routes: install match scoping. */
   sdk?: SdkRouteOptions;
-  /** Click classification options. */
+  /**
+   * Click classification options. All optional: with none of them the email
+   * security scanner rule (lib/scanner-detection.ts) is off and everything else
+   * works as usual.
+   */
   botDetection?: {
     /**
-     * Path to an ASN database in MMDB format, such as DB-IP's IP to ASN Lite. Turns on the
-     * email security scanner rule (lib/scanner-detection.ts); without it the
-     * rule is off. A file that can't be opened is logged and the rule stays off.
+     * Your own IP-to-ASN source: an API client, an in-house table, any database
+     * format. Takes precedence over `asnDatabasePath`.
+     */
+    asnLookup?: AsnLookup;
+    /**
+     * Path to an ASN database in MMDB format, such as DB-IP's IP to ASN Lite. A
+     * file that can't be opened is logged and the rule stays off.
      */
     asnDatabasePath?: string;
   };
@@ -78,12 +86,19 @@ export async function createServer(options: ServerOptions = {}) {
   // Database
   await initializeDatabase(options.database);
 
-  // Email security scanner detection (optional: needs an ASN database)
-  const scannerDetection = loadScannerDetection(options.botDetection?.asnDatabasePath, {
-    asns: options.config?.botDetection?.emailScannerAsns,
-    log: (message) => fastify.log.warn(message),
-  });
-  if (scannerDetection) fastify.log.info('Email scanner detection is on');
+  // Email security scanner detection (optional). With no source configured this
+  // leaves any lookup the host already set with configureScannerDetection() alone.
+  const scannerAsns = options.config?.botDetection?.emailScannerAsns;
+  if (options.botDetection?.asnLookup) {
+    configureScannerDetection({ lookup: options.botDetection.asnLookup, asns: scannerAsns });
+    fastify.log.info('Email scanner detection is on');
+  } else if (options.botDetection?.asnDatabasePath) {
+    const on = loadScannerDetection(options.botDetection.asnDatabasePath, {
+      asns: scannerAsns,
+      log: (message) => fastify.log.warn(message),
+    });
+    if (on) fastify.log.info('Email scanner detection is on');
+  }
 
   // Routes
   await fastify.register(healthRoutes);
