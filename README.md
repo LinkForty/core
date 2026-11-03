@@ -22,7 +22,7 @@
 - **Full data ownership** — All click data, analytics, and attribution stored in your PostgreSQL database
 - **Privacy-first** — No third-party data sharing, no tracking pixels, your users' data stays with you
 - **REST API and mobile SDKs** — SDKs for React Native, Expo, iOS (Swift), and Android (Kotlin)
-- **Firebase Dynamic Links replacement** — Google shut down Firebase Dynamic Links in August 2025. LinkForty provides the same capabilities with a self-hosted, open-source stack
+- **Firebase Dynamic Links alternative** — Google shut down Firebase Dynamic Links in August 2025. LinkForty is a self-hosted, open-source alternative
 
 ### How LinkForty Compares
 
@@ -550,26 +550,8 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for det
 
 AGPL-3.0 - see [LICENSE](LICENSE) file for details.
 
-## Related Projects
-
-- **[@linkforty/mobile-sdk-react-native](https://github.com/LinkForty/mobile-sdk-react-native)** - React Native SDK
-- **[@linkforty/mobile-sdk-expo](https://github.com/LinkForty/mobile-sdk-expo)** - Expo SDK
-- **[mobile-sdk-ios](https://github.com/LinkForty/mobile-sdk-ios)** - iOS SDK (Swift)
-- **[mobile-sdk-android](https://github.com/LinkForty/mobile-sdk-android)** - Android SDK (Kotlin)
-- **[LinkForty Cloud](https://go.linkforty.com/m0ycvnog/core-cloud)** - Hosted SaaS version with authentication, teams, billing, and dashboard
-
 ## Support
 
 - **Documentation**: [docs.linkforty.com](https://go.linkforty.com/m0ycvnog/core-docs)
 - **Issues**: [GitHub Issues](https://github.com/linkforty/core/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/linkforty/core/discussions)
-
-## Built with:
-- [Fastify](https://www.fastify.io/) - Fast web framework
-- [PostgreSQL](https://www.postgresql.org/) - Powerful database
-- [Redis](https://redis.io/) - In-memory cache
-- [Zod](https://zod.dev/) - TypeScript-first schema validation
-- [nanoid](https://github.com/ai/nanoid) - Unique ID generation
-- [geoip-lite](https://github.com/geoip-lite/node-geoip) - IP geolocation
-- [ua-parser-js](https://github.com/faisalman/ua-parser-js) - User agent parsing
-- [qrcode](https://github.com/soldair/node-qrcode) - QR code generation
