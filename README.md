@@ -254,14 +254,14 @@ You can change the page or send browsers somewhere else instead, without writing
    ```json
    {
      "notFound": {
-       "redirectUrl": "https://ridealert.example",   // send browsers here (302); the rest is ignored
-       "title": "This ride link has expired",
-       "message": "Open the app to see current rides.",
+       "redirectUrl": "https://example.com",   // send browsers here (302); the rest is ignored
+       "title": "This link has expired",
+       "message": "Open the app to continue.",
        "logoUrl": "https://cdn.example/logo.png",
        "accentColor": "#0f766e",                     // the button
        "backgroundColor": "#f6f7f8",                 // light mode only
        "buttonLabel": "Get the app",                 // shown only with buttonUrl
-       "buttonUrl": "https://ridealert.example/app"
+       "buttonUrl": "https://example.com/app"
      }
    }
    ```
@@ -285,9 +285,9 @@ When the link does have a web destination, the page offers it as a "Continue on 
     "launchpad": {
       "desktop": "no-destination",     // "no-destination" (default) | "always" | "off"
       "mobile": "store",               // "store" (default) | "page"
-      "appName": "Ride Alert",
+      "appName": "Example App",
       "appIconUrl": "https://cdn.example/icon.png",
-      "appWebsiteUrl": "https://ridealert.example", // optional; the header's icon and name link here
+      "appWebsiteUrl": "https://example.com", // optional; the header's icon and name link here
       "accentColor": "#0f766e",           // buttons, the web link, focus rings
       "backgroundColor": "#101418"        // optional; fixes the page's palette (see below)
     }

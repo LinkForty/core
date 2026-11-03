@@ -96,9 +96,9 @@ describe('parseConfig', () => {
     const launchpad = {
       desktop: 'always',
       mobile: 'page',
-      appName: 'Ride Alert',
+      appName: 'Example App',
       appIconUrl: 'https://cdn.example.com/icon.png',
-      appWebsiteUrl: 'https://ridealert.example',
+      appWebsiteUrl: 'https://example.com',
       accentColor: '#0f766e',
       backgroundColor: '#101418',
     };

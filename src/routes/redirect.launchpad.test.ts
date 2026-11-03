@@ -94,7 +94,7 @@ afterEach(async () => {
 
 describe('launchpad page — when it is served', () => {
   it('replaces the plain page for a desktop visitor to a link with no web destination', async () => {
-    mockDb(linkRow({ og_title: 'Ride Alert', og_description: 'Live updates for your route' }));
+    mockDb(linkRow({ og_title: 'Example App', og_description: 'A short description of the app' }));
     const res = await get(app, DESKTOP_UA);
 
     expect(res.statusCode).toBe(200);
@@ -102,8 +102,8 @@ describe('launchpad page — when it is served', () => {
     expect(res.headers['x-robots-tag']).toBe('noindex, nofollow');
     expect(res.headers['cache-control']).toBe('no-store');
     expect(res.headers['content-security-policy']).toMatch(/^default-src 'none'; .*script-src 'nonce-[A-Za-z0-9+/=]+'/);
-    expect(res.body).toContain('<h1>Ride Alert</h1>');
-    expect(res.body).toContain('Live updates for your route');
+    expect(res.body).toContain('<h1>Example App</h1>');
+    expect(res.body).toContain('A short description of the app');
     expect(res.body).toContain('Download on the App Store');
     expect(res.body).toContain('Get it on Google Play');
     expect(res.body).toContain(
@@ -517,7 +517,7 @@ describe('launchpad page — instance defaults (linkforty.config.json)', () => {
 
   it('changes nothing when there are no defaults', async () => {
     const rows = [
-      linkRow({ og_title: 'Ride Alert' }),
+      linkRow({ og_title: 'Example App' }),
       linkRow({ org_settings: { launchpad: { appName: 'Demo App', accentColor: '#0f766e', desktop: 'always' } }, web_fallback_url: 'https://example.com/page' }),
     ];
     const withEmpty = await build({ launchpad: { defaults: {} } });
