@@ -35,7 +35,7 @@ export interface ServerOptions {
   /** Click classification options. */
   botDetection?: {
     /**
-     * Path to a MaxMind GeoLite2-ASN (or GeoIP2-ISP) `.mmdb` file. Turns on the
+     * Path to an ASN database in MMDB format, such as DB-IP's IP to ASN Lite. Turns on the
      * email security scanner rule (lib/scanner-detection.ts); without it the
      * rule is off. A file that can't be opened is logged and the rule stays off.
      */

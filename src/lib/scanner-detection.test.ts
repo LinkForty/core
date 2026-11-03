@@ -70,6 +70,11 @@ describe('isEmailScanner', () => {
     expect(isEmailScanner(undefined, CLOUD_IP)).toBe(false);
   });
 
+  it('covers both Microsoft networks seen scanning', () => {
+    configureScannerDetection({ lookup: () => 8070 });
+    expect(isEmailScanner(WINDOWS_CHROME, CLOUD_IP)).toBe(true);
+  });
+
   it('uses a configured ASN list in place of the defaults', () => {
     configureScannerDetection({ lookup, asns: [7922] });
     expect(isEmailScanner(WINDOWS_CHROME, RESIDENTIAL_IP)).toBe(true);
@@ -128,13 +133,13 @@ describe('loadScannerDetection', () => {
 
   it('stays off and logs when the file is missing', () => {
     const log = vi.fn();
-    expect(loadScannerDetection('/nonexistent/GeoLite2-ASN.mmdb', { log })).toBe(false);
+    expect(loadScannerDetection('/nonexistent/asn.mmdb', { log })).toBe(false);
     expect(isScannerDetectionEnabled()).toBe(false);
     expect(log).toHaveBeenCalledOnce();
-    expect(log.mock.calls[0][0]).toContain('/nonexistent/GeoLite2-ASN.mmdb');
+    expect(log.mock.calls[0][0]).toContain('/nonexistent/asn.mmdb');
   });
 
-  it('stays off and logs when the file is not a MaxMind database', () => {
+  it('stays off and logs when the file is not an MMDB database', () => {
     dir = mkdtempSync(join(tmpdir(), 'linkforty-asn-'));
     const path = join(dir, 'not-a-db.mmdb');
     writeFileSync(path, 'not a database');
@@ -146,7 +151,7 @@ describe('loadScannerDetection', () => {
 
   it('turns a previously configured rule off when the new file fails', () => {
     configureScannerDetection({ lookup });
-    loadScannerDetection('/nonexistent/GeoLite2-ASN.mmdb', { log: () => {} });
+    loadScannerDetection('/nonexistent/asn.mmdb', { log: () => {} });
     expect(isScannerDetectionEnabled()).toBe(false);
   });
 });
