@@ -96,7 +96,7 @@ To send every broken link to your site:
 { "notFound": { "redirectUrl": "https://example.com/" } }
 ```
 
-An organization's own `settings.notFound` (same fields) takes precedence on hosts that belong to it. See the README.
+An organization's own `settings.notFound` (same fields) takes precedence on hosts that belong to it. See [Redirects](docs/redirects.md).
 
 #### Launchpad page
 
