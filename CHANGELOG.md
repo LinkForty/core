@@ -1,3 +1,7 @@
+## <small>1.44.3 (2026-11-03)</small>
+
+* docs: move version-specific reference from the README into docs/ (#95) ([989214c](https://github.com/LinkForty/core/commit/989214c)), closes [#95](https://github.com/LinkForty/core/issues/95)
+
 ## <small>1.44.2 (2026-11-03)</small>
 
 * fix(package): exclude compiled test files from the npm package (#94) ([76892f2](https://github.com/LinkForty/core/commit/76892f2)), closes [#94](https://github.com/LinkForty/core/issues/94)
