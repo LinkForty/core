@@ -21,7 +21,7 @@
 - **No per-click pricing** — No usage-based fees, no monthly minimums, no enterprise sales calls
 - **Full data ownership** — All click data, analytics, and attribution stored in your PostgreSQL database
 - **Privacy-first** — No third-party data sharing, no tracking pixels, your users' data stays with you
-- **REST API and mobile SDKs** — SDKs for React Native, Expo, iOS (Swift), and Android (Kotlin)
+- **REST API and mobile SDKs** — SDKs for React Native, Expo, Flutter, iOS (Swift), and Android (Kotlin)
 - **Firebase Dynamic Links alternative** — Google shut down Firebase Dynamic Links in August 2025. LinkForty is a self-hosted, open-source alternative
 
 ### How LinkForty Compares
@@ -445,6 +445,7 @@ LinkForty Core supports iOS Universal Links and Android App Links for seamless d
 |----------|---------|---------|
 | React Native | [`@linkforty/mobile-sdk-react-native`](https://github.com/LinkForty/mobile-sdk-react-native) | `npm install @linkforty/mobile-sdk-react-native` |
 | Expo | [`@linkforty/mobile-sdk-expo`](https://github.com/LinkForty/mobile-sdk-expo) | `npx expo install @linkforty/mobile-sdk-expo` |
+| Flutter | [`linkforty_flutter`](https://github.com/LinkForty/mobile-sdk-flutter) | `flutter pub add linkforty_flutter` |
 | iOS (Swift) | [LinkFortySDK](https://github.com/LinkForty/mobile-sdk-ios) | Swift Package Manager |
 | Android (Kotlin) | [LinkFortySDK](https://github.com/LinkForty/mobile-sdk-android) | Gradle dependency |
 
