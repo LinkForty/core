@@ -223,9 +223,9 @@ describe('resolveClickUtms', () => {
 
   it('never returns an empty string when configuration holds a blank', () => {
     // Real production shape: a link saved with campaign set to ''.
-    const result = resolveClickUtms({}, { source: 'clevertap', medium: 'email', campaign: '' });
+    const result = resolveClickUtms({}, { source: 'example-esp', medium: 'email', campaign: '' });
     expect(result.utmCampaign).toBeUndefined();
-    expect(result.utmSource).toBe('clevertap');
+    expect(result.utmSource).toBe('example-esp');
   });
 
   it('trims values so " ig" and "ig" do not split into two library entries', () => {

@@ -91,6 +91,7 @@
   },
   "files": [
     "dist",
+    "!dist/**/*.test.*",
     "migrations",
     "README.md",
     "LICENSE",
