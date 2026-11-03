@@ -123,6 +123,7 @@ volumes:
 |----------|---------|
 | React Native | [`@linkforty/mobile-sdk-react-native`](https://www.npmjs.com/package/@linkforty/mobile-sdk-react-native) |
 | Expo | [`@linkforty/mobile-sdk-expo`](https://www.npmjs.com/package/@linkforty/mobile-sdk-expo) |
+| Flutter | [`linkforty_flutter`](https://pub.dev/packages/linkforty_flutter) |
 | iOS (Swift) | [LinkFortySDK](https://github.com/LinkForty/mobile-sdk-ios) |
 | Android (Kotlin) | [LinkFortySDK](https://github.com/LinkForty/mobile-sdk-android) |
 
