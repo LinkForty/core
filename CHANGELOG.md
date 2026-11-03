@@ -1,3 +1,7 @@
+## <small>1.44.2 (2026-11-03)</small>
+
+* fix(package): exclude compiled test files from the npm package (#94) ([76892f2](https://github.com/LinkForty/core/commit/76892f2)), closes [#94](https://github.com/LinkForty/core/issues/94)
+
 ## <small>1.44.1 (2026-11-03)</small>
 
 * docs: use neutral placeholder names in examples and tests (#93) ([5a0466d](https://github.com/LinkForty/core/commit/5a0466d)), closes [#93](https://github.com/LinkForty/core/issues/93)
