@@ -1,3 +1,7 @@
+## <small>1.44.4 (2026-11-04)</small>
+
+* fix(docker): pass TRUST_PROXY and TRUSTED_CLIENT_IP_HEADER into the container (#97) ([97fd1ea](https://github.com/LinkForty/core/commit/97fd1ea)), closes [#97](https://github.com/LinkForty/core/issues/97)
+
 ## <small>1.44.3 (2026-11-03)</small>
 
 * docs: move version-specific reference from the README into docs/ (#95) ([989214c](https://github.com/LinkForty/core/commit/989214c)), closes [#95](https://github.com/LinkForty/core/issues/95)
