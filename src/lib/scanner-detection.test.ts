@@ -88,6 +88,35 @@ describe('isEmailScanner', () => {
   });
 });
 
+describe('isEmailScanner with a failing lookup', () => {
+  const failing: AsnLookup = () => {
+    throw new Error('lookup failed');
+  };
+
+  it('treats the click as not a scanner and warns once', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      configureScannerDetection({ lookup: failing });
+      expect(isEmailScanner(WINDOWS_CHROME, CLOUD_IP)).toBe(false);
+      expect(isEmailScanner(WINDOWS_CHROME, CLOUD_IP)).toBe(false);
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0][0]).toContain('lookup failed');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('does not make classifyBot throw', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      configureScannerDetection({ lookup: failing });
+      expect(classifyBot(WINDOWS_CHROME, 'GET', undefined, false, CLOUD_IP)).toEqual({ isBot: false, reason: null });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
 describe('classifyBot with scanner detection', () => {
   it('classifies a scanner as email_scanner', () => {
     configureScannerDetection({ lookup });

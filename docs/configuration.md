@@ -116,7 +116,7 @@ Mail security services (Microsoft Defender Safe Links, Mimecast, Proofpoint and 
 To turn it on, give Core a source of IP-to-ASN data, which is how it recognizes the networks scanners run from. Any of these works:
 
 - **An MMDB file**, set with `ASN_DB_PATH` or `botDetection.asnDatabasePath`. [DB-IP's IP to ASN Lite](https://db-ip.com/db/download/ip-to-asn-lite) is one option. It needs no account and is updated monthly (`https://download.db-ip.com/free/dbip-asn-lite-YYYY-MM.mmdb.gz`; unzip it first).
-- **Your own lookup**, a function from IP to ASN passed as `botDetection.asnLookup`. Use this for an API, an in-house table or another format.
+- **Your own lookup**, a function from IP to ASN passed as `botDetection.asnLookup`. Use this for an in-house table or another format. The function is synchronous, so to use an API, keep its results in memory and look them up there.
 
 ```bash
 ASN_DB_PATH=/data/asn.mmdb

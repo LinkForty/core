@@ -39,8 +39,9 @@ export interface ServerOptions {
    */
   botDetection?: {
     /**
-     * Your own IP-to-ASN source: an API client, an in-house table, any database
-     * format. Takes precedence over `asnDatabasePath`.
+     * Your own IP-to-ASN source: an in-house table, any database format, or API
+     * results kept in memory (it is synchronous). Takes precedence over
+     * `asnDatabasePath`. If it throws, the click counts as not a scanner.
      */
     asnLookup?: AsnLookup;
     /**
