@@ -1,3 +1,8 @@
+## <small>1.45.1 (2026-11-04)</small>
+
+* docs(bot-detection): mark email scanner detection as experimental (#99) ([82af133](https://github.com/LinkForty/core/commit/82af133)), closes [#99](https://github.com/LinkForty/core/issues/99)
+* ci(cla): update the CLA Assistant action to v2.6.1 under its current name (#98) ([e246556](https://github.com/LinkForty/core/commit/e246556)), closes [#98](https://github.com/LinkForty/core/issues/98)
+
 ## 1.45.0 (2026-11-04)
 
 * feat(bot-detection): make the scanner rule's ASN source pluggable, and add AS8070 (#96) ([1be9dc0](https://github.com/LinkForty/core/commit/1be9dc0)), closes [#96](https://github.com/LinkForty/core/issues/96)
