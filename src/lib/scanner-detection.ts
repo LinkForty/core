@@ -13,9 +13,9 @@
  * of the cloud networks below *and* the user agent is a desktop browser. Mobile
  * browsers and app HTTP clients from those networks are left alone.
  *
- * The ASN comes from a MaxMind GeoLite2-ASN (or GeoIP2-ISP) database, which an
- * instance has to supply: the license doesn't allow redistributing it. Without
- * one the rule is simply off and classification works as before.
+ * The ASN comes from an MMDB-format ASN database that the instance supplies,
+ * such as DB-IP's IP to ASN Lite (CC BY 4.0, attribution required). Without one
+ * the rule is simply off and classification works as before.
  */
 import { readFileSync } from 'fs';
 import { Reader, type AsnResponse } from 'maxmind';
@@ -26,6 +26,7 @@ import { Reader, type AsnResponse } from 'maxmind';
  */
 export const DEFAULT_SCANNER_ASNS: readonly number[] = [
   8075, // Microsoft (Azure; Defender for Office 365 Safe Links)
+  8070, // Microsoft
   16509, // Amazon (AWS)
   14618, // Amazon (AWS us-east-1)
   15169, // Google
@@ -54,6 +55,7 @@ interface ScannerDetectionState {
 }
 
 let state: ScannerDetectionState | null = null;
+let lookupFailureLogged = false;
 
 /**
  * Turn the email scanner rule on (or off, with `lookup: null`).
@@ -63,6 +65,7 @@ let state: ScannerDetectionState | null = null;
 export function configureScannerDetection(options: { lookup: AsnLookup | null; asns?: readonly number[] }): void {
   const asns = new Set(options.asns ?? DEFAULT_SCANNER_ASNS);
   state = options.lookup && asns.size > 0 ? { lookup: options.lookup, asns } : null;
+  lookupFailureLogged = false;
 }
 
 /** Whether the email scanner rule is active. */
@@ -71,10 +74,11 @@ export function isScannerDetectionEnabled(): boolean {
 }
 
 /**
- * Open a MaxMind ASN database (`.mmdb`) and return a lookup over it. Reads the
+ * Open an ASN database (`.mmdb` with `autonomous_system_number` records, as
+ * DB-IP and MaxMind publish) and return a lookup over it. Reads the
  * file once; lookups are in memory.
  *
- * @throws when the file can't be read or isn't a MaxMind database.
+ * @throws when the file can't be read or isn't an MMDB database.
  */
 export function openAsnDatabase(path: string): AsnLookup {
   const reader = new Reader<AsnResponse>(readFileSync(path));
@@ -124,6 +128,17 @@ const DESKTOP_BROWSER_UA = /^Mozilla\/5\.0 \((?:Windows NT|Macintosh|X11|CrOS)/;
 export function isEmailScanner(userAgent: string | undefined, ip: string | undefined): boolean {
   if (!state || !ip || !userAgent) return false;
   if (!DESKTOP_BROWSER_UA.test(userAgent)) return false;
-  const asn = state.lookup(ip);
-  return asn !== null && state.asns.has(asn);
+  try {
+    const asn = state.lookup(ip);
+    return asn !== null && state.asns.has(asn);
+  } catch (error) {
+    // A failing lookup must never cost the click its record: the caller writes
+    // the row after classifying, so count it as not a scanner and carry on.
+    if (!lookupFailureLogged) {
+      lookupFailureLogged = true;
+      const reason = error instanceof Error ? error.message : String(error);
+      console.warn(`Email scanner detection: the ASN lookup failed; treating these clicks as not scanners (${reason})`);
+    }
+    return false;
+  }
 }
