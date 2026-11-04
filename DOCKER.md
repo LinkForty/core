@@ -56,7 +56,7 @@ docker run -d \
 | `PORT`         | No       | `3000`       | Server port                           |
 | `NODE_ENV`     | No       | `production` | Environment mode                      |
 | `JWT_SECRET`   | No       | -            | JWT signing secret                    |
-| `ASN_DB_PATH`  | No       | -            | ASN database (`.mmdb`) path, such as DB-IP's IP to ASN Lite; turns on email scanner detection (mount the file into the container) |
+| `ASN_DB_PATH`  | No       | -            | ASN database (`.mmdb`) path, such as DB-IP's IP to ASN Lite; turns on experimental email scanner detection (mount the file into the container) |
 
 See [.env.example](.env.example) for complete configuration options.
 

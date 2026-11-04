@@ -113,6 +113,13 @@ Mail security services (Microsoft Defender Safe Links, Mimecast, Proofpoint and 
 
 **This is optional and off by default.** Core needs no account, key, download or third-party service to run. Without an ASN source, clicks are classified by the other bot rules and these visits count as human clicks.
 
+**This rule is experimental.** It decides from a click's network and user agent alone, and its accuracy hasn't been measured against known scanner traffic, so the network list and behavior may change. It can make mistakes in both directions:
+
+- **Real people can be flagged:** for example, anyone using a desktop browser through a cloud desktop, or through a VPN or proxy hosted on these networks. Their clicks would be missing from your analytics.
+- **Scanners can be missed:** a scanner on another network, or one sending a mobile user agent, still counts as a human click.
+
+Before relying on the numbers, compare a sample of flagged clicks with your own data, such as sign-ups or purchases.
+
 To turn it on, give Core a source of IP-to-ASN data, which is how it recognizes the networks scanners run from. Any of these works:
 
 - **An MMDB file**, set with `ASN_DB_PATH` or `botDetection.asnDatabasePath`. [DB-IP's IP to ASN Lite](https://db-ip.com/db/download/ip-to-asn-lite) is one option. It needs no account and is updated monthly (`https://download.db-ip.com/free/dbip-asn-lite-YYYY-MM.mmdb.gz`; unzip it first).
@@ -129,6 +136,19 @@ const server = await createServer({
 ```
 
 A click is then recorded with `is_bot = true` and `bot_reason = 'email_scanner'` when it comes from a desktop browser on Microsoft, Amazon or Google's networks (ASNs 8075, 8070, 16509, 14618, 15169, 396982). Mobile browsers, app HTTP clients and SDK requests from those networks are not flagged. Without the database the rule is off; a file that can't be opened is logged and the server starts without it.
+
+When a click is flagged:
+
+- The visitor is redirected exactly as before.
+- The row stays in `click_events`, but analytics no longer counts it.
+- Click events and webhooks are still sent.
+- Its non-reserved query parameters aren't stored, so they can't be passed to a deferred install and can't be recovered later.
+
+To turn the rule off, remove the ASN source or set `botDetection.emailScannerAsns` to an empty list, then restart. To count clicks it already flagged again, run this, which can take a while on a large table:
+
+```sql
+UPDATE click_events SET is_bot = false, bot_reason = NULL WHERE bot_reason = 'email_scanner';
+```
 
 To change the networks, set `botDetection.emailScannerAsns` in `linkforty.config.json`. It replaces the built-in list, and an empty list turns the rule off. Networks iCloud Private Relay exits through (Apple, Cloudflare, Akamai, Fastly) are rejected, since real Safari users would be flagged.
 
