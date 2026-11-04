@@ -57,6 +57,11 @@ services:
       PORT: ${PORT:-3000}
       HOST: ${HOST:-0.0.0.0}
 
+      # Behind a reverse proxy or CDN: read the visitor's IP instead of the
+      # proxy's, or installs are never attributed to clicks. Set one of these
+      # in .env; see .env.example. Leave both unset when clients reach Core directly.
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      TRUSTED_CLIENT_IP_HEADER: ${TRUSTED_CLIENT_IP_HEADER:-}
 
       # Optional: JWT secret for authentication
       # JWT_SECRET: ${JWT_SECRET}
