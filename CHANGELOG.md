@@ -1,3 +1,7 @@
+## 1.45.0 (2026-11-04)
+
+* feat(bot-detection): make the scanner rule's ASN source pluggable, and add AS8070 (#96) ([1be9dc0](https://github.com/LinkForty/core/commit/1be9dc0)), closes [#96](https://github.com/LinkForty/core/issues/96)
+
 ## <small>1.44.4 (2026-11-04)</small>
 
 * fix(docker): pass TRUST_PROXY and TRUSTED_CLIENT_IP_HEADER into the container (#97) ([97fd1ea](https://github.com/LinkForty/core/commit/97fd1ea)), closes [#97](https://github.com/LinkForty/core/issues/97)
