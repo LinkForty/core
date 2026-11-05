@@ -56,6 +56,7 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-3000}
       HOST: ${HOST:-0.0.0.0}
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
 
       # Behind a reverse proxy or CDN: read the visitor's IP instead of the
       # proxy's, or installs are never attributed to clicks. Set one of these
@@ -69,6 +70,16 @@ services:
       # Optional: trust the x-lf-bot header. Only behind a proxy that sets it
       # and strips copies sent by clients.
       TRUST_EDGE_BOT_HEADER: ${TRUST_EDGE_BOT_HEADER:-}
+
+      # Optional: path inside the container to an IP-to-ASN database, for email
+      # security scanner detection. Mount the file as well.
+      ASN_DB_PATH: ${ASN_DB_PATH:-}
+
+      # Optional: iOS Universal Links and Android App Links
+      IOS_TEAM_ID: ${IOS_TEAM_ID:-}
+      IOS_BUNDLE_ID: ${IOS_BUNDLE_ID:-}
+      ANDROID_PACKAGE_NAME: ${ANDROID_PACKAGE_NAME:-}
+      ANDROID_SHA256_FINGERPRINTS: ${ANDROID_SHA256_FINGERPRINTS:-}
 
     ports:
       - "${LINKFORTY_PORT:-3000}:3000"
