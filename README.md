@@ -146,93 +146,16 @@ Core runs anywhere you can run a container with PostgreSQL 13+ (Redis is optiona
 
 ## Mobile SDK Integration
 
-LinkForty Core supports iOS Universal Links and Android App Links for seamless deep linking in mobile applications.
+Core serves the verification files for iOS Universal Links and Android App Links. Set these environment variables and it generates them at `/.well-known/apple-app-site-association` and `/.well-known/assetlinks.json`:
 
-### iOS Universal Links Setup
+```bash
+IOS_TEAM_ID=ABC123XYZ
+IOS_BUNDLE_ID=com.yourcompany.yourapp
+ANDROID_PACKAGE_NAME=com.yourcompany.yourapp
+ANDROID_SHA256_FINGERPRINTS=AA:BB:CC:DD:...   # comma-separated for more than one
+```
 
-1. **Set environment variables:**
-   ```bash
-   IOS_TEAM_ID=ABC123XYZ  # Your Apple Developer Team ID
-   IOS_BUNDLE_ID=com.yourcompany.yourapp
-   ```
-
-2. **Configure in Xcode:**
-   - Add "Associated Domains" capability
-   - Add domain: `applinks:yourdomain.com`
-
-3. **Verify AASA file:**
-   ```bash
-   curl https://yourdomain.com/.well-known/apple-app-site-association
-   ```
-
-   Expected response:
-   ```json
-   {
-     "applinks": {
-       "apps": [],
-       "details": [
-         {
-           "appID": "ABC123XYZ.com.yourcompany.yourapp",
-           "paths": ["*"]
-         }
-       ]
-     }
-   }
-   ```
-
-### Android App Links Setup
-
-1. **Get your SHA-256 fingerprint:**
-   ```bash
-   # Debug keystore
-   keytool -list -v -keystore ~/.android/debug.keystore \
-     -alias androiddebugkey -storepass android -keypass android
-
-   # Release keystore
-   keytool -list -v -keystore /path/to/release.keystore \
-     -alias your-alias
-   ```
-
-2. **Set environment variables:**
-   ```bash
-   ANDROID_PACKAGE_NAME=com.yourcompany.yourapp
-   ANDROID_SHA256_FINGERPRINTS=AA:BB:CC:DD:...
-
-   # Multiple fingerprints (debug + release)
-   ANDROID_SHA256_FINGERPRINTS=AA:BB:CC:...,DD:EE:FF:...
-   ```
-
-3. **Configure in AndroidManifest.xml:**
-   ```xml
-   <intent-filter android:autoVerify="true">
-     <action android:name="android.intent.action.VIEW" />
-     <category android:name="android.intent.category.DEFAULT" />
-     <category android:name="android.intent.category.BROWSABLE" />
-     <data android:scheme="https" />
-     <data android:host="yourdomain.com" />
-   </intent-filter>
-   ```
-
-4. **Verify assetlinks.json:**
-   ```bash
-   curl https://yourdomain.com/.well-known/assetlinks.json
-   ```
-
-   Expected response:
-   ```json
-   [
-     {
-       "relation": ["delegate_permission/common.handle_all_urls"],
-       "target": {
-         "namespace": "android_app",
-         "package_name": "com.yourcompany.yourapp",
-         "sha256_cert_fingerprints": ["AA:BB:CC:..."]
-       }
-     }
-   ]
-   ```
-
-### Available Mobile SDKs
+See [iOS Universal Links](https://docs.linkforty.com/guides/attribution/sdk-integration#ios-universal-links) and [Android App Links](https://docs.linkforty.com/guides/attribution/sdk-integration#android-app-links) for the app-side setup.
 
 | Platform | Package | Install |
 |----------|---------|---------|
@@ -243,20 +166,6 @@ LinkForty Core supports iOS Universal Links and Android App Links for seamless d
 | Android (Kotlin) | [LinkFortySDK](https://github.com/LinkForty/mobile-sdk-android) | Gradle dependency |
 
 See the [SDK documentation](https://docs.linkforty.com/sdks/react-native) for integration guides.
-
-### Testing Domain Verification
-
-Test iOS Universal Links with Apple's validator:
-```bash
-https://search.developer.apple.com/appsearch-validation-tool/
-```
-
-Test Android App Links with Google's validator:
-```bash
-adb shell am start -a android.intent.action.VIEW \
-  -d "https://yourdomain.com/test"
-```
-
 
 ## For AI Tools (llms.txt)
 
