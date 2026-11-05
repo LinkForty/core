@@ -135,7 +135,7 @@ HOST=0.0.0.0
 NODE_ENV=production
 CORS_ORIGIN=*
 
-# Short link domain (used in QR codes and SDK responses)
+# Short link domain (used in QR codes)
 SHORTLINK_DOMAIN=https://go.yourdomain.com
 
 # iOS Universal Links (optional)

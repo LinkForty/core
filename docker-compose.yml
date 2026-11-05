@@ -63,15 +63,12 @@ services:
       TRUST_PROXY: ${TRUST_PROXY:-}
       TRUSTED_CLIENT_IP_HEADER: ${TRUSTED_CLIENT_IP_HEADER:-}
 
-      # Optional: JWT secret for authentication
-      # JWT_SECRET: ${JWT_SECRET}
+      # Optional: base URL encoded in QR codes, including the scheme.
+      SHORTLINK_DOMAIN: ${SHORTLINK_DOMAIN:-}
 
-      # Optional: Email configuration
-      # SMTP_HOST: ${SMTP_HOST}
-      # SMTP_PORT: ${SMTP_PORT}
-      # SMTP_USER: ${SMTP_USER}
-      # SMTP_PASS: ${SMTP_PASS}
-      # EMAIL_FROM: ${EMAIL_FROM}
+      # Optional: trust the x-lf-bot header. Only behind a proxy that sets it
+      # and strips copies sent by clients.
+      TRUST_EDGE_BOT_HEADER: ${TRUST_EDGE_BOT_HEADER:-}
 
     ports:
       - "${LINKFORTY_PORT:-3000}:3000"

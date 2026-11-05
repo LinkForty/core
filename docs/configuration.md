@@ -177,6 +177,10 @@ IOS_BUNDLE_ID=com.yourcompany.yourapp
 ANDROID_PACKAGE_NAME=com.yourcompany.yourapp
 ANDROID_SHA256_FINGERPRINTS=AA:BB:CC:DD:...
 
-# Custom domain for QR code URLs (optional)
-SHORTLINK_DOMAIN=yourdomain.com
+# Base URL encoded in QR codes, including the scheme (optional; defaults to the request's host)
+SHORTLINK_DOMAIN=https://go.yourdomain.com
+
+# Trust the x-lf-bot header (1 or true) to mark a click as a bot (optional).
+# Only behind a proxy that sets this header and strips copies sent by clients.
+# TRUST_EDGE_BOT_HEADER=true
 ```

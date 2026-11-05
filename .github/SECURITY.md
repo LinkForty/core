@@ -87,7 +87,6 @@ The following environment variables should be kept secure:
 
 - `DATABASE_URL` - Contains database credentials
 - `REDIS_URL` - Contains Redis credentials (if used)
-- `JWT_SECRET` - Used for token signing
 - Any custom API keys or secrets
 
 ### Production Deployment
