@@ -1,3 +1,7 @@
+## <small>1.45.2 (2026-11-05)</small>
+
+* docs: move the API reference to docs/api.md and correct environment variables (#100) ([1c4b418](https://github.com/LinkForty/core/commit/1c4b418)), closes [#100](https://github.com/LinkForty/core/issues/100)
+
 ## <small>1.45.1 (2026-11-04)</small>
 
 * docs(bot-detection): mark email scanner detection as experimental (#99) ([82af133](https://github.com/LinkForty/core/commit/82af133)), closes [#99](https://github.com/LinkForty/core/issues/99)
