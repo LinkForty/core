@@ -26,10 +26,24 @@ jobs:
       id-token: write # For NPM provenance
 
     steps:
+      # semantic-release pushes the release commit and tag straight to main.
+      # main's ruleset only lets repository admins and the LinkForty bot app
+      # bypass the pull-request requirement, and GitHub does not allow the
+      # workflow's own GITHUB_TOKEN as a bypass actor, so the push has to be
+      # made with the app's token. The "[skip ci]" in the release commit
+      # message keeps that push from starting another CI or release run.
+      - name: Mint bot token
+        id: bot
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.LINKFORTY_BOT_APP_ID }}
+          private-key: ${{ secrets.LINKFORTY_BOT_PRIVATE_KEY }}
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Fetch all history for semantic-release
+          token: ${{ steps.bot.outputs.token }}
           persist-credentials: false
 
       - name: Setup Node.js
@@ -49,7 +63,7 @@ jobs:
 
       - name: Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.bot.outputs.token }}
         run: npx semantic-release
 
   # Notify on failure

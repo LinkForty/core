@@ -21,11 +21,22 @@ jobs:
       (github.event_name == 'pull_request_target') ||
       (github.event_name == 'issue_comment' && github.event.comment.body == 'recheck')
     steps:
+      # The signature commit lands on main directly. main's ruleset only lets
+      # repository admins and the LinkForty bot app bypass the pull-request
+      # requirement, and GitHub does not allow the workflow's own GITHUB_TOKEN
+      # as a bypass actor, so the commit has to be made with the app's token.
+      - name: Mint bot token
+        id: bot
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.LINKFORTY_BOT_APP_ID }}
+          private-key: ${{ secrets.LINKFORTY_BOT_PRIVATE_KEY }}
+
       - name: CLA Assistant
         uses: contributor-assistant/github-action@v2.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PERSONAL_ACCESS_TOKEN: ${{ secrets.CLA_ASSISTANT_PAT }}
+          PERSONAL_ACCESS_TOKEN: ${{ steps.bot.outputs.token }}
         with:
           path-to-document: 'https://github.com/linkforty/core/blob/main/CLA.md'
           # The action defaults this to 'master', which does not exist in this
