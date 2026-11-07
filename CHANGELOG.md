@@ -1,3 +1,7 @@
+## <small>1.45.4 (2026-11-07)</small>
+
+* docs: shorten the README's mobile setup and link to the guides (#102) ([c0cf8e9](https://github.com/LinkForty/core/commit/c0cf8e9)), closes [#102](https://github.com/LinkForty/core/issues/102)
+
 ## <small>1.45.3 (2026-11-07)</small>
 
 * fix: pass app link, CORS and ASN settings through docker-compose.yml (#101) ([06d94bb](https://github.com/LinkForty/core/commit/06d94bb)), closes [#101](https://github.com/LinkForty/core/issues/101)
