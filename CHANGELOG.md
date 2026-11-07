@@ -1,3 +1,7 @@
+## <small>1.45.3 (2026-11-07)</small>
+
+* fix: pass app link, CORS and ASN settings through docker-compose.yml (#101) ([06d94bb](https://github.com/LinkForty/core/commit/06d94bb)), closes [#101](https://github.com/LinkForty/core/issues/101)
+
 ## <small>1.45.2 (2026-11-05)</small>
 
 * docs: move the API reference to docs/api.md and correct environment variables (#100) ([1c4b418](https://github.com/LinkForty/core/commit/1c4b418)), closes [#100](https://github.com/LinkForty/core/issues/100)
