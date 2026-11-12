@@ -205,3 +205,40 @@ describe.skipIf(!ADMIN_URL)('idle connection errors', () => {
     expect((await db.query('SELECT 1 AS ok')).rows[0].ok).toBe(1);
   }, 60_000);
 });
+
+describe.skipIf(!ADMIN_URL)('install_events click index', () => {
+  // install_events.click_id references click_events ON DELETE SET NULL, so
+  // every click deletion looks up its installs by click_id. Without an index
+  // that lookup is a full scan of install_events per deleted click.
+  const scratchName = `lf_core_install_click_idx_${Date.now()}`;
+  let admin: pg.Client;
+
+  beforeAll(async () => {
+    admin = new pg.Client({ connectionString: ADMIN_URL });
+    await admin.connect();
+    await admin.query(`CREATE DATABASE ${scratchName}`);
+  }, 30_000);
+
+  afterAll(async () => {
+    await db?.end().catch(() => undefined);
+    await admin.query(`DROP DATABASE IF EXISTS ${scratchName} WITH (FORCE)`);
+    await admin.end();
+  }, 30_000);
+
+  it('builds a valid index on install_events(click_id), and a second start keeps it', async () => {
+    const url = new URL(ADMIN_URL as string);
+    url.pathname = `/${scratchName}`;
+    await initializeDatabase({ url: url.toString(), pool: { min: 1, max: 2 } });
+    await db.end();
+    await initializeDatabase({ url: url.toString(), pool: { min: 1, max: 2 } });
+
+    const { rows } = await db.query(
+      `SELECT i.indisvalid, pg_get_indexdef(i.indexrelid) AS def
+       FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid
+       WHERE c.relname = 'idx_installs_click_id'`
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].indisvalid).toBe(true);
+    expect(rows[0].def).toMatch(/ON public\.install_events USING btree \(click_id\)/);
+  }, 60_000);
+});

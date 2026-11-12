@@ -68,6 +68,9 @@ export const FINGERPRINT_IP_INDEX_LOCK_KEY = 4977262;
 /** Advisory lock key held while building idx_in_app_events_client_event. Stable across releases. */
 export const CLIENT_EVENT_INDEX_LOCK_KEY = 4977263;
 
+/** Advisory lock key held while building idx_installs_click_id. Stable across releases. */
+export const INSTALL_CLICK_INDEX_LOCK_KEY = 4977264;
+
 // Initialize database schema
 export async function initializeDatabase(options: DatabaseOptions = {}) {
   // Initialize pool
@@ -844,6 +847,12 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
     CLIENT_EVENT_INDEX_LOCK_KEY,
     'an event arriving twice at the same moment may be stored twice'
   );
+  await ensureConcurrentIndex(
+    'idx_installs_click_id',
+    'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_installs_click_id ON install_events(click_id)',
+    INSTALL_CLICK_INDEX_LOCK_KEY,
+    'every deleted click will scan install_events in full'
+  );
 }
 
 /**
@@ -853,6 +862,11 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
  * - idx_in_app_events_client_event: one event per install and client event id;
  *   a write on every in-app event. The event endpoint looks a repeat up before
  *   inserting, so the index only settles two copies arriving at once.
+ * - idx_installs_click_id: install_events by click. install_events.click_id
+ *   references click_events ON DELETE SET NULL, so deleting a click looks up
+ *   the installs that point at it; without this index each deleted click is a
+ *   full scan of install_events, and a retention job deleting clicks in bulk
+ *   runs for as long as the table is large.
  *
  * Built CONCURRENTLY because these tables can be large, and a plain CREATE
  * INDEX would hold their writes for the length of the build. That rules out the schema lock above: a
@@ -863,7 +877,7 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
  * EXISTS would then skip forever, so an invalid one is dropped and rebuilt. A
  * build in progress also reads as invalid, hence the try-lock: only one instance
  * ever works on the index, and the others move on rather than wait. Failure is
- * logged, not thrown: both work without their index, with the cost named in
+ * logged, not thrown: each works without its index, with the cost named in
  * `withoutIndex`.
  */
 async function ensureConcurrentIndex(
