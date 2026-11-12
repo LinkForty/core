@@ -1,3 +1,8 @@
+## <small>1.45.5 (2026-11-12)</small>
+
+* perf(database): index install_events.click_id so deleting clicks stays fast (#104) ([15203aa](https://github.com/LinkForty/core/commit/15203aa)), closes [#104](https://github.com/LinkForty/core/issues/104)
+* ci: push release and CLA signature commits with the LinkForty bot app token (#103) ([0ddcd39](https://github.com/LinkForty/core/commit/0ddcd39)), closes [#103](https://github.com/LinkForty/core/issues/103)
+
 ## <small>1.45.4 (2026-11-07)</small>
 
 * docs: shorten the README's mobile setup and link to the guides (#102) ([c0cf8e9](https://github.com/LinkForty/core/commit/c0cf8e9)), closes [#102](https://github.com/LinkForty/core/issues/102)
