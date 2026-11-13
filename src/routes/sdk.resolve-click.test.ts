@@ -11,7 +11,7 @@ import { sdkRoutes } from './sdk.js';
 
 const LINK_ID = '00000000-0000-0000-0000-0000000000aa';
 
-function mockDb() {
+function mockDb(utmParameters: Record<string, string> | null = null) {
   query.mockReset();
   query.mockImplementation(async (sql: string) => {
     if (/information_schema\.columns/i.test(sql)) return { rows: [{ x: 1 }], rowCount: 1 };
@@ -27,7 +27,7 @@ function mockDb() {
           warn_at: null,
           owner_suspended_at: null,
           expires_at: null,
-          utm_parameters: null,
+          utm_parameters: utmParameters,
         }],
         rowCount: 1,
       };
@@ -36,17 +36,26 @@ function mockDb() {
   });
 }
 
-/** The is_bot and bot_reason the resolve stored, once its async insert has run. */
-async function storedClick() {
+/** The parameters of the click the resolve inserted, once its async insert has run. */
+async function insertedClickParams(): Promise<unknown[]> {
   for (let i = 0; i < 20; i++) {
     const insert = query.mock.calls.find(([sql]) => /INSERT INTO click_events/i.test(sql));
-    if (insert) {
-      const params = insert[1] as unknown[];
-      return { isBot: params[16], botReason: params[17] };
-    }
+    if (insert) return insert[1] as unknown[];
     await new Promise((r) => setImmediate(r));
   }
   throw new Error('no click recorded');
+}
+
+/** The is_bot and bot_reason the resolve stored. */
+async function storedClick() {
+  const params = await insertedClickParams();
+  return { isBot: params[16], botReason: params[17] };
+}
+
+/** The utm_source, utm_medium and utm_campaign the resolve stored. */
+async function storedUtms() {
+  const params = await insertedClickParams();
+  return { source: params[12], medium: params[13], campaign: params[14] };
 }
 
 let app: FastifyInstance;
@@ -83,5 +92,31 @@ describe('SDK resolve click classification', () => {
     });
 
     expect(await storedClick()).toEqual({ isBot: true, botReason: 'ua' });
+  });
+});
+
+describe('SDK resolve click UTMs', () => {
+  const SDK_HEADERS = { 'user-agent': 'okhttp/4.12.0', 'x-linkforty-sdk': 'android/1.9.0' };
+
+  it("records the link's stored UTMs when the tapped URL carries none", async () => {
+    mockDb({ source: 'newsletter', medium: 'email', campaign: 'spring' });
+
+    await app.inject({ method: 'GET', url: '/api/sdk/v1/resolve/utm001', headers: SDK_HEADERS });
+
+    expect(await storedUtms()).toEqual({ source: 'newsletter', medium: 'email', campaign: 'spring' });
+  });
+
+  it('lets UTMs on the tapped URL override the stored ones per key', async () => {
+    mockDb({ source: 'newsletter', medium: 'email', campaign: 'spring' });
+
+    await app.inject({ method: 'GET', url: '/api/sdk/v1/resolve/utm002?utm_source=braze', headers: SDK_HEADERS });
+
+    expect(await storedUtms()).toEqual({ source: 'braze', medium: 'email', campaign: 'spring' });
+  });
+
+  it('records no UTMs for a link without any', async () => {
+    await app.inject({ method: 'GET', url: '/api/sdk/v1/resolve/utm003', headers: SDK_HEADERS });
+
+    expect(await storedUtms()).toEqual({ source: null, medium: null, campaign: null });
   });
 });
