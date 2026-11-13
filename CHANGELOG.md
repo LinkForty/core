@@ -1,3 +1,7 @@
+## <small>1.45.6 (2026-11-13)</small>
+
+* fix(sdk): record the link's UTMs on clicks from an SDK resolve (#105) ([27d24b3](https://github.com/LinkForty/core/commit/27d24b3)), closes [#105](https://github.com/LinkForty/core/issues/105)
+
 ## <small>1.45.5 (2026-11-12)</small>
 
 * perf(database): index install_events.click_id so deleting clicks stays fast (#104) ([15203aa](https://github.com/LinkForty/core/commit/15203aa)), closes [#104](https://github.com/LinkForty/core/issues/104)
