@@ -13,7 +13,7 @@ import {
 import { toDeepLinkPayload } from '../lib/deep-link-payload.js';
 import { findWebhooksForLink, triggerWebhooks } from '../lib/webhook.js';
 import { evaluateLinkSafety, createOwnerSuspensionSelect } from '../lib/link-safety.js';
-import { parseUserAgent, getLocationFromIP, detectDevice } from '../lib/utils.js';
+import { parseUserAgent, getLocationFromIP, detectDevice, resolveClickUtms } from '../lib/utils.js';
 import { emitClickEvent } from '../lib/event-emitter.js';
 import { classifyBot, edgeBotSignal, isSdkRequest } from '../lib/bot-detection.js';
 
@@ -755,6 +755,9 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
         const fpScreenWidth = query?.fp_sw ? parseInt(query.fp_sw, 10) : undefined;
         const fpScreenHeight = query?.fp_sh ? parseInt(query.fp_sh, 10) : undefined;
 
+        // UTMs on the tapped URL win per key; otherwise the link's own, as on a redirect.
+        const { utmSource, utmMedium, utmCampaign } = resolveClickUtms(query, link.utm_parameters);
+
         // Insert click event
         const clickResult = await db.query(
           `INSERT INTO click_events (
@@ -776,9 +779,9 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
             latitude,
             longitude,
             timezone,
-            query?.utm_source || null,
-            query?.utm_medium || null,
-            query?.utm_campaign || null,
+            utmSource ?? null,
+            utmMedium ?? null,
+            utmCampaign ?? null,
             referrer,
             isBot,
             botReason,
