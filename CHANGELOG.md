@@ -1,3 +1,7 @@
+## 1.46.0 (2026-11-20)
+
+* feat(clicks): record whether a click opened an installed app (click_events.opened_app) (#106) ([e60d956](https://github.com/LinkForty/core/commit/e60d956)), closes [#106](https://github.com/LinkForty/core/issues/106)
+
 ## <small>1.45.6 (2026-11-13)</small>
 
 * fix(sdk): record the link's UTMs on clicks from an SDK resolve (#105) ([27d24b3](https://github.com/LinkForty/core/commit/27d24b3)), closes [#105](https://github.com/LinkForty/core/issues/105)
