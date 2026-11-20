@@ -122,12 +122,13 @@ describe.skipIf(!ADMIN_URL)('initialisation against a table someone is reading',
     await admin.end();
   }, 30_000);
 
-  it('a second start completes while a transaction holds ACCESS SHARE on links, and the setting does not leak', async () => {
+  it('a second start completes while a transaction holds ACCESS SHARE on links and click_events, and the setting does not leak', async () => {
     const reader = new pg.Client({ connectionString: scratchUrl });
     await reader.connect();
     try {
       await reader.query('BEGIN');
       await reader.query('SELECT 1 FROM links LIMIT 1');
+      await reader.query('SELECT 1 FROM click_events LIMIT 1');
 
       const started = Date.now();
       await initializeDatabase({ url: scratchUrl, pool: { min: 1, max: 2 }, lockTimeoutMs: 2000 });
@@ -168,6 +169,53 @@ describe.skipIf(!ADMIN_URL)('initialisation against a table someone is reading',
       await other.end();
     }
   }, 30_000);
+});
+
+describe.skipIf(!ADMIN_URL)('click_events.opened_app', () => {
+  const scratchName = `lf_core_opened_app_${Date.now()}`;
+  let admin: pg.Client;
+  let scratchUrl: string;
+
+  beforeAll(async () => {
+    admin = new pg.Client({ connectionString: ADMIN_URL });
+    await admin.connect();
+    await admin.query(`CREATE DATABASE ${scratchName}`);
+    const url = new URL(ADMIN_URL as string);
+    url.pathname = `/${scratchName}`;
+    scratchUrl = url.toString();
+  }, 30_000);
+
+  afterAll(async () => {
+    await db?.end().catch(() => undefined);
+    await admin.query(`DROP DATABASE IF EXISTS ${scratchName} WITH (FORCE)`);
+    await admin.end();
+  }, 30_000);
+
+  async function openedAppColumn() {
+    const { rows } = await db.query(
+      `SELECT is_nullable, column_default FROM information_schema.columns
+       WHERE table_name = 'click_events' AND column_name = 'opened_app'`
+    );
+    return rows[0];
+  }
+
+  it('is created with a new database, and added to an existing click_events with false for its rows', async () => {
+    await initializeDatabase({ url: scratchUrl, pool: { min: 1, max: 2 } });
+    expect(await openedAppColumn()).toEqual({ is_nullable: 'NO', column_default: 'false' });
+
+    // A database from before the column: existing clicks read false once it is added.
+    const { rows: [link] } = await db.query(
+      `INSERT INTO links (short_code, original_url) VALUES ('openedapp1', 'https://example.com') RETURNING id`
+    );
+    await db.query('ALTER TABLE click_events DROP COLUMN opened_app');
+    await db.query('INSERT INTO click_events (link_id) VALUES ($1)', [link.id]);
+    await db.end();
+
+    await initializeDatabase({ url: scratchUrl, pool: { min: 1, max: 2 } });
+    expect(await openedAppColumn()).toEqual({ is_nullable: 'NO', column_default: 'false' });
+    const { rows } = await db.query('SELECT opened_app FROM click_events WHERE link_id = $1', [link.id]);
+    expect(rows).toEqual([{ opened_app: false }]);
+  }, 60_000);
 });
 
 describe.skipIf(!ADMIN_URL)('idle connection errors', () => {

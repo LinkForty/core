@@ -2,6 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import zlib from 'zlib';
+import crypto from 'crypto';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { db, initializeDatabase } from '../database.js';
@@ -171,5 +172,40 @@ describe.skipIf(!ADMIN_URL)('LinkForty bundles (integration)', () => {
     expect(links.rows).toEqual([{ id: LINK_A, organization_id: ORG_X }]);
     const orgs = await pools.other.query('SELECT id FROM organizations');
     expect(orgs.rows).toEqual([{ id: ORG_X }]);
+  }, 60_000);
+
+  it('imports a bundle exported before a column existed, giving that column its default', async () => {
+    const file = path.join(dir, 'org-a.lfbundle');
+    // The bundle an older server would have written: no field for columns added since.
+    const lines = zlib.gunzipSync(fs.readFileSync(file)).toString().trimEnd().split('\n').map((l) => JSON.parse(l));
+    const hash = crypto.createHash('sha256');
+    const rewritten = lines.map((line) => {
+      if (line.type === 'manifest') return JSON.stringify(line);
+      if (line.type === 'end') return JSON.stringify({ ...line, sha256: hash.digest('hex') });
+      delete line.data.openedApp;
+      delete line.data.oneInstallPerClick;
+      const raw = JSON.stringify(line);
+      hash.update(raw + '\n');
+      return raw;
+    });
+    const older = path.join(dir, 'older.lfbundle');
+    fs.writeFileSync(older, zlib.gzipSync(rewritten.join('\n') + '\n'));
+
+    const name = `lf_core_bundle_old_${stamp}`;
+    await admin.query(`CREATE DATABASE ${name}`);
+    await initializeDatabase({ url: urlFor(name), pool: { min: 1, max: 2 } });
+    const pool = db;
+    try {
+      await pool.query(`INSERT INTO organizations (id, name) VALUES ($1, 'X')`, [ORG_X]);
+      const report = await importBundleFile(pool, older, { organizationId: ORG_X });
+      expect(report).toMatchObject({ imported: true, conflicts: [] });
+      const click = await pool.query('SELECT opened_app FROM click_events WHERE id = $1', [CLICK]);
+      expect(click.rows).toEqual([{ opened_app: false }]);
+      const link = await pool.query('SELECT one_install_per_click FROM links WHERE id = $1', [LINK_A]);
+      expect(link.rows).toEqual([{ one_install_per_click: false }]);
+    } finally {
+      await pool.end();
+      await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+    }
   }, 60_000);
 });

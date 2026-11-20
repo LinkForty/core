@@ -118,7 +118,11 @@ async function* readBundle(
   if (!ended) throw new BundleError('Bundle has no end record; the file is incomplete');
 }
 
-/** A bundle row as a row of its table, with the import's assignments applied. */
+/**
+ * A bundle row as a row of its table, with the import's assignments applied.
+ * A field the bundle doesn't carry (it was exported before the column existed)
+ * is left out, so the column's default applies.
+ */
 function toColumns(row: Row, options: ImportOptions): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [column, rule] of exportedColumns(row.table)) {
@@ -130,6 +134,7 @@ function toColumns(row: Row, options: ImportOptions): Record<string, unknown> {
       if (rule.owner === 'organization' && options.organizationId) value = options.organizationId;
       if (rule.owner === 'user' && options.userId !== undefined) value = options.userId;
     }
+    if (value === undefined && !(rule.field in row.data)) continue;
     out[column] = value ?? null;
   }
   return out;
@@ -196,7 +201,10 @@ async function insertBatch(
 ): Promise<void> {
   const { table } = batch[0];
   const rows = batch.map((row) => toColumns(row, options));
-  const columns = exportedColumns(table).map(([column]) => column);
+  // Only columns the bundle carries; the rest take their defaults.
+  const columns = exportedColumns(table)
+    .map(([column]) => column)
+    .filter((column) => rows.some((row) => column in row));
 
   if (table === 'webhooks') {
     columns.push('secret');

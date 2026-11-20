@@ -49,6 +49,11 @@ export interface ClickEventData {
   linkParams?: Record<string, string>;
   /** Whether the click was classified as a bot or link previewer. */
   isBot?: boolean;
+  /**
+   * Whether the click is an app opening the link through the SDK (the app was
+   * already installed), rather than a browser click.
+   */
+  openedApp?: boolean;
 }
 
 /**

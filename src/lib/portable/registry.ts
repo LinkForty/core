@@ -136,6 +136,7 @@ export const BUNDLE_TABLES: Readonly<Record<string, TableRule>> = {
       is_bot: p('isBot'),
       bot_reason: p('botReason'),
       install_matched_at: p('installMatchedAt'),
+      opened_app: p('openedApp'),
     },
   },
   device_fingerprints: {

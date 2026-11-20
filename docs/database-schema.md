@@ -80,6 +80,7 @@ The redirect, SDK resolve and preview routes all use it. A resolver that throws 
 | referrer     | TEXT         | Referrer URL                 |
 | is_bot       | BOOLEAN      | Automated traffic, excluded from human analytics |
 | bot_reason   | VARCHAR(16)  | Why: `edge`, `method`, `ua` or `email_scanner` |
+| opened_app   | BOOLEAN      | The click opened an app already installed: the SDK resolved the link (Universal Link, App Link or custom scheme). False for browser clicks |
 
 ## Device Fingerprints Table
 
