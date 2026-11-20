@@ -215,7 +215,8 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
         referrer TEXT,
         is_bot BOOLEAN NOT NULL DEFAULT false,
         bot_reason VARCHAR(16),
-        link_params JSONB
+        link_params JSONB,
+        opened_app BOOLEAN NOT NULL DEFAULT false
       )
     `);
 
@@ -663,6 +664,14 @@ export async function initializeDatabase(options: DatabaseOptions = {}) {
     `);
     await client.query(`
       ALTER TABLE click_events ADD COLUMN IF NOT EXISTS install_matched_at TIMESTAMP
+    `);
+
+    // click_events.opened_app: true when the click is an app opening the link
+    // through the SDK (a Universal Link, App Link or custom scheme handed to
+    // /api/sdk/v1/resolve), so the app was already installed; false for a
+    // browser click. A constant default makes the add catalog-only.
+    await client.query(`
+      ALTER TABLE click_events ADD COLUMN IF NOT EXISTS opened_app BOOLEAN NOT NULL DEFAULT false
     `);
 
     // install_events.competing_links: how many other links also had a

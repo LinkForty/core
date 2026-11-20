@@ -763,8 +763,8 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
           `INSERT INTO click_events (
             link_id, ip_address, user_agent, device_type, platform,
             country_code, country_name, region, city, latitude, longitude, timezone,
-            utm_source, utm_medium, utm_campaign, referrer, is_bot, bot_reason
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+            utm_source, utm_medium, utm_campaign, referrer, is_bot, bot_reason, opened_app
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, true)
           RETURNING id`,
           [
             link.id,
@@ -824,6 +824,8 @@ export async function sdkRoutes(fastify: FastifyInstance, options: SdkRouteOptio
           utmParameters: link.utm_parameters || undefined,
           referer: referrer || undefined,
           language: fpLanguage,
+          isBot,
+          openedApp: true,
         });
 
         // Trigger webhooks for click_event

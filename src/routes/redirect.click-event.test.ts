@@ -82,6 +82,15 @@ describe('click events', () => {
     });
   });
 
+  it('are browser clicks, not app opens', async () => {
+    await app.inject({ method: 'GET', url: '/abc123', headers: { 'user-agent': DESKTOP_UA } });
+    await vi.waitFor(() => expect(events).toHaveLength(1));
+    expect(events[0].openedApp).toBe(false);
+    // The column's default (false) records it.
+    const insert = query.mock.calls.find(([sql]) => /INSERT INTO click_events/i.test(sql));
+    expect(insert?.[0]).not.toMatch(/opened_app/);
+  });
+
   it('mark bot clicks so a receiver can leave them out', async () => {
     await app.inject({ method: 'GET', url: '/abc123', headers: { 'user-agent': BOT_UA } });
     await vi.waitFor(() => expect(events).toHaveLength(1));

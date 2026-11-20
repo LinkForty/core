@@ -8,6 +8,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 const query = vi.fn();
 vi.mock('../lib/database.js', () => ({ db: { query: (...a: unknown[]) => query(...a) } }));
 import { sdkRoutes } from './sdk.js';
+import { subscribeToClickEvents, type ClickEventData } from '../lib/event-emitter.js';
 
 const LINK_ID = '00000000-0000-0000-0000-0000000000aa';
 
@@ -118,5 +119,32 @@ describe('SDK resolve click UTMs', () => {
     await app.inject({ method: 'GET', url: '/api/sdk/v1/resolve/utm003', headers: SDK_HEADERS });
 
     expect(await storedUtms()).toEqual({ source: null, medium: null, campaign: null });
+  });
+});
+
+describe('SDK resolve opened_app', () => {
+  const SDK_HEADERS = { 'user-agent': 'okhttp/4.12.0', 'x-linkforty-sdk': 'android/1.9.0' };
+
+  it('stores the click as an app open', async () => {
+    await app.inject({ method: 'GET', url: '/api/sdk/v1/resolve/abc123', headers: SDK_HEADERS });
+    await insertedClickParams();
+
+    const [sql] = query.mock.calls.find(([s]) => /INSERT INTO click_events/i.test(s)) as [string];
+    const columns = sql.slice(sql.indexOf('(') + 1, sql.indexOf(')')).split(',').map((c) => c.trim());
+    const values = sql.slice(sql.indexOf('VALUES') + 6).replace(/RETURNING[\s\S]*/, '').trim().slice(1, -1).split(',').map((v) => v.trim());
+    expect(columns).toContain('opened_app');
+    expect(values[columns.indexOf('opened_app')]).toBe('true');
+  });
+
+  it('announces the click as an app open, with its bot classification', async () => {
+    const events: ClickEventData[] = [];
+    const unsubscribe = subscribeToClickEvents((e) => events.push(e));
+    try {
+      await app.inject({ method: 'GET', url: '/api/sdk/v1/resolve/abc123', headers: SDK_HEADERS });
+      await vi.waitFor(() => expect(events).toHaveLength(1));
+      expect(events[0]).toMatchObject({ openedApp: true, isBot: false, redirectReason: 'sdk_resolve' });
+    } finally {
+      unsubscribe();
+    }
   });
 });

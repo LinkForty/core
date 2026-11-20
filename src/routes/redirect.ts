@@ -887,6 +887,7 @@ export async function redirectRoutes(
           language: fpLanguage,
           linkParams: Object.keys(linkParams).length > 0 ? linkParams : undefined,
           isBot,
+          openedApp: false,
         });
 
         // Trigger webhooks for click_event
